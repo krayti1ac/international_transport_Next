@@ -65,6 +65,17 @@ if (env === 'production') {
   loadEnvFile(`.env.${env}.local`);
 }
 
+// Auto-derive NEXT_PUBLIC_APP_URL on Vercel or CI platforms
+if (!process.env.NEXT_PUBLIC_APP_URL) {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    process.env.NEXT_PUBLIC_APP_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  } else if (process.env.VERCEL_URL) {
+    process.env.NEXT_PUBLIC_APP_URL = `https://${process.env.VERCEL_URL}`;
+  } else if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    process.env.NEXT_PUBLIC_APP_URL = `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+  }
+}
+
 // Supabase JS requires WebSocket. Provide fallback for Node < 22 where native WebSocket is missing.
 if (typeof globalThis.WebSocket === 'undefined') {
   globalThis.WebSocket = class WebSocketPolyfill {};
@@ -107,11 +118,6 @@ const REQUIRED_VARS = [
     label: 'Supabase Service Role Key (server-only)',
     example: 'eyJhb... (service role JWT)',
   },
-  {
-    key: 'NEXT_PUBLIC_APP_URL',
-    label: 'Application Public URL',
-    example: 'https://app.transbodanon.ma',
-  },
 ];
 
 /**
@@ -119,6 +125,11 @@ const REQUIRED_VARS = [
  * Missing these produces a warning but does NOT block the build.
  */
 const OPTIONAL_VARS = [
+  {
+    key: 'NEXT_PUBLIC_APP_URL',
+    label: 'Application Public URL',
+    example: 'https://app.transbodanon.ma',
+  },
   {
     key: 'NEXT_PUBLIC_SENTRY_DSN',
     label: 'Sentry Client DSN (error reporting)',
