@@ -1,0 +1,17 @@
+{
+  "name": "نظام النقل الدولي - بوابة السائق",
+  "short_name": "TransIntl",
+  "description": "تطبيق إدارة الرحلات والمهام ووصولات الوقود الميدانية",
+  "start_url": "/driver-tasks",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#1d4ed8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

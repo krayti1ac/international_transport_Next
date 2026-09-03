@@ -1,0 +1,184 @@
+# Cursor/Windsurf/Copilot Rules — Trans Bodanon TMS
+
+## 1. Tech Stack (Immutable)
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript (strict mode) |
+| Styling | Tailwind CSS v4 |
+| UI Components | Shadcn UI (Radix primitives) |
+| Data Fetching | @tanstack/react-query (React Query v5) |
+| State Management | Zustand |
+| Backend / Auth | Supabase (SSR helpers from @supabase/ssr) |
+| i18n | next-intl |
+| PWA | next-pwa |
+| Maps | React Leaflet / Leaflet |
+| PDF | jsPDF / qrcode |
+| OCR | Tesseract.js (fuel receipts) |
+
+**Rule: Do NOT introduce new dependencies without explicit user confirmation.**
+
+---
+
+## 2. Project Structure — Feature-First (Enforced)
+
+```
+src/
+  app/
+    [locale]/                    # i18n routes
+      (auth)/                    # public auth pages
+      (app)/                     # protected dashboard routes
+    api/                         # REST API routes
+  components/
+    ui/                          # Shadcn UI primitives
+    layout/                      # layout shells
+    features/                    # cross-cutting feature components
+  features/                      # ← EVERY NEW FEATURE GOES HERE
+    [feature_name]/
+      components/                # feature-specific React components
+      services/                  # server actions + query functions
+      hooks/                     # feature-specific React Query hooks
+      stores/                    # Zustand slices (if needed)
+      schemas/                   # Zod validation schemas
+      types/                     # feature-specific TypeScript types
+  lib/
+    supabase/                    # Supabase SSR + browser clients
+    stores/                      # global Zustand stores
+    utils/                       # pure utility functions
+  hooks/                         # global custom hooks
+  i18n/                          # translation files
+  types/                         # global shared types (database types)
+```
+
+**Rules:**
+- Every feature lives in `src/features/[feature_name]/`.
+- Never put feature logic in `src/app/` or top-level `src/components/`.
+- Server Actions go in `src/features/[feature_name]/services/*.actions.ts`.
+- Query keys live in `src/features/[feature_name]/services/*.queries.ts`.
+- Keep `src/types/database.ts` as the single source of truth for DB interfaces.
+
+---
+
+## 3. Financial Rule (CRITICAL — Non-Negotiable)
+
+**Never use JavaScript native `number` (IEEE 754 double) for any currency, financial, or accounting calculation. Always use `decimal.js`.**
+
+```typescript
+// CORRECT
+import Decimal from 'decimal.js';
+
+const total = new Decimal(trip.price);
+const advance = new Decimal(amountGiven);
+const balance = total.minus(advance).toFixed(2);
+
+// WRONG — Never do this
+const total = trip.price;
+const balance = total - advance;  // FLOATING POINT ERROR
+```
+
+- Configure globally: `Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });`
+- Use `decimal.js` in every Server Action, every React Query hook, and every Zustand store that deals with money.
+- For display formatting, convert to `Number` or string **only at the final UI boundary**.
+- If a query result contains money fields, parse them with `new Decimal(value)` immediately on receipt.
+
+---
+
+## 4. Backend Rules
+
+### 4.1 Server Actions for Mutations
+- All mutations (INSERT, UPDATE, DELETE) MUST be implemented as Next.js Server Actions in `*.actions.ts` files.
+- Never call Supabase client directly from Client Components for mutations.
+- Server Actions must validate inputs with Zod schemas.
+
+### 4.2 React Query for Fetching
+- All data fetching on the client side uses `@tanstack/react-query`.
+- Query functions live in `*.queries.ts` files inside the feature.
+- Use `useQuery` / `useMutation` from `@tanstack/react-query`.
+- Invalidate relevant queries after mutations.
+
+### 4.3 Row Level Security (RLS)
+- The Supabase database enforces RLS policies. Never bypass RLS by using `service_role` key in the client.
+- Server-side code (Server Actions, API routes) should use the `server` Supabase client which has service role access. Always validate the user's own data access in application logic before relying solely on RLS.
+- Never expose raw SQL or unvalidated identifiers in queries.
+
+---
+
+## 5. Supabase Client Usage
+
+```typescript
+// Server Components / Server Actions
+import { createClient } from '@/lib/supabase/server';
+const supabase = await createClient();
+
+// Client Components
+import { createClient } from '@/lib/supabase/browser';
+const supabase = createClient();
+```
+
+---
+
+## 6. Zustand Stores
+
+- Global stores live in `src/lib/stores/*.ts`.
+- Feature-local stores live in `src/features/[feature]/stores/*.ts`.
+- Use `zustand` with the `shallow` comparison for selectors.
+
+---
+
+## 7. Authentication & RBAC
+
+- Roles: `admin`, `secretary`, `driver`.
+- Route access is controlled by `isRouteAllowed(role, pathname)` in `src/lib/rbac.ts`.
+- Navigation items must be filtered by role in the sidebar.
+- Never show admin-only pages to non-admin roles, even if the UI is hidden.
+
+---
+
+## 8. Arabic / French / English Context
+
+- The UI is bilingual: Arabic (RTL) and French.
+- Always support both `dir="rtl"` and `dir="ltr"` via Tailwind's `rtl:` modifiers.
+- Keep business terms consistent: refer to the i18n keys in `src/i18n/`.
+
+---
+
+## 9. PWA & Offline
+
+- Use `next-pwa` with Workbox.
+- Offline data sync uses the `offline-sync` library in `src/lib/offline-sync.ts`.
+- Critical driver actions (fuel receipts, E-POD signing) must work offline and queue for sync.
+
+---
+
+## 10. Code Quality
+
+- ESLint: `npm run lint` — fix all warnings.
+- TypeScript strict mode — no `any` types unless absolutely unavoidable.
+- Prefer `async/await` over `.then()`.
+- Keep functions small and single-responsibility.
+- Error messages in the UI should be in the user's locale (Arabic or French).
+
+---
+
+## 11. What This AI MUST NOT Do
+
+- Add a new dependency without discussion.
+- Use `Math.round()`, arithmetic `+` / `-` / `*` / `/` on money values.
+- Bypass RLS or auth checks.
+- Mutate state directly (always use Zustand setters / Server Actions).
+- Introduce Redux, Context API for global state (use Zustand).
+- Hardcode company info, bank accounts, or credentials.
+- Use `console.log` in production code (use proper logging).
+
+---
+
+## 12. What This AI SHOULD Do
+
+- Use existing feature structure when adding new features.
+- Write Server Actions for all mutations.
+- Use React Query for all client-side data fetching.
+- Use `decimal.js` for all money math.
+- Keep Arabic & French translations updated in i18n files.
+- Write clean, typed, RTL-aware components.
+- Check RBAC before rendering sensitive UI sections.

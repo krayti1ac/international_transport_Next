@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "نظام إدارة النقل الدولي",
+    "dashboard": {
+      "title": "لوحة التحكم",
+      "welcome": "مرحباً",
+      "stats": {
+        "totalTrips": "إجمالي الرحلات",
+        "totalRevenue": "إجمالي الإيرادات",
+        "activeDrivers": "السائقون النشطون",
+        "fleetHealth": "صحة الأسطول"
+      }
+    },
+    "trips": {
+      "title": "الرحلات",
+      "createTrip": "إنشاء رحلة",
+      "outbound": "ذهاب",
+      "return": "عودة",
+      "status": {
+        "pending": "قيد الانتظار",
+        "in_progress": "جارية",
+        "completed": "مكتملة",
+        "settled": "تمت التسوية"
+      }
+    },
+    "treasury": {
+      "title": "الخزينة",
+      "balance": "الرصيد",
+      "transactions": "العمليات",
+      "type": {
+        "trip_expense": "مصروف رحلة",
+        "trip_revenue": "إيراد رحلة",
+        "office_expense": "مصروف مكتب"
+      }
+    },
+    "clients": {
+      "title": "العملاء",
+      "name": "الاسم",
+      "phone": "الهاتف",
+      "email": "البريد الإلكتروني",
+      "createClient": "إضافة عميل"
+    },
+    "invoices": {
+      "title": "الفواتير",
+      "createInvoice": "إنشاء فاتورة",
+      "status": {
+        "paid": "مدفوعة",
+        "partially_paid": "مدفوعة جزئياً",
+        "unpaid": "غير مدفوعة"
+      }
+    },
+    "documents": {
+      "title": "الوثائق",
+      "expiryAlert": "تنبيه انتهاء الصلاحية",
+      "renew": "تجديد",
+      "quickRenew": "تجديد سريع",
+      "renewalCost": "تكلفة التجديد"
+    },
+    "drivers": {
+      "title": "السائقون",
+      "name": "الاسم",
+      "phone": "الهاتف",
+      "status": "الحالة",
+      "baseSalary": "الراتب الأساسي",
+      "bonusPercentage": "نسبة المكافأة"
+    },
+    "auth": {
+      "login": "تسجيل الدخول",
+      "logout": "تسجيل الخروج",
+      "email": "البريد الإلكتروني",
+      "password": "كلمة المرور",
+      "signup": "إنشاء حساب",
+      "forgotPassword": "نسيت كلمة المرور؟"
+    },
+    "settings": {
+      "title": "الإعدادات",
+      "language": "اللغة",
+      "theme": "المظهر",
+      "dark": "داكن",
+      "light": "فاتح",
+      "system": "نظام"
+    },
+    "common": {
+      "save": "حفظ",
+      "cancel": "إلغاء",
+      "delete": "حذف",
+      "edit": "تعديل",
+      "search": "بحث",
+      "filter": "تصفية",
+      "actions": "إجراءات",
+      "loading": "جاري التحميل...",
+      "error": "خطأ",
+      "success": "نجاح",
+      "confirm": "تأكيد",
+      "close": "إغلاق",
+      "back": "رجوع",
+      "next": "التالي",
+      "previous": "السابق",
+      "yes": "نعم",
+      "no": "لا",
+      "noData": "لا توجد بيانات",
+      "currency": "العملة",
+      "date": "التاريخ",
+      "amount": "المبلغ",
+      "description": "الوصف",
+      "notes": "ملاحظات",
+      "reference": "المرجع",
+      "status": "الحالة",
+      "type": "النوع"
+    }
+  }
+}

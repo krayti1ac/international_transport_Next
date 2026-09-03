@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "Système de Gestion du Transport International",
+    "dashboard": {
+      "title": "Tableau de bord",
+      "welcome": "Bienvenue",
+      "stats": {
+        "totalTrips": "Total des trajets",
+        "totalRevenue": "Revenu total",
+        "activeDrivers": "Chauffeurs actifs",
+        "fleetHealth": "Santé de la flotte"
+      }
+    },
+    "trips": {
+      "title": "Trajets",
+      "createTrip": "Créer un trajet",
+      "outbound": "Aller",
+      "return": "Retour",
+      "status": {
+        "pending": "En attente",
+        "in_progress": "En cours",
+        "completed": "Terminé",
+        "settled": "Règlement effectué"
+      }
+    },
+    "treasury": {
+      "title": "Trésorerie",
+      "balance": "Solde",
+      "transactions": "Transactions",
+      "type": {
+        "trip_expense": "Dépense de trajet",
+        "trip_revenue": "Revenu de trajet",
+        "office_expense": "Dépense de bureau"
+      }
+    },
+    "clients": {
+      "title": "Clients",
+      "name": "Nom",
+      "phone": "Téléphone",
+      "email": "E-mail",
+      "createClient": "Ajouter un client"
+    },
+    "invoices": {
+      "title": "Factures",
+      "createInvoice": "Créer une facture",
+      "status": {
+        "paid": "Payée",
+        "partially_paid": "Partiellement payée",
+        "unpaid": "Impayée"
+      }
+    },
+    "documents": {
+      "title": "Documents",
+      "expiryAlert": "Alerte d'expiration",
+      "renew": "Renouveler",
+      "quickRenew": "Renouvellement rapide",
+      "renewalCost": "Coût de renouvellement"
+    },
+    "drivers": {
+      "title": "Chauffeurs",
+      "name": "Nom",
+      "phone": "Téléphone",
+      "status": "Statut",
+      "baseSalary": "Salaire de base",
+      "bonusPercentage": "Pourcentage de bonus"
+    },
+    "auth": {
+      "login": "Connexion",
+      "logout": "Déconnexion",
+      "email": "E-mail",
+      "password": "Mot de passe",
+      "signup": "Inscription",
+      "forgotPassword": "Mot de passe oublié ?"
+    },
+    "settings": {
+      "title": "Paramètres",
+      "language": "Langue",
+      "theme": "Thème",
+      "dark": "Sombre",
+      "light": "Clair",
+      "system": "Système"
+    },
+    "common": {
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "search": "Rechercher",
+      "filter": "Filtrer",
+      "actions": "Actions",
+      "loading": "Chargement...",
+      "error": "Erreur",
+      "success": "Succès",
+      "confirm": "Confirmer",
+      "close": "Fermer",
+      "back": "Retour",
+      "next": "Suivant",
+      "previous": "Précédent",
+      "yes": "Oui",
+      "no": "Non",
+      "noData": "Aucune donnée",
+      "currency": "Devise",
+      "date": "Date",
+      "amount": "Montant",
+      "description": "Description",
+      "notes": "Remarques",
+      "reference": "Référence",
+      "status": "Statut",
+      "type": "Type"
+    }
+  }
+}

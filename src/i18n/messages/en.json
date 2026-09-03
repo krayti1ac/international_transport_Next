@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "International Transport Management System",
+    "dashboard": {
+      "title": "Dashboard",
+      "welcome": "Welcome",
+      "stats": {
+        "totalTrips": "Total Trips",
+        "totalRevenue": "Total Revenue",
+        "activeDrivers": "Active Drivers",
+        "fleetHealth": "Fleet Health"
+      }
+    },
+    "trips": {
+      "title": "Trips",
+      "createTrip": "Create Trip",
+      "outbound": "Outbound",
+      "return": "Return",
+      "status": {
+        "pending": "Pending",
+        "in_progress": "In Progress",
+        "completed": "Completed",
+        "settled": "Settled"
+      }
+    },
+    "treasury": {
+      "title": "Treasury",
+      "balance": "Balance",
+      "transactions": "Transactions",
+      "type": {
+        "trip_expense": "Trip Expense",
+        "trip_revenue": "Trip Revenue",
+        "office_expense": "Office Expense"
+      }
+    },
+    "clients": {
+      "title": "Clients",
+      "name": "Name",
+      "phone": "Phone",
+      "email": "Email",
+      "createClient": "Add Client"
+    },
+    "invoices": {
+      "title": "Invoices",
+      "createInvoice": "Create Invoice",
+      "status": {
+        "paid": "Paid",
+        "partially_paid": "Partially Paid",
+        "unpaid": "Unpaid"
+      }
+    },
+    "documents": {
+      "title": "Documents",
+      "expiryAlert": "Expiry Alert",
+      "renew": "Renew",
+      "quickRenew": "Quick Renew",
+      "renewalCost": "Renewal Cost"
+    },
+    "drivers": {
+      "title": "Drivers",
+      "name": "Name",
+      "phone": "Phone",
+      "status": "Status",
+      "baseSalary": "Base Salary",
+      "bonusPercentage": "Bonus Percentage"
+    },
+    "auth": {
+      "login": "Login",
+      "logout": "Logout",
+      "email": "Email",
+      "password": "Password",
+      "signup": "Sign Up",
+      "forgotPassword": "Forgot Password?"
+    },
+    "settings": {
+      "title": "Settings",
+      "language": "Language",
+      "theme": "Theme",
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    },
+    "common": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "edit": "Edit",
+      "search": "Search",
+      "filter": "Filter",
+      "actions": "Actions",
+      "loading": "Loading...",
+      "error": "Error",
+      "success": "Success",
+      "confirm": "Confirm",
+      "close": "Close",
+      "back": "Back",
+      "next": "Next",
+      "previous": "Previous",
+      "yes": "Yes",
+      "no": "No",
+      "noData": "No data available",
+      "currency": "Currency",
+      "date": "Date",
+      "amount": "Amount",
+      "description": "Description",
+      "notes": "Notes",
+      "reference": "Reference",
+      "status": "Status",
+      "type": "Type"
+    }
+  }
+}

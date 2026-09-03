@@ -1,0 +1,352 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { TripOrder, Advance, TruckMaintenance, FinePenalty, FerryExpense, Driver, Truck } from '@/types/database';
+import { calculateTripFinancials, TripFinancialSummary } from '@/lib/profitability';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { TrendingUp, DollarSign, Fuel, Search, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle } from 'lucide-react';
+import { formatCurrency } from '@/lib/forex';
+import { MatriculeBadge } from '@/components/ui/matricule-badge';
+import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+
+export default function TripProfitabilityPage() {
+  const [summaries, setSummaries] = useState<TripFinancialSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cardLayout, setCardLayout] = useCardViewMode('trip_profitability', 'grid');
+
+  const { toast } = useToast();
+  const supabase = useMemo(() => createClient(), []);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [tripsRes, advancesRes, fuelRes, finesRes, ferriesRes, driversRes, trucksRes] = await Promise.all([
+        supabase.from('trip_orders').select('*').order('departure_date', { ascending: false }),
+        supabase.from('advances').select('*'),
+        supabase.from('truck_maintenance').select('*').eq('type', 'fuel'),
+        supabase.from('fine_penalties').select('*'),
+        supabase.from('ferry_expenses').select('*'),
+        supabase.from('drivers').select('id, name'),
+        supabase.from('trucks').select('id, plate_number'),
+      ]);
+
+      if (tripsRes.error) throw tripsRes.error;
+
+      const trips = tripsRes.data || [];
+      const advances = advancesRes.data || [];
+      const fuelRecords = fuelRes.data || [];
+      const fines = finesRes.data || [];
+      const ferries = ferriesRes.data || [];
+      const drivers = driversRes.data || [];
+      const trucks = trucksRes.data || [];
+
+      const calculated = trips.map((trip) => {
+        const driver = drivers.find((d) => d.id === trip.driver_id);
+        const truck = trucks.find((t) => t.id === trip.truck_id);
+
+        return calculateTripFinancials({
+          trip,
+          advances,
+          fuelRecords,
+          fines,
+          ferries,
+          driverName: driver?.name,
+          truckPlate: truck?.plate_number,
+          distanceKm: 1850,
+          fuelLiters: 580,
+        });
+      });
+
+      setSummaries(calculated);
+    } catch (error: any) {
+      toast({
+        title: 'خطأ',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const totalRevenue = summaries.reduce((sum, s) => sum + s.revenue, 0);
+  const totalExpenses = summaries.reduce((sum, s) => sum + s.totalExpenses, 0);
+  const netProfit = totalRevenue - totalExpenses;
+  const averageMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+  const filtered = summaries.filter((s) => {
+    const route = s.route?.toLowerCase() ?? '';
+    const cmr = s.cmrNumber?.toLowerCase() ?? '';
+    const driver = s.driverName?.toLowerCase() ?? '';
+    const truck = s.truckPlate?.toLowerCase() ?? '';
+    const query = searchQuery.toLowerCase();
+    return route.includes(query) || cmr.includes(query) || driver.includes(query) || truck.includes(query);
+  });
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      <div>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">أرباح وتحليلات الرحلات والوقود</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي إيرادات الرحلات</CardTitle>
+            <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-foreground">{formatCurrency(totalRevenue, 'MAD')}</div>
+            <p className="text-xs text-muted-foreground mt-1">{summaries.length} رحلة مسجلة</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي مصاريف المسارات</CardTitle>
+            <Fuel className="w-5 h-5 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">{formatCurrency(totalExpenses, 'MAD')}</div>
+            <p className="text-xs text-muted-foreground mt-1">وقود + سلف + عبّارة + غرامات</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">صافي الأرباح المحققة</CardTitle>
+            <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold font-mono ${netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+              {formatCurrency(netProfit, 'MAD')}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">الأرباح الصافية بعد خصم كافة المصاريف</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">متوسط هامش الربح</CardTitle>
+            <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              {averageMargin.toFixed(1)}%
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-foreground">{averageMargin.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground mt-1">كفاءة تشغيل الأسطول</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+        <div className="relative flex-1">
+          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Input
+            placeholder="بحث بالمسار، رقم CMR، السائق، أو رقم الشاحنة..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pr-9 h-9 text-xs rounded-xl"
+          />
+        </div>
+        <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">جاري احتساب البيانات المالية...</p>
+        </div>
+      ) : cardLayout === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((item) => {
+            const isProfitable = item.netProfit >= 0;
+            return (
+              <Card key={item.tripId} className="hover:shadow-md transition-shadow flex flex-col justify-between">
+                <div>
+                  <CardHeader className="pb-3 border-b border-border">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base font-amiri font-bold text-foreground">{item.route}</CardTitle>
+                        <CardDescription className="text-xs mt-0.5">
+                          {item.cmrNumber || `رحلة #${item.tripId}`} • {item.departureDate}
+                        </CardDescription>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold font-mono ${
+                        isProfitable
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
+                          : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
+                      }`}>
+                        {item.profitMarginPercentage}%
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-3 text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground items-center">
+                      <div>السائق: <span className="font-medium text-foreground">{item.driverName || 'غير محدد'}</span></div>
+                      <div className="flex items-center gap-1">
+                        <span>الشاحنة:</span>
+                        {item.truckPlate ? (
+                          <MatriculeBadge plate={item.truckPlate} variant="badge" size="xs" />
+                        ) : (
+                          <span className="text-foreground">غير محدد</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 p-3 bg-muted/40 rounded-xl border border-border text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">سعر الرحلة (الإيراد):</span>
+                        <span className="font-bold text-primary font-mono">{formatCurrency(item.revenue, 'MAD')}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>الوقود:</span>
+                        <span className="font-mono">-{formatCurrency(item.fuelCost, 'MAD')}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>سلف السائق:</span>
+                        <span className="font-mono">-{formatCurrency(item.advancesCost, 'MAD')}</span>
+                      </div>
+                      {item.ferryCost > 0 && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>العبّارة البحرية:</span>
+                          <span className="font-mono">-{formatCurrency(item.ferryCost, 'MAD')}</span>
+                        </div>
+                      )}
+                      {item.finesCost > 0 && (
+                        <div className="flex justify-between text-rose-600">
+                          <span>الغرامات:</span>
+                          <span className="font-mono">-{formatCurrency(item.finesCost, 'MAD')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-border pt-1.5 font-bold">
+                        <span className="text-foreground">صافي ربح الرحلة:</span>
+                        <span className={`font-mono ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                          {formatCurrency(item.netProfit, 'MAD')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {item.litersPer100Km && (
+                      <div className="flex items-center justify-between text-xs px-1">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Fuel className="w-3.5 h-3.5 text-primary" />
+                          معدل استهلاك الديزل:
+                        </span>
+                        <span className="font-mono font-bold flex items-center gap-1">
+                          {item.litersPer100Km} L/100km
+                          {item.fuelStatus === 'high' && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                          {item.fuelStatus === 'efficient' && <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </div>
+              </Card>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="col-span-full text-center py-12">
+              <p className="text-muted-foreground">لا توجد رحلات مطابقة لمعايير البحث</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* List View Cards */
+        <div className="flex flex-col gap-3">
+          {filtered.map((item) => {
+            const isProfitable = item.netProfit >= 0;
+            return (
+              <Card key={item.tripId} className="hover:shadow-md transition-shadow overflow-hidden">
+                <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+                  {/* Right: Route & Details */}
+                  <div className="flex items-center gap-3 min-w-[220px]">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      isProfitable ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600'
+                    }`}>
+                      {isProfitable ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-amiri font-bold text-foreground">{item.route}</CardTitle>
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                        <span>{item.cmrNumber || `رحلة #${item.tripId}`}</span>
+                        <span>•</span>
+                        <span>{item.departureDate}</span>
+                        {item.truckPlate && (
+                          <>
+                            <span>•</span>
+                            <MatriculeBadge plate={item.truckPlate} variant="badge" size="xs" />
+                          </>
+                        )}
+                        {item.driverName && (
+                          <>
+                            <span>•</span>
+                            <span>{item.driverName}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Middle: Financials */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
+                      <span className="text-muted-foreground">الإيراد:</span>
+                      <span className="font-bold text-foreground font-mono">{formatCurrency(item.revenue, 'MAD')}</span>
+                    </div>
+
+                    <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
+                      <span className="text-muted-foreground">التكاليف:</span>
+                      <span className="font-mono text-muted-foreground">
+                        -{formatCurrency(item.fuelCost + item.advancesCost + item.ferryCost + item.finesCost, 'MAD')}
+                      </span>
+                    </div>
+
+                    <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
+                      <span className="text-muted-foreground">صافي الربح:</span>
+                      <span className={`font-mono font-bold ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                        {formatCurrency(item.netProfit, 'MAD')}
+                      </span>
+                    </div>
+
+                    {item.litersPer100Km && (
+                      <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                        <Fuel className="w-3.5 h-3.5 text-primary" />
+                        {item.litersPer100Km} L/100km
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Left: Margin Badge */}
+                  <div className="flex items-center justify-end border-t lg:border-t-0 pt-2.5 lg:pt-0 border-border/40">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
+                      isProfitable
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
+                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
+                    }`}>
+                      هامش: {item.profitMarginPercentage}%
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
+              <p className="text-muted-foreground">لا توجد رحلات مطابقة لمعايير البحث</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

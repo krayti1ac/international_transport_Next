@@ -1,0 +1,40 @@
+name: TransBodanon CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Run ESLint
+      run: npm run lint
+
+    - name: TypeScript Strict Typecheck
+      run: npx tsc --noEmit
+
+    - name: Test Build (Next.js 16.3 + Turbopack)
+      run: npm run build
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
+        SUPABASE_SERVICE_ROLE_KEY: "placeholder-service-role-key"
+        NEXT_PUBLIC_APP_URL: "https://placeholder.transbodanon.ma"
+        SKIP_ENV_VALIDATION: "true"
+

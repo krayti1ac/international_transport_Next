@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --background: #f8f9ff;
+    --foreground: #0d1c2d;
+    --card: #ffffff;
+    --card-foreground: #0d1c2d;
+    --popover: #ffffff;
+    --popover-foreground: #0d1c2d;
+    --primary: #0f172a;
+    --primary-foreground: #ffffff;
+    --secondary: #515f74;
+    --secondary-foreground: #ffffff;
+    --muted: #eef4ff;
+    --muted-foreground: #57657b;
+    --accent: #e5efff;
+    --accent-foreground: #0f172a;
+    --destructive: #ba1a1a;
+    --destructive-foreground: #ffffff;
+    --border: #d4e4fa;
+    --input: #c6c6cd;
+    --ring: #2563eb;
+    --sidebar-bg: #ffffff;
+    --sidebar-fg: #0d1c2d;
+    --sidebar-border: #e2e8f0;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f0f4ff;
+    --surface-container: #e5efff;
+    --surface-container-high: #dbe9ff;
+    --surface-container-highest: #d4e4fa;
+    --tertiary: #d95f00;
+    --tertiary-container: #ffdbca;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: #080c14;
+    --foreground: #f8fafc;
+    --card: #0f172a;
+    --card-foreground: #f8fafc;
+    --popover: #0f172a;
+    --popover-foreground: #f8fafc;
+    --primary: #38bdf8;
+    --primary-foreground: #0f172a;
+    --secondary: #94a3b8;
+    --secondary-foreground: #f8fafc;
+    --muted: #131b2e;
+    --muted-foreground: #94a3b8;
+    --accent: #1e293b;
+    --accent-foreground: #38bdf8;
+    --destructive: #f87171;
+    --destructive-foreground: #ffffff;
+    --border: #1e293b;
+    --input: #2a374f;
+    --ring: #38bdf8;
+    --sidebar-bg: #05080e;
+    --sidebar-fg: #f8fafc;
+    --sidebar-border: #131b2e;
+    --surface-container-lowest: #0d131f;
+    --surface-container-low: #111a2c;
+    --surface-container: #162238;
+    --surface-container-high: #1c2b45;
+    --surface-container-highest: #243553;
+    --tertiary: #f97316;
+    --tertiary-container: #341100;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-border: var(--sidebar-border);
+  
+  --font-sans: var(--font-cairo);
+  --font-mono: var(--font-geist-mono);
+  --font-amiri: var(--font-amiri);
+  
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  direction: rtl;
+  text-align: right;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Custom Scrollbar for Dark & Light */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  opacity: 0.3;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    direction: ltr !important;
+    text-align: left !important;
+  }
+
+  [data-print-hidden] {
+    display: none !important;
+  }
+
+  [data-print-p-0] {
+    padding: 0 !important;
+  }
+
+  [data-print-overflow-visible] {
+    overflow: visible !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+}

@@ -1,0 +1,255 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { TripOrder, Advance, Driver } from '@/types/database';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { MapPin, Fuel, FileText, CheckCircle } from 'lucide-react';
+
+export default function DriverTasksPage() {
+  const [trips, setTrips] = useState<TripOrder[]>([]);
+  const [advances, setAdvances] = useState<Advance[]>([]);
+  const [driver, setDriver] = useState<Driver | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const supabase = useMemo(() => createClient(), []);
+
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        const { data: driverData, error: driverError } = await supabase
+          .from('drivers')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single<Driver>();
+
+        if (driverError || !driverData) {
+          toast({
+            title: 'خطأ',
+            description: 'لم يتم العثور على ملف السائق المرتبط بهذا الحساب',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+
+        setDriver(driverData);
+
+        const [tripsRes, advancesRes] = await Promise.all([
+          supabase.from('trip_orders').select('*').eq('driver_id', driverData.id).order('departure_date', { ascending: false }),
+          supabase.from('advances').select('*').eq('driver_id', driverData.id).order('date', { ascending: false }),
+        ]);
+
+        if (tripsRes.error) throw tripsRes.error;
+        if (advancesRes.error) throw advancesRes.error;
+
+        setTrips(tripsRes.data || []);
+        setAdvances(advancesRes.data || []);
+
+        channel = supabase
+          .channel(`driver-tasks-${driverData.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'trip_orders',
+              filter: `driver_id=eq.${driverData.id}`,
+            },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                const newTrip = payload.new as TripOrder;
+                setTrips((prev) => [newTrip, ...prev]);
+                toast({ title: 'تم إسناد رحلة جديدة لك!' });
+              } else if (payload.eventType === 'UPDATE') {
+                const updated = payload.new as TripOrder;
+                setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'advances',
+              filter: `driver_id=eq.${driverData.id}`,
+            },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                setAdvances((prev) => [payload.new as Advance, ...prev]);
+              } else if (payload.eventType === 'UPDATE') {
+                const updated = payload.new as Advance;
+                setAdvances((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+                toast({ title: 'تم تحديث حالة السلفة' });
+              }
+            }
+          )
+          .subscribe();
+      } catch (error: any) {
+        const message = error?.message || (error instanceof Error ? error.message : 'حدث خطأ غير متوقع');
+        toast({
+          title: 'خطأ',
+          description: message,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, toast]);
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending': return 'قيد الانتظار';
+      case 'in_transit': return 'في الطريق';
+      case 'completed': return 'مكتمل';
+      case 'cancelled': return 'ملغي';
+      default: return status;
+    }
+  };
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      <div>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">مهامي وجدول الرحلات</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">متابعة مسار الرحلات النشطة، وثائق CMR وسجل السلف الشخصية</p>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold font-amiri text-foreground flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              الرحلات المخصصة
+            </h2>
+            {trips.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">لا توجد رحلات مخصصة لك حالياً</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {trips.map((trip) => (
+                  <Card key={trip.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg font-amiri text-foreground">{trip.route}</CardTitle>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          trip.status === 'in_transit'
+                            ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25'
+                            : trip.status === 'completed'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
+                            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                        }`}>
+                          {getStatusText(trip.status)}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">تاريخ الانطلاق:</span>
+                          <span className="font-medium text-foreground">{trip.departure_date}</span>
+                        </div>
+                        {trip.cmr_number && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">رقم CMR:</span>
+                            <span className="font-medium font-mono text-foreground" dir="ltr">{trip.cmr_number}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full"
+                          asChild
+                        >
+                          <a href={`/driver-delivery?tripId=${trip.id}`}>
+                            <CheckCircle className="w-3.5 h-3.5 ml-1.5" />
+                            تأكيد التسليم
+                          </a>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4 pt-4">
+            <h2 className="text-lg font-bold font-amiri text-foreground flex items-center gap-2">
+              <Fuel className="w-5 h-5 text-primary" />
+              السلف الأخيرة
+            </h2>
+            {advances.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">لا توجد سلف مسجلة</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {advances.slice(0, 5).map((advance) => (
+                  <Card key={advance.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base font-amiri flex items-center gap-2 text-foreground">
+                          <FileText className="w-4 h-4 text-primary" />
+                          سلفة #{advance.id}
+                        </CardTitle>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          advance.status === 'approved'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
+                            : advance.status === 'pending'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                            : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
+                        }`}>
+                          {advance.status === 'approved' ? 'معتمد' : advance.status === 'pending' ? 'قيد الانتظار' : 'مرفوض'}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">المبلغ:</span>
+                          <span className="font-bold text-primary font-mono">{advance.amount} {advance.currency}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">التاريخ:</span>
+                          <span className="font-medium text-foreground">{advance.date}</span>
+                        </div>
+                        {advance.reason && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">السبب:</span>
+                            <span className="font-medium text-foreground">{advance.reason}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
