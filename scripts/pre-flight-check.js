@@ -65,7 +65,10 @@ if (env === 'production') {
   loadEnvFile(`.env.${env}.local`);
 }
 
-const { createClient } = require('@supabase/supabase-js');
+// Supabase JS requires WebSocket. Provide fallback for Node < 22 where native WebSocket is missing.
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = class WebSocketPolyfill {};
+}
 
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
@@ -218,8 +221,21 @@ async function checkSupabaseConnection() {
     return;
   }
 
+  if (
+    supabaseUrl.includes('xxxx.supabase.co') ||
+    supabaseUrl.includes('placeholder') ||
+    supabaseKey.includes('...') ||
+    supabaseKey.includes('placeholder')
+  ) {
+    warn(`Placeholder credentials detected (${supabaseUrl}). Skipping live database test.`);
+    warn(`To verify live connectivity, replace placeholder secrets with your real Supabase project credentials.`);
+    warnings++;
+    return;
+  }
+
   let supabase;
   try {
+    const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(supabaseUrl, supabaseKey, {
       db: { schema: 'public' },
       auth: { persistSession: false, autoRefreshToken: false },
