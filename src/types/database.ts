@@ -526,6 +526,7 @@ export interface AppSettings {
 export interface SystemSettings {
   id: number;
   company_name?: string;
+  logo_url?: string | null;
   default_tva_rate?: number;
   owner_profit_share: number;
   default_bank_account_id?: number;

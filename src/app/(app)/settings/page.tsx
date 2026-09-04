@@ -1,23 +1,26 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Sun, Moon, Laptop, Palette, Building2 } from 'lucide-react';
+import { Save, Sun, Moon, Laptop, Palette, Building2, ImagePlus, Trash2, Loader2 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [settings, setSettings] = useState({
     company_name: '',
+    logo_url: null as string | null,
     owner_profit_share: '0',
     default_bank_account_id: '',
     default_tva_rate: '20',
   });
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const supabase = useMemo(() => createClient(), []);
@@ -41,6 +44,7 @@ export default function SettingsPage() {
       if (data) {
         setSettings({
           company_name: data.company_name || '',
+          logo_url: data.logo_url || null,
           owner_profit_share: data.owner_profit_share?.toString() || '0',
           default_bank_account_id: data.default_bank_account_id?.toString() || '',
           default_tva_rate: (data.default_tva_rate !== undefined && data.default_tva_rate !== null)
@@ -71,6 +75,7 @@ export default function SettingsPage() {
       const payload: any = {
         id: 1,
         company_name: settings.company_name,
+        logo_url: settings.logo_url || null,
         owner_profit_share: parseFloat(settings.owner_profit_share) || 0,
         default_bank_account_id: settings.default_bank_account_id ? parseInt(settings.default_bank_account_id) : null,
         default_tva_rate: parseFloat(settings.default_tva_rate) || 20,
@@ -79,14 +84,29 @@ export default function SettingsPage() {
 
       let { error } = await supabase.from('system_settings').upsert(payload);
 
-      // If column is not in Supabase schema cache, fallback to saving without it
-      if (error && (error.message?.includes('default_tva_rate') || error.code === 'PGRST204')) {
+      // If a column is not in Supabase schema cache, fallback to saving without it
+      if (error && error.code === 'PGRST204') {
+        const offending = (error.message?.match(/'([^']+)'/) || [])[1];
+        if (offending && offending in payload) {
+          delete (payload as any)[offending];
+          const retryResult = await supabase.from('system_settings').upsert(payload);
+          error = retryResult.error;
+        }
+      }
+
+      // Legacy fallback for default_tva_rate
+      if (error && error.message?.includes('default_tva_rate')) {
         delete payload.default_tva_rate;
         const retryResult = await supabase.from('system_settings').upsert(payload);
         error = retryResult.error;
       }
 
       if (error) throw error;
+
+      // Update sidebar branding without requiring a full reload
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('company-settings-updated'));
+      }
 
       toast({
         title: 'تم حفظ الإعدادات بنجاح',
@@ -99,6 +119,107 @@ export default function SettingsPage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleLogoPick = () => {
+    logoInputRef.current?.click();
+  };
+
+  const handleLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'الرجاء اختيار ملف صورة صالح', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'حجم الصورة يتجاوز 2 ميجابايت', variant: 'destructive' });
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const path = `company/logo_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('settings')
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabase.storage.from('settings').getPublicUrl(path);
+      const publicUrl = pub.publicUrl;
+
+      // Persist the URL to system_settings immediately so it is visible even before pressing save
+      const updatePayload: any = {
+        id: 1,
+        logo_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      };
+      let { error: persistError } = await supabase.from('system_settings').upsert(updatePayload);
+      if (persistError && (persistError.code === 'PGRST204' || persistError.message?.includes('logo_url'))) {
+        // Column not yet visible to PostgREST cache: keep url in local state only
+        console.warn('logo_url column not visible to PostgREST yet:', persistError.message);
+        persistError = null;
+      }
+      if (persistError) throw persistError;
+
+      // Delete the previous logo file if it existed in our bucket
+      if (settings.logo_url) {
+        try {
+          const oldPath = settings.logo_url.split('/storage/v1/object/public/settings/')[1];
+          if (oldPath) await supabase.storage.from('settings').remove([oldPath]);
+        } catch (cleanupErr) {
+          console.warn('Could not remove previous logo:', cleanupErr);
+        }
+      }
+
+      setSettings((prev) => ({ ...prev, logo_url: publicUrl }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('company-settings-updated'));
+      }
+      toast({ title: '✅ تم رفع شعار الشركة بنجاح' });
+    } catch (error: any) {
+      toast({
+        title: 'فشل رفع الشعار',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!settings.logo_url) return;
+    const previous = settings.logo_url;
+    setSettings((prev) => ({ ...prev, logo_url: null }));
+    try {
+      const path = previous.split('/storage/v1/object/public/settings/')[1];
+      if (path) await supabase.storage.from('settings').remove([path]);
+
+      const updatePayload: any = {
+        id: 1,
+        logo_url: null,
+        updated_at: new Date().toISOString(),
+      };
+      let { error: persistError } = await supabase.from('system_settings').upsert(updatePayload);
+      if (persistError && (persistError.code === 'PGRST204' || persistError.message?.includes('logo_url'))) {
+        persistError = null;
+      }
+      if (persistError) throw persistError;
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('company-settings-updated'));
+      }
+      toast({ title: 'تم حذف شعار الشركة' });
+    } catch (error: any) {
+      setSettings((prev) => ({ ...prev, logo_url: previous }));
+      toast({
+        title: 'فشل حذف الشعار',
+        description: error.message,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -221,6 +342,66 @@ export default function SettingsPage() {
               placeholder="مثال: شركة النقل الدولي واللوجستيك"
             />
           </div>
+
+          {/* شعار الشركة */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">شعار الشركة</label>
+            <p className="text-xs text-muted-foreground">
+              يظهر في أعلى القائمة الجانبية وفي جميع ملفات PDF الصادرة عن الشركة
+            </p>
+            <div className="flex items-center gap-4">
+              <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                {settings.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={settings.logo_url}
+                    alt="شعار الشركة"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <ImagePlus className="w-8 h-8 text-muted-foreground" />
+                )}
+                {uploadingLogo && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg,image/webp"
+                  className="hidden"
+                  onChange={handleLogoFile}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleLogoPick}
+                  disabled={uploadingLogo}
+                  size="sm"
+                >
+                  <ImagePlus className="w-4 h-4 ml-2" />
+                  {settings.logo_url ? 'تغيير الشعار' : 'رفع شعار'}
+                </Button>
+                {settings.logo_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleRemoveLogo}
+                    disabled={uploadingLogo}
+                    size="sm"
+                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="w-4 h-4 ml-2" />
+                    حذف الشعار
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">نسبة الضريبة الافتراضية TVA (%)</label>

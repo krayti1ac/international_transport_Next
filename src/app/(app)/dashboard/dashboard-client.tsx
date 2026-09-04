@@ -144,6 +144,8 @@ const adminNavGroups: SidebarGroup[] = [
     label: 'الأسطول والمركبات',
     items: [
       { title: 'وثائق الأسطول', href: '/fleet/documents', icon: <FileText className="w-4 h-4" /> },
+      { title: 'أرشيف الوثائق العام', href: '/documents', icon: <FileText className="w-4 h-4" /> },
+      { title: 'حجوزات وتذاكر العبّارات', href: '/ferry-expenses', icon: <Ship className="w-4 h-4" /> },
       { title: 'قائمة فواتير الإصلاح', href: '/maintenance?tab=repair_invoices', icon: <List className="w-4 h-4" /> },
       { title: 'الصيانة الدورية للأسطول', href: '/maintenance', icon: <Wrench className="w-4 h-4" /> },
       { title: 'كشف مصاريف الصيانة', href: '/maintenance?tab=expenses', icon: <Receipt className="w-4 h-4" /> },
@@ -176,20 +178,6 @@ const adminNavGroups: SidebarGroup[] = [
       { title: 'دردشة داخلية', href: '/chat', icon: <MessageSquare className="w-4 h-4" /> },
       { title: 'مركز إشعارات الواتساب', href: '/whatsapp-notifications', icon: <MessageSquare className="w-4 h-4" /> },
       { title: 'تذكيرات الفواتير المتأخرة (واتساب)', href: '/whatsapp-reminders', icon: <Bell className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'fleet-vehicles',
-    label: 'الأسطول والمركبات',
-    items: [
-      { title: 'وثائق الأسطول', href: '/fleet/documents', icon: <FileText className="w-4 h-4" /> },
-      { title: 'أرشيف الوثائق العام', href: '/documents', icon: <FileText className="w-4 h-4" /> },
-      { title: 'حجوزات وتذاكر العبّارات', href: '/ferry-expenses', icon: <Ship className="w-4 h-4" /> },
-      { title: 'قائمة فواتير الإصلاح', href: '/maintenance?tab=repair_invoices', icon: <List className="w-4 h-4" /> },
-      { title: 'الصيانة الدورية للأسطول', href: '/maintenance', icon: <Wrench className="w-4 h-4" /> },
-      { title: 'كشف مصاريف الصيانة', href: '/maintenance?tab=expenses', icon: <Receipt className="w-4 h-4" /> },
-      { title: '⚠️ تنبيهات الصيانة الوقائية', href: '/maintenance?tab=alerts', icon: <AlertTriangle className="w-4 h-4" /> },
-      { title: '⛽ مسح تذاكر الوقود (AI)', href: '/fuel-receipt', icon: <Scan className="w-4 h-4" /> },
     ],
   },
   {

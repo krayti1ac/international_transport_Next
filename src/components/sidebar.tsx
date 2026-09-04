@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import React, { useState, useMemo, useCallback } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export interface SidebarItem {
   title: string;
@@ -46,27 +47,24 @@ interface SidebarProps {
 export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const { theme, setTheme } = useTheme();
-  
-  // Single active group ID (accordion behavior)
+  const { companyName, logoUrl } = useCompanyBranding();
+
   const [activeGroupId, setActiveGroupId] = useState<string | null | undefined>(undefined);
   const [allExpanded, setAllExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Normalize items into groups if only items array is passed
   const normalizedGroups: SidebarGroup[] = useMemo(() => {
     if (groups && groups.length > 0) return groups;
     if (items && items.length > 0) return [{ id: 'default', label: 'الرئيسية', items }];
     return [];
   }, [groups, items]);
 
-  // Helper to check if item is allowed for current user role
   const isItemAllowed = useCallback((item: SidebarItem): boolean => {
     if (!item.roles) return true;
     if (!userRole) return false;
     return item.roles.includes(userRole);
   }, [userRole]);
 
-  // Filter groups and their items based on user role
   const filteredGroups = useMemo(() => {
     return normalizedGroups
       .map((group, gIdx) => {
@@ -87,7 +85,6 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       .filter((group) => group.items.length > 0);
   }, [normalizedGroups, isItemAllowed]);
 
-  // Check if a group contains active route
   const isGroupActive = useCallback((group: SidebarGroup): boolean => {
     return group.items.some(
       (item) =>
@@ -96,21 +93,18 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
     );
   }, [currentPath]);
 
-  // Find the group that contains the current active route or default to first group
   const defaultActiveGroupId = useMemo(() => {
     const matched = filteredGroups.find(isGroupActive);
     if (matched) return matched.id;
     return filteredGroups[0]?.id || null;
   }, [filteredGroups, isGroupActive]);
 
-  // Determine effective open state for a group
   const isGroupOpen = (group: SidebarGroup): boolean => {
     if (searchQuery.trim() || allExpanded) return true;
     const currentOpenId = activeGroupId !== undefined ? activeGroupId : defaultActiveGroupId;
     return currentOpenId === group.id;
   };
 
-  // Toggle group open/close with single-open accordion logic
   const handleToggleGroup = (groupId: string) => {
     setAllExpanded(false);
     const currentOpenId = activeGroupId !== undefined ? activeGroupId : defaultActiveGroupId;
@@ -135,7 +129,6 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  // Filter groups and items when searching
   const searchedGroups = useMemo(() => {
     if (!searchQuery.trim()) return filteredGroups;
 
@@ -160,43 +153,52 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
 
   return (
     <aside
-      className="w-68 h-full bg-[#110e1b] text-[#f1ecf9] flex flex-col border-l border-[#221c33] select-none shadow-2xl relative z-20 transition-colors duration-200"
+      className="w-68 h-full bg-[var(--sidebar-bg)] text-[var(--sidebar-fg)] flex flex-col border-l border-[var(--sidebar-border)] select-none shadow-2xl relative z-20 transition-colors duration-200"
       dir="rtl"
     >
       {/* Brand Header */}
-      <div className="p-3.5 border-b border-[#221c33] flex items-center justify-between bg-[#141021]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-purple-900/30">
-            <Truck className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold font-amiri tracking-wide text-white leading-tight">
-              ترانس بودانون
+      <div className="p-3.5 border-b border-[var(--sidebar-border)] flex items-center justify-between bg-[var(--sidebar-header-bg)] transition-colors duration-200">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={`شعار ${companyName}`}
+              className="w-8 h-8 rounded-lg object-contain bg-[var(--sidebar-bg)] border border-[var(--sidebar-border)] shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-purple-900/30 shrink-0">
+              <Truck className="w-4 h-4" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold font-amiri tracking-wide text-[var(--sidebar-fg)] leading-tight truncate">
+              {companyName}
             </h1>
-            <p className="text-[10px] text-[#a598c4] font-medium">المنظومة اللوجستية الدولية</p>
+            <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">المنظومة اللوجستية الدولية</p>
           </div>
         </div>
-        <span className="flex h-2 w-2 relative">
+        <span className="flex h-2 w-2 relative shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
         </span>
       </div>
 
       {/* Search and Quick Controls */}
-      <div className="px-2.5 pt-2.5 pb-1.5 space-y-1.5 border-b border-[#221c33] bg-[#141021]/60">
+      <div className="px-2.5 pt-2.5 pb-1.5 space-y-1.5 border-b border-[var(--sidebar-border)] bg-[var(--sidebar-header-bg)]/60 transition-colors duration-200">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8778a8]" />
+          <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--sidebar-fg-muted)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="بحث سريع في القوائم..."
-            className="w-full bg-[#181328] border border-[#2c2342] rounded-md pr-8 pl-3 py-1 text-xs text-[#f1ecf9] placeholder:text-[#8778a8] focus:outline-hidden focus:border-[#a78bfa]/80 focus:ring-1 focus:ring-[#a78bfa]/20 transition-all"
+            className="w-full bg-[var(--sidebar-input-bg)] border border-[var(--sidebar-border)] rounded-md pr-8 pl-3 py-1 text-xs text-[var(--sidebar-fg)] placeholder:text-[var(--sidebar-fg-muted)] focus:outline-hidden focus:border-[var(--sidebar-fg-muted)] focus:ring-1 focus:ring-[var(--sidebar-fg-muted)]/20 transition-all"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#8778a8] hover:text-white bg-[#2c2342] rounded-full w-3.5 h-3.5 flex items-center justify-center cursor-pointer"
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] bg-[var(--sidebar-border)] rounded-full w-3.5 h-3.5 flex items-center justify-center cursor-pointer"
             >
               ✕
             </button>
@@ -204,8 +206,8 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         </div>
 
         {/* Expand / Collapse Controls */}
-        <div className="flex items-center justify-between text-[10px] text-[#8778a8] px-1">
-          <span className="font-semibold text-[#8778a8] uppercase tracking-wider">
+        <div className="flex items-center justify-between text-[10px] text-[var(--sidebar-fg-muted)] px-1">
+          <span className="font-semibold text-[var(--sidebar-fg-muted)] uppercase tracking-wider">
             الأقسام ({searchedGroups.length})
           </span>
           <div className="flex items-center gap-1">
@@ -213,17 +215,17 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
               type="button"
               onClick={expandAll}
               title="توسيع الكل"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[#201833] hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer"
             >
               <ChevronsUpDown className="w-2.5 h-2.5" />
               <span>توسيع</span>
             </button>
-            <span className="text-[#322849]">•</span>
+            <span className="text-[var(--sidebar-fg-muted)]">•</span>
             <button
               type="button"
               onClick={collapseAll}
               title="طي الكل"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[#201833] hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer"
             >
               <ChevronsDownUp className="w-2.5 h-2.5" />
               <span>طي</span>
@@ -233,9 +235,9 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       </div>
 
       {/* Navigation Groups List */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#2f2549] scrollbar-track-transparent">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--sidebar-border)] scrollbar-track-transparent">
         {searchedGroups.length === 0 ? (
-          <div className="text-center py-6 text-xs text-[#8778a8]">
+          <div className="text-center py-6 text-xs text-[var(--sidebar-fg-muted)]">
             لا توجد عناصر مطابقة للبحث
           </div>
         ) : (
@@ -252,19 +254,19 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                   className={cn(
                     "w-full px-2.5 py-2 flex items-center justify-between text-right rounded-md transition-colors cursor-pointer group",
                     isOpen
-                      ? "text-[#e9ddff] font-semibold"
-                      : "text-[#c2b2df] hover:text-white hover:bg-[#1a142c]"
+                      ? "text-[var(--sidebar-fg)] font-semibold"
+                      : "text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover-bg)]"
                   )}
                 >
                   <span className="text-[13px] tracking-wide truncate">
                     {group.label}
                   </span>
 
-                  <span className="text-[#a78bfa] transition-transform duration-200 shrink-0">
+                  <span className="text-[var(--sidebar-fg-muted)] transition-transform duration-200 shrink-0">
                     {isOpen ? (
-                      <ChevronDown className="w-4 h-4 text-[#c4b5fd]" />
+                      <ChevronDown className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
                     ) : (
-                      <ChevronLeft className="w-4 h-4 text-[#8f7eaf] group-hover:text-[#c4b5fd]" />
+                      <ChevronLeft className="w-4 h-4 text-[var(--sidebar-fg-muted)] group-hover:text-[var(--sidebar-fg)]" />
                     )}
                   </span>
                 </button>
@@ -290,10 +292,10 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                             className={cn(
                               "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] transition-colors group relative cursor-pointer",
                               isExact
-                                ? "bg-[#271e3d] text-white font-semibold"
+                                ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
                                 : isActive
-                                ? "bg-[#1f1731] text-[#ece4fa]"
-                                : "text-[#d6cbef] hover:bg-[#1e1730] hover:text-white"
+                                ? "bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-fg)]"
+                                : "text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)]"
                             )}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -301,8 +303,8 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                                 className={cn(
                                   "w-5 h-5 flex items-center justify-center shrink-0 transition-colors text-xs",
                                   isExact
-                                    ? "text-[#c4b5fd]"
-                                    : "text-[#bfa8ff] group-hover:text-[#d8ccff]"
+                                    ? "text-[var(--sidebar-fg)]"
+                                    : "text-[var(--sidebar-fg-muted)] group-hover:text-[var(--sidebar-fg)]"
                                 )}
                               >
                                 {item.icon}
@@ -311,7 +313,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                             </div>
 
                             {item.badge !== undefined && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#8b5cf6]/20 text-[#c4b5fd] border border-[#8b5cf6]/30">
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[var(--sidebar-badge-bg)] text-[var(--sidebar-badge-fg)] border border-[var(--sidebar-border)]">
                                 {item.badge}
                               </span>
                             )}
@@ -328,47 +330,47 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       </nav>
 
       {/* Footer Section: Dark Mode Toggle, Settings, Version */}
-      <div className="border-t border-[#221c33] bg-[#141021] p-2 space-y-1">
+      <div className="border-t border-[var(--sidebar-border)] bg-[var(--sidebar-header-bg)] p-2 space-y-1 transition-colors duration-200">
         {/* Dark Mode Row */}
-        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] text-[#cfc2e6]">
+        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] text-[var(--sidebar-fg)]">
           <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-[#8f7eaf]" />
+            <Sun className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
             <span className="text-[12px] font-medium">الوضع الداكن</span>
           </div>
-          {/* Custom iOS/Modern style toggle switch matching Image 11 */}
+          {/* Custom iOS/Modern style toggle switch */}
           <button
             type="button"
             onClick={toggleTheme}
             aria-label="تبديل الوضع الداكن"
             className={cn(
               "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer outline-hidden",
-              theme === 'dark' ? "bg-[#c4b5fd]" : "bg-[#33284d]"
+              theme === 'dark' ? "bg-[var(--sidebar-fg-muted)]" : "bg-[var(--sidebar-border)]"
             )}
           >
             <div
               className={cn(
                 "w-5 h-5 rounded-full transition-transform duration-200 shadow-sm",
                 theme === 'dark'
-                  ? "bg-[#352161] translate-x-0"
-                  : "bg-[#8f7eaf] -translate-x-5"
+                  ? "bg-[var(--sidebar-bg)] translate-x-0"
+                  : "bg-[var(--sidebar-fg-muted)] -translate-x-5"
               )}
             />
           </button>
         </div>
 
-        {/* Collapsible Settings Group matching Image 11 */}
+        {/* Collapsible Settings Group */}
         <div className="pt-0.5">
           <button
             type="button"
             onClick={() => setSettingsOpen(!settingsOpen)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium text-[#c2b2df] hover:text-white hover:bg-[#1a142c] rounded-md cursor-pointer transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover-bg)] rounded-md cursor-pointer transition-colors"
           >
             <span className="text-[12.5px] tracking-wide">الإعدادات</span>
-            <span className="text-[#a78bfa] transition-transform duration-200">
+            <span className="text-[var(--sidebar-fg-muted)] transition-transform duration-200">
               {settingsOpen ? (
-                <ChevronDown className="w-4 h-4 text-[#c4b5fd]" />
+                <ChevronDown className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
               ) : (
-                <ChevronLeft className="w-4 h-4 text-[#8f7eaf]" />
+                <ChevronLeft className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
               )}
             </span>
           </button>
@@ -379,12 +381,12 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                 href="/settings"
                 onClick={onItemClick}
                 className={cn(
-                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[#d6cbef] hover:bg-[#1e1730] hover:text-white transition-colors cursor-pointer",
-                  currentPath === '/settings' && "bg-[#271e3d] text-white font-semibold"
+                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
+                  currentPath === '/settings' && "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[#bfa8ff]">
+                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
                     <Settings className="w-4 h-4" />
                   </span>
                   <span className="truncate">إعدادات الشركة</span>
@@ -395,12 +397,12 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                 href="/settings?tab=users"
                 onClick={onItemClick}
                 className={cn(
-                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[#d6cbef] hover:bg-[#1e1730] hover:text-white transition-colors cursor-pointer",
-                  currentPath.includes('tab=users') && "bg-[#271e3d] text-white font-semibold"
+                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
+                  currentPath.includes('tab=users') && "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[#bfa8ff]">
+                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
                     <Users className="w-4 h-4" />
                   </span>
                   <span className="truncate">المستخدمين</span>
@@ -410,12 +412,11 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
           )}
         </div>
 
-        {/* System Version string matching Image 11 */}
-        <div className="text-[10px] text-center text-[#7d7098] pt-1 pb-0.5 tracking-wider font-mono">
+        {/* System Version string */}
+        <div className="text-[10px] text-center text-[var(--sidebar-fg-muted)] pt-1 pb-0.5 tracking-wider font-mono">
           إصدار المنظومة v1.0.0+1
         </div>
       </div>
     </aside>
   );
 }
-
