@@ -32,6 +32,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
         
         if (data) {
+          const userLang = (data.preferred_language || (
+            typeof window !== 'undefined'
+              ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
+              : null
+          ) || 'ar') as 'ar' | 'fr';
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('app_locale', userLang);
+              localStorage.setItem(`user_lang_${data.id}`, userLang);
+              if (data.email) {
+                localStorage.setItem(`user_lang_${data.email.toLowerCase()}`, userLang);
+              }
+              document.documentElement.lang = userLang;
+              document.documentElement.dir = userLang === 'ar' ? 'rtl' : 'ltr';
+              document.cookie = `NEXT_LOCALE=${userLang}; path=/; max-age=31536000; SameSite=Lax`;
+              window.dispatchEvent(new CustomEvent('app-language-changed', { detail: { locale: userLang } }));
+            } catch (e) {}
+          }
+
           setUser({
             id: data.id,
             email: data.email || session.user.email || '',
@@ -40,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             created_at: data.created_at,
             theme_mode: data.theme_mode,
             mfa_enabled: data.mfa_enabled,
+            preferred_language: userLang,
           });
           setRole(data.role);
         }
@@ -58,6 +79,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
         
         if (data) {
+          const userLang = (data.preferred_language || (
+            typeof window !== 'undefined'
+              ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
+              : null
+          ) || 'ar') as 'ar' | 'fr';
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('app_locale', userLang);
+              localStorage.setItem(`user_lang_${data.id}`, userLang);
+              if (data.email) {
+                localStorage.setItem(`user_lang_${data.email.toLowerCase()}`, userLang);
+              }
+              document.documentElement.lang = userLang;
+              document.documentElement.dir = userLang === 'ar' ? 'rtl' : 'ltr';
+              document.cookie = `NEXT_LOCALE=${userLang}; path=/; max-age=31536000; SameSite=Lax`;
+              window.dispatchEvent(new CustomEvent('app-language-changed', { detail: { locale: userLang } }));
+            } catch (e) {}
+          }
+
           setUser({
             id: data.id,
             email: data.email || session.user.email || '',
@@ -66,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             created_at: data.created_at,
             theme_mode: data.theme_mode,
             mfa_enabled: data.mfa_enabled,
+            preferred_language: userLang,
           });
           setRole(data.role);
         }
@@ -94,6 +136,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (profile) {
+        const userLang = (profile.preferred_language || (
+          typeof window !== 'undefined'
+            ? (localStorage.getItem(`user_lang_${profile.id}`) || localStorage.getItem(`user_lang_${(profile.email || email).toLowerCase()}`))
+            : null
+        ) || 'ar') as 'ar' | 'fr';
+
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('app_locale', userLang);
+            localStorage.setItem(`user_lang_${profile.id}`, userLang);
+            localStorage.setItem(`user_lang_${(profile.email || email).toLowerCase()}`, userLang);
+            document.documentElement.lang = userLang;
+            document.documentElement.dir = userLang === 'ar' ? 'rtl' : 'ltr';
+            document.cookie = `NEXT_LOCALE=${userLang}; path=/; max-age=31536000; SameSite=Lax`;
+            window.dispatchEvent(new CustomEvent('app-language-changed', { detail: { locale: userLang } }));
+          } catch (e) {}
+        }
+
         const loggedInUser: User = {
           id: profile.id,
           email: profile.email || authData.user.email || '',
@@ -102,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           created_at: profile.created_at,
           theme_mode: profile.theme_mode,
           mfa_enabled: profile.mfa_enabled,
+          preferred_language: userLang,
         };
         setUser(loggedInUser);
         setRole(profile.role);

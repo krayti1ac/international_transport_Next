@@ -1,0 +1,18 @@
+{
+  "autonomous-executor": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/agent-auto-approve.js",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
+

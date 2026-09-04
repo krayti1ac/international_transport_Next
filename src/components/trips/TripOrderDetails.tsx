@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlaneTakeoff, PlaneLanding, Truck, DollarSign, X, Navigation } from 'lucide-react';
+import { PlaneTakeoff, PlaneLanding, DollarSign, X, Navigation } from 'lucide-react';
+import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { TransitActions } from '@/components/trips/TransitActions';
 import { DriverSettlementDialog } from '@/components/trips/DriverSettlementDialog';
 import { PodReportView } from '@/features/trips/components/PodReportView';
@@ -136,7 +137,7 @@ function TripOrderDetails({
           <Card className="bg-amber-500/5 border-amber-500/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                <Truck className="w-4 h-4" />
+                <TruckIcon className="w-4 h-4" />
                 الطاقم والأسطول
               </CardTitle>
             </CardHeader>
@@ -146,11 +147,17 @@ function TripOrderDetails({
                 <p className="font-medium text-foreground">{assignedDriver?.name || 'غير مسند'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">الشاحنة</p>
+                <p className="text-muted-foreground mb-1 flex items-center gap-1">
+                  <TruckIcon className="w-3.5 h-3.5 text-blue-500" />
+                  الشاحنة
+                </p>
                 <MatriculeBadge plate={assignedTruck?.plate_number} variant="badge" size="sm" />
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">المقطورة</p>
+                <p className="text-muted-foreground mb-1 flex items-center gap-1">
+                  <TrailerIcon className="w-3.5 h-3.5 text-purple-500" />
+                  المقطورة
+                </p>
                 <MatriculeBadge plate={assignedTrailer?.plate_number} variant="subtle" size="sm" />
               </div>
               <div>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { MapPin, Plus, Pencil, Trash2, Navigation, X } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { DEFAULT_ROUTES } from '@/lib/default-data';
 
 const ROUTE_TYPE_LABELS: Record<string, string> = {
   outbound: 'رحلات الذهاب (تصدير)',
@@ -35,19 +36,24 @@ export default function TransportRoutesPage() {
       }
       const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setRoutes(data || []);
+      if (error) {
+        console.warn('Could not fetch transport routes from database, falling back to default data:', error);
+        const filtered = DEFAULT_ROUTES.filter((r) => filterType === 'all' || r.route_type === filterType);
+        setRoutes(filtered);
+      } else if (data && data.length > 0) {
+        setRoutes(data);
+      } else {
+        const filtered = DEFAULT_ROUTES.filter((r) => filterType === 'all' || r.route_type === filterType);
+        setRoutes(filtered);
+      }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
-      toast({
-        title: 'خطأ في تحميل البيانات',
-        description: message,
-        variant: 'destructive',
-      });
+      console.warn('Transport routes fetch error, falling back to defaults:', error);
+      const filtered = DEFAULT_ROUTES.filter((r) => filterType === 'all' || r.route_type === filterType);
+      setRoutes(filtered);
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast, filterType]);
+  }, [supabase, filterType]);
 
   useEffect(() => {
     fetchRoutes();

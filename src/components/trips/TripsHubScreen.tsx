@@ -309,7 +309,9 @@ export default function TripsHubScreen() {
       if (clientsRes.error) throw clientsRes.error;
       if (driversRes.error) throw driversRes.error;
       if (trucksRes.error) throw trucksRes.error;
-      if (advancesRes.error) throw advancesRes.error;
+      if (advancesRes.error) {
+        console.warn('Advances query warning in TripsHubScreen:', advancesRes.error.message);
+      }
       if (cashBoxesRes.error) throw cashBoxesRes.error;
       if (routesRes.error) throw routesRes.error;
 

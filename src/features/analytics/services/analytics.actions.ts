@@ -6,6 +6,7 @@ import {
   DEFAULT_TRIPS,
   DEFAULT_TRUCKS,
   DEFAULT_DRIVERS,
+  DEFAULT_INVOICES,
   fallbackArray,
 } from '@/lib/default-data';
 
@@ -94,7 +95,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
     ]);
 
     const treasury = treasuryRes.data || [];
-    const invoices = invoicesRes.data || [];
+    const invoices = fallbackArray(invoicesRes.data, DEFAULT_INVOICES);
     const tripOrders = fallbackArray(tripOrdersRes.data, DEFAULT_TRIPS);
     const truckMaintenance = truckMaintenanceRes.data || [];
     const repairInvoices = repairInvoicesRes.data || [];
@@ -163,7 +164,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
         description: 'المبلغ المستحق: 17,500 MAD (تجاوزت موعد السداد بـ 14 يوم)',
         severity: 'high',
         date: '2025-09-08',
-        actionUrl: '/invoices',
+        actionUrl: '/invoices?status=overdue',
       });
       criticalAlerts.push({
         id: 'inv-demo-2',
@@ -172,7 +173,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
         description: 'المبلغ المستحق: 16,000 EUR (تجاوزت موعد السداد بـ 7 أيام)',
         severity: 'high',
         date: '2025-09-11',
-        actionUrl: '/invoices',
+        actionUrl: '/invoices?status=overdue',
       });
     }
 

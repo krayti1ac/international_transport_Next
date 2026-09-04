@@ -7,8 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { MapPin, Navigation, Satellite } from 'lucide-react';
-import { TrackingMap } from './TrackingMap';
+import dynamic from 'next/dynamic';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
+
+const TrackingMap = dynamic(
+  () => import('./TrackingMap').then((mod) => ({ default: mod.TrackingMap })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-xl min-h-[400px]">
+        <p className="text-muted-foreground text-sm font-medium">جاري تحميل الخريطة...</p>
+      </div>
+    ),
+  }
+);
 
 const TruckTrackingScreen = () => {
   const [trucks, setTrucks] = useState<Truck[]>([]);

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Truck } from 'lucide-react';
+import { X, Save, User } from 'lucide-react';
+import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import type { Truck as TruckType, Driver, Trailer } from '@/types/database';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
@@ -182,7 +183,13 @@ export function FleetFormModal({
       <Card className="w-full max-w-xl my-8 shadow-2xl border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <CardTitle className="font-amiri text-xl flex items-center gap-2 text-foreground">
-            <Truck className="w-5 h-5 text-primary" />
+            {entityType === 'trailer' ? (
+              <TrailerIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            ) : entityType === 'driver' ? (
+              <User className="w-5 h-5 text-amber-500" />
+            ) : (
+              <TruckIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            )}
             {getTitle()}
           </CardTitle>
           <Button variant="ghost" size="icon" onClick={onClose}>

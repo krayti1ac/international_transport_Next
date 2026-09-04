@@ -3,7 +3,8 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ShieldCheck, Wrench, Truck as TruckIcon } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Wrench } from 'lucide-react';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import type { Truck, TruckMaintenance } from '@/types/database';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 

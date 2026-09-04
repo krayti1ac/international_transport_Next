@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,7 @@ interface FIFOPaymentModalProps {
   bankAccounts?: BankAccount[];
   cashBoxes?: CashBox[];
   onPaymentProcessed?: () => void;
+  initialClientId?: number | '';
 }
 
 export function FIFOPaymentModal({
@@ -27,12 +28,13 @@ export function FIFOPaymentModal({
   bankAccounts = [],
   cashBoxes = [],
   onPaymentProcessed,
+  initialClientId,
 }: FIFOPaymentModalProps) {
   const availableClients = fallbackArray(clients, DEFAULT_CLIENTS);
   const availableBankAccounts = fallbackArray(bankAccounts, DEFAULT_BANK_ACCOUNTS);
   const availableCashBoxes = fallbackArray(cashBoxes, DEFAULT_CASH_BOXES);
 
-  const [selectedClientId, setSelectedClientId] = useState<number | ''>('');
+  const [selectedClientId, setSelectedClientId] = useState<number | ''>(initialClientId || '');
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>('MAD');
   const [method, setMethod] = useState<string>('bank_transfer');
@@ -45,6 +47,12 @@ export function FIFOPaymentModal({
 
   const { toast } = useToast();
   const supabase = createClient();
+
+  useEffect(() => {
+    if (isOpen && initialClientId) {
+      setSelectedClientId(initialClientId);
+    }
+  }, [isOpen, initialClientId]);
 
   if (!isOpen) return null;
 

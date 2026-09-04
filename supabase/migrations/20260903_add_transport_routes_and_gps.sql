@@ -65,5 +65,25 @@ INSERT INTO public.transport_routes (name, route_type, origin, destination, orig
 ('ألميريا → الدار البيضاء', 'return', 'ألميريا', 'الدار البيضاء', 36.8423, -2.4623, 33.5731, -7.5898, 400, 1, true, '2025-01-01T08:00:00Z')
 ON CONFLICT DO NOTHING;
 
+-- Enable RLS and add policies
+ALTER TABLE IF EXISTS public.transport_routes ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated users full access to transport_routes') THEN
+    CREATE POLICY "Allow authenticated users full access to transport_routes"
+      ON public.transport_routes FOR ALL
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow anon read access to transport_routes') THEN
+    CREATE POLICY "Allow anon read access to transport_routes"
+      ON public.transport_routes FOR SELECT
+      TO anon
+      USING (true);
+  END IF;
+END $$;
+
 -- Refresh PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

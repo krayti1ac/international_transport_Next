@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Truck as TruckIcon, Layers } from 'lucide-react';
+import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Layers } from 'lucide-react';
+import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
@@ -683,7 +684,10 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الشاحنة المخصصة (Tracteur) *</label>
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <TruckIcon className="w-4 h-4 text-blue-500" />
+                      الشاحنة المخصصة (Tracteur) *
+                    </label>
                     <select
                       value={formData.truck_id || ''}
                       onChange={(e) => handleTruckChange(e.target.value)}
@@ -700,7 +704,10 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">المقطورة (Remorque / Frigo)</label>
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <TrailerIcon className="w-4 h-4 text-purple-500" />
+                      المقطورة (Remorque / Frigo)
+                    </label>
                     <select
                       value={formData.trailer_id || ''}
                       onChange={(e) => setFormData({ ...formData, trailer_id: parseInt(e.target.value) || undefined })}
@@ -709,6 +716,7 @@ export function TripFormModal({
                       <option value="">-- اختيار المقطورة --</option>
                       {availableTrailers.map((trailer) => (
                         <option key={trailer.id} value={trailer.id}>
+                          {trailer.plate_number} {trailer.model ? `(${trailer.model})` : ''}
                         </option>
                       ))}
                     </select>

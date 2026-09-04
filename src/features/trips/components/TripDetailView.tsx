@@ -14,9 +14,10 @@ import { PodReportView } from '@/features/trips/components/PodReportView';
 import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
 import { formatCurrency } from '@/lib/forex';
 import {
-  ArrowRight, MapPin, Truck as TruckIcon, FileText, Anchor, User,
+  ArrowRight, MapPin, FileText, User,
   DollarSign, ExternalLink, TrendingUp, RefreshCw, ShieldCheck, Box
 } from 'lucide-react';
+import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 
 interface TripDetailViewProps {
   tripId: number;
@@ -220,7 +221,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             </div>
             <div className="flex justify-between items-center bg-muted/40 p-3 rounded-xl border border-border/50">
               <span className="text-muted-foreground flex items-center gap-1.5">
-                <Anchor className="w-4 h-4 text-purple-500" /> المقطورة (Remorque):
+                <TrailerIcon className="w-4 h-4 text-purple-500" /> المقطورة (Remorque):
               </span>
               <div className="text-right">
                 <MatriculeBadge plate={trailer?.plate_number || 'غير مسندة'} variant="badge" size="xs" />

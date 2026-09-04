@@ -536,13 +536,19 @@ export default function DriversPage() {
                         الهاتف:
                       </span>
                       {driver.phone ? (
-                        <a
-                          href={`tel:${driver.phone}`}
-                          className="font-mono font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1"
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = `tel:${driver.phone}`;
+                          }}
+                          className="font-mono font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
                           dir="ltr"
                         >
                           {driver.phone}
-                        </a>
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -679,9 +685,19 @@ export default function DriversPage() {
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-muted-foreground" />
                       {driver.phone ? (
-                        <a href={`tel:${driver.phone}`} className="font-mono font-medium text-foreground hover:text-primary" dir="ltr">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = `tel:${driver.phone}`;
+                          }}
+                          className="font-mono font-medium text-foreground hover:text-primary cursor-pointer"
+                          dir="ltr"
+                        >
                           {driver.phone}
-                        </a>
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

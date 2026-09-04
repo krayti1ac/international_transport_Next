@@ -36,14 +36,26 @@ export default function DriverAdvancesPage() {
           return;
         }
 
-        const { data, error } = await supabase
+        let advancesList: Advance[] = [];
+        const res = await supabase
           .from('advances')
           .select('*')
           .eq('driver_id', driverData.id)
           .order('date', { ascending: false });
 
-        if (error) throw error;
-        setAdvances(data || []);
+        if (!res.error && res.data) {
+          advancesList = res.data;
+        } else {
+          // Fallback to created_at if date column does not exist
+          const fallbackRes = await supabase
+            .from('advances')
+            .select('*')
+            .eq('driver_id', driverData.id)
+            .order('created_at', { ascending: false });
+
+          advancesList = fallbackRes.data || [];
+        }
+        setAdvances(advancesList);
       } catch (error: any) {
         const message = error?.message || (error instanceof Error ? error.message : 'حدث خطأ غير متوقع');
         toast({

@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Sun, Moon, Laptop, Palette, Building2, ImagePlus, Trash2, Loader2 } from 'lucide-react';
+import { Save, Sun, Moon, Laptop, Palette, Building2, ImagePlus, Trash2, Loader2, Languages } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
+import { useLanguage } from '@/components/language-provider';
+import { useAuth } from '@/components/auth-provider';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -23,6 +25,8 @@ export default function SettingsPage() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const { locale, dir, setLocale, t } = useLanguage();
+  const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
@@ -109,11 +113,11 @@ export default function SettingsPage() {
       }
 
       toast({
-        title: 'تم حفظ الإعدادات بنجاح',
+        title: t('تم حفظ الإعدادات بنجاح', 'Paramètres enregistrés avec succès'),
       });
     } catch (error: any) {
       toast({
-        title: 'خطأ في حفظ الإعدادات',
+        title: t('خطأ في حفظ الإعدادات', "Erreur lors de l'enregistrement des paramètres"),
         description: error.message,
         variant: 'destructive',
       });
@@ -232,20 +236,106 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6" dir="rtl">
+    <div className="max-w-2xl mx-auto space-y-6" dir={dir}>
       <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">إعدادات النظام</h1>
-        <p className="text-sm text-muted-foreground mt-1">تخصيص مظهر النظام، بيانات الشركة، والنسب المالية</p>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">
+          {t('إعدادات النظام', 'Paramètres du système')}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {t(
+            'تخصيص لغة ومظهر النظام، بيانات الشركة، والنسب المالية',
+            "Personnalisation de la langue, du thème, des données de l'entreprise et des paramètres financiers"
+          )}
+        </p>
       </div>
+
+      {/* لغة النظام (Bascule Ar/Fr) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-amiri flex items-center gap-2">
+            <Languages className="w-5 h-5 text-primary" />
+            {t('لغة النظام (Langue du système)', 'Langue du système (System Language)')}
+          </CardTitle>
+          <CardDescription>
+            {t(
+              'اختر اللغة المفضلة لواجهة النظام، يتم تذكر وحفظ هذا التفضيل لحسابك بشكل مستقل',
+              "Choisissez la langue de l'interface, cette préférence est mémorisée pour votre compte"
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* خيار العربية */}
+            <button
+              type="button"
+              onClick={async () => {
+                await setLocale('ar', user?.id || user?.email);
+                toast({ title: '🇸🇦 تم تفعيل اللغة العربية وحفظ التفضيل' });
+              }}
+              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                locale === 'ar'
+                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-500 font-bold text-sm">
+                AR
+              </div>
+              <div>
+                <p className="font-bold text-sm text-foreground">العربية</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('واجهة باللغة العربية (من اليمين إلى اليسار)', 'Interface en arabe (RTL)')}
+                </p>
+              </div>
+              {locale === 'ar' && (
+                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                  {t('مفعّل', 'Activé')}
+                </span>
+              )}
+            </button>
+
+            {/* خيار الفرنسية */}
+            <button
+              type="button"
+              onClick={async () => {
+                await setLocale('fr', user?.id || user?.email);
+                toast({ title: '🇫🇷 Langue française activée et préférence enregistrée' });
+              }}
+              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                locale === 'fr'
+                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-500 font-bold text-sm">
+                FR
+              </div>
+              <div>
+                <p className="font-bold text-sm text-foreground">Français</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('واجهة باللغة الفرنسية (من اليسار إلى اليمين)', 'Interface en français (LTR)')}
+                </p>
+              </div>
+              {locale === 'fr' && (
+                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                  {t('مفعّل', 'Activé')}
+                </span>
+              )}
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* مظهر النظام والألوان */}
       <Card>
         <CardHeader>
           <CardTitle className="font-amiri flex items-center gap-2">
             <Palette className="w-5 h-5 text-primary" />
-            مظهر النظام والألوان (Theme Mode)
+            {t('مظهر النظام والألوان (Theme Mode)', "Mode d'affichage et thèmes (Theme Mode)")}
           </CardTitle>
-          <CardDescription>اختر الوضع المناسب لراحة عينيك أثناء العمل على النظام</CardDescription>
+          <CardDescription>
+            {t('اختر الوضع المناسب لراحة عينيك أثناء العمل على النظام', 'Choisissez le mode adapté au confort de vos yeux')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -253,7 +343,7 @@ export default function SettingsPage() {
               type="button"
               onClick={() => {
                 setTheme('light');
-                toast({ title: '☀️ تم تفعيل الوضع الفاتح' });
+                toast({ title: t('☀️ تم تفعيل الوضع الفاتح', '☀️ Mode clair activé') });
               }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
                 theme === 'light'
@@ -265,11 +355,15 @@ export default function SettingsPage() {
                 <Sun className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-bold text-sm text-foreground">الوضع الفاتح</p>
-                <p className="text-xs text-muted-foreground mt-0.5">مظهر نهاري مشرق وعالي الوضوح</p>
+                <p className="font-bold text-sm text-foreground">{t('الوضع الفاتح', 'Mode clair')}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('مظهر نهاري مشرق وعالي الوضوح', 'Apparence claire et lumineuse')}
+                </p>
               </div>
               {theme === 'light' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">مفعّل</span>
+                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                  {t('مفعّل', 'Activé')}
+                </span>
               )}
             </button>
 
@@ -277,7 +371,7 @@ export default function SettingsPage() {
               type="button"
               onClick={() => {
                 setTheme('dark');
-                toast({ title: '🌙 تم تفعيل الوضع الداكن' });
+                toast({ title: t('🌙 تم تفعيل الوضع الداكن', '🌙 Mode sombre activé') });
               }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
                 theme === 'dark'
@@ -289,11 +383,15 @@ export default function SettingsPage() {
                 <Moon className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-bold text-sm text-foreground">الوضع الداكن</p>
-                <p className="text-xs text-muted-foreground mt-0.5">مريح للعينين في الإضاءة الخافتة</p>
+                <p className="font-bold text-sm text-foreground">{t('الوضع الداكن', 'Mode sombre')}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('مريح للعينين في الإضاءة الخافتة', 'Confortable pour les yeux')}
+                </p>
               </div>
               {theme === 'dark' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">مفعّل</span>
+                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                  {t('مفعّل', 'Activé')}
+                </span>
               )}
             </button>
 
@@ -301,7 +399,7 @@ export default function SettingsPage() {
               type="button"
               onClick={() => {
                 setTheme('system');
-                toast({ title: '🖥️ تم تفعيل المزامنة مع النظام' });
+                toast({ title: t('🖥️ تم تفعيل المزامنة مع النظام', '🖥️ Synchronisation avec le système activée') });
               }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
                 theme === 'system'
@@ -313,11 +411,15 @@ export default function SettingsPage() {
                 <Laptop className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-bold text-sm text-foreground">تلقائي (حسب جهازك)</p>
-                <p className="text-xs text-muted-foreground mt-0.5">يتغير تلقائياً مع إعدادات جهازك</p>
+                <p className="font-bold text-sm text-foreground">{t('تلقائي (حسب جهازك)', 'Automatique (système)')}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('يتغير تلقائياً مع إعدادات جهازك', "S'adapte automatiquement")}
+                </p>
               </div>
               {theme === 'system' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">مفعّل</span>
+                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                  {t('مفعّل', 'Activé')}
+                </span>
               )}
             </button>
           </div>
@@ -329,25 +431,30 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="font-amiri flex items-center gap-2">
             <Building2 className="w-5 h-5 text-primary" />
-            الإعدادات العامة للشركة
+            {t('الإعدادات العامة للشركة', "Paramètres généraux de l'entreprise")}
           </CardTitle>
-          <CardDescription>البيانات الأساسية التي تظهر في الفواتير ومطبوعات CMR</CardDescription>
+          <CardDescription>
+            {t('البيانات الأساسية التي تظهر في الفواتير ومطبوعات CMR', 'Informations de base pour les factures et documents CMR')}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">اسم الشركة</label>
+            <label className="text-sm font-medium text-foreground">{t('اسم الشركة', "Nom de l'entreprise")}</label>
             <Input
               value={settings.company_name}
               onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
-              placeholder="مثال: شركة النقل الدولي واللوجستيك"
+              placeholder={t('مثال: شركة النقل الدولي واللوجستيك', 'Ex: Société de Transport International')}
             />
           </div>
 
           {/* شعار الشركة */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">شعار الشركة</label>
+            <label className="text-sm font-medium text-foreground">{t('شعار الشركة', "Logo de l'entreprise")}</label>
             <p className="text-xs text-muted-foreground">
-              يظهر في أعلى القائمة الجانبية وفي جميع ملفات PDF الصادرة عن الشركة
+              {t(
+                'يظهر في أعلى القائمة الجانبية وفي جميع ملفات PDF الصادرة عن الشركة',
+                'Affiché en haut du menu latéral et sur les documents PDF émis'
+              )}
             </p>
             <div className="flex items-center gap-4">
               <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
@@ -355,7 +462,7 @@ export default function SettingsPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={settings.logo_url}
-                    alt="شعار الشركة"
+                    alt={t('شعار الشركة', "Logo de l'entreprise")}
                     className="w-full h-full object-contain"
                   />
                 ) : (
@@ -383,7 +490,7 @@ export default function SettingsPage() {
                   size="sm"
                 >
                   <ImagePlus className="w-4 h-4 ml-2" />
-                  {settings.logo_url ? 'تغيير الشعار' : 'رفع شعار'}
+                  {settings.logo_url ? t('تغيير الشعار', 'Changer le logo') : t('رفع شعار', 'Télécharger un logo')}
                 </Button>
                 {settings.logo_url && (
                   <Button
@@ -395,7 +502,7 @@ export default function SettingsPage() {
                     className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
                   >
                     <Trash2 className="w-4 h-4 ml-2" />
-                    حذف الشعار
+                    {t('حذف الشعار', 'Supprimer le logo')}
                   </Button>
                 )}
               </div>
@@ -404,7 +511,7 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">نسبة الضريبة الافتراضية TVA (%)</label>
+              <label className="text-sm font-medium text-foreground">{t('نسبة الضريبة الافتراضية TVA (%)', 'Taux de TVA par défaut (%)')}</label>
               <Input
                 type="number"
                 value={settings.default_tva_rate}
@@ -412,10 +519,10 @@ export default function SettingsPage() {
                 placeholder="20"
                 dir="ltr"
               />
-              <p className="text-xs text-muted-foreground">تُطبق هذه النسبة تلقائياً على جميع العملاء الخاضعين للضريبة</p>
+              <p className="text-xs text-muted-foreground">{t('تُطبق هذه النسبة تلقائياً على جميع العملاء الخاضعين للضريبة', 'Ce taux est appliqué par défaut aux clients assujettis')}</p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">نسبة ربح المالك (%)</label>
+              <label className="text-sm font-medium text-foreground">{t('نسبة ربح المالك (%)', 'Part de profit du propriétaire (%)')}</label>
               <Input
                 type="number"
                 value={settings.owner_profit_share}
@@ -426,18 +533,18 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">معرف الحساب البنكي الافتراضي</label>
+            <label className="text-sm font-medium text-foreground">{t('معرف الحساب البنكي الافتراضي', 'ID du compte bancaire par défaut')}</label>
             <Input
               type="number"
               value={settings.default_bank_account_id}
               onChange={(e) => setSettings({ ...settings, default_bank_account_id: e.target.value })}
-              placeholder="معرف الحساب البنكي"
+              placeholder={t('معرف الحساب البنكي', 'Identifiant compte bancaire')}
               dir="ltr"
             />
           </div>
           <Button onClick={handleSave} disabled={saving} className="w-full">
             <Save className="w-4 h-4 ml-2" />
-            {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+            {saving ? t('جاري الحفظ...', 'Enregistrement en cours...') : t('حفظ الإعدادات', 'Enregistrer les paramètres')}
           </Button>
         </CardContent>
       </Card>

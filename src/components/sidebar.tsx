@@ -11,10 +11,10 @@ import {
   Sun,
   Settings,
   Users,
-  Truck,
 } from "lucide-react";
 import React, { useState, useMemo, useCallback } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { useLanguage } from "@/components/language-provider";
 import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export interface SidebarItem {
@@ -47,6 +47,7 @@ interface SidebarProps {
 export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const { theme, setTheme } = useTheme();
+  const { dir, locale, t } = useLanguage();
   const { companyName, logoUrl } = useCompanyBranding();
 
   const [activeGroupId, setActiveGroupId] = useState<string | null | undefined>(undefined);
@@ -86,10 +87,16 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
   }, [normalizedGroups, isItemAllowed]);
 
   const isGroupActive = useCallback((group: SidebarGroup): boolean => {
+    const currentBase = currentPath.split('?')[0];
     return group.items.some(
-      (item) =>
-        item.href === currentPath ||
-        item.children?.some((child) => child.href === currentPath)
+      (item) => {
+        const itemBase = item.href.split('?')[0];
+        return (
+          item.href === currentPath ||
+          (itemBase !== '/dashboard' && currentBase === itemBase) ||
+          item.children?.some((child) => child.href === currentPath || (child.href.split('?')[0] !== '/dashboard' && currentBase === child.href.split('?')[0]))
+        );
+      }
     );
   }, [currentPath]);
 
@@ -153,8 +160,8 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
 
   return (
     <aside
-      className="w-68 h-full bg-[var(--sidebar-bg)] text-[var(--sidebar-fg)] flex flex-col border-l border-[var(--sidebar-border)] select-none shadow-2xl relative z-20 transition-colors duration-200"
-      dir="rtl"
+      className={`w-68 h-full bg-[var(--sidebar-bg)] text-[var(--sidebar-fg)] flex flex-col ${dir === 'rtl' ? 'border-l' : 'border-r'} border-[var(--sidebar-border)] select-none shadow-2xl relative z-20 transition-colors duration-200`}
+      dir={dir}
     >
       {/* Brand Header */}
       <div className="p-3.5 border-b border-[var(--sidebar-border)] flex items-center justify-between bg-[var(--sidebar-header-bg)] transition-colors duration-200">
@@ -168,7 +175,23 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             />
           ) : (
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-purple-900/30 shrink-0">
-              <Truck className="w-4 h-4" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 32 32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-5 h-5"
+                aria-hidden="true"
+              >
+                <path d="M2 18.5a2 2 0 0 1 2-2h11.5v6H4a2 2 0 0 1-2-2v-2Z" />
+                <path d="M15.5 12h6l3.5 4.5h-2v3h-7.5v-7.5Z" />
+                <circle cx="7" cy="22" r="1.6" fill="currentColor" stroke="none" />
+                <circle cx="20" cy="22" r="1.6" fill="currentColor" stroke="none" />
+                <circle cx="26.5" cy="22" r="1.6" fill="currentColor" stroke="none" />
+              </svg>
             </div>
           )}
           <div className="min-w-0">
@@ -192,7 +215,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="بحث سريع في القوائم..."
+            placeholder={locale === 'ar' ? 'بحث سريع في القوائم...' : 'Recherche rapide...'}
             className="w-full bg-[var(--sidebar-input-bg)] border border-[var(--sidebar-border)] rounded-md pr-8 pl-3 py-1 text-xs text-[var(--sidebar-fg)] placeholder:text-[var(--sidebar-fg-muted)] focus:outline-hidden focus:border-[var(--sidebar-fg-muted)] focus:ring-1 focus:ring-[var(--sidebar-fg-muted)]/20 transition-all"
           />
           {searchQuery && (
@@ -255,12 +278,19 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                     "w-full px-2.5 py-2 flex items-center justify-between text-right rounded-md transition-colors cursor-pointer group",
                     isOpen
                       ? "text-[var(--sidebar-fg)] font-semibold"
+                      : hasActiveChild
+                      ? "text-[var(--sidebar-fg)] font-medium bg-[var(--sidebar-hover-bg)]/50"
                       : "text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover-bg)]"
                   )}
                 >
-                  <span className="text-[13px] tracking-wide truncate">
-                    {group.label}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {hasActiveChild && !isOpen && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    )}
+                    <span className="text-[13px] tracking-wide truncate">
+                      {group.label}
+                    </span>
+                  </div>
 
                   <span className="text-[var(--sidebar-fg-muted)] transition-transform duration-200 shrink-0">
                     {isOpen ? (
@@ -281,8 +311,11 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                   <div className="overflow-hidden">
                     <div className="pt-0.5 pb-1 space-y-0.5 pr-1 pl-1">
                       {group.items.map((item, index) => {
-                        const isActive = currentPath === item.href || (item.href !== '/dashboard' && currentPath.startsWith(item.href.split('?')[0]) && item.href.split('?')[0] !== '/fleet' && item.href.split('?')[0] !== '/treasury' && item.href.split('?')[0] !== '/invoices');
+                        const itemBase = item.href.split('?')[0];
+                        const currentBase = currentPath.split('?')[0];
                         const isExact = currentPath === item.href;
+                        const isBaseMatch = itemBase !== '/dashboard' && (currentPath === itemBase || currentBase === itemBase);
+                        const isCurrent = isExact || isBaseMatch;
 
                         return (
                           <Link
@@ -290,11 +323,9 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                             href={item.href}
                             onClick={onItemClick}
                             className={cn(
-                              "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] transition-colors group relative cursor-pointer",
-                              isExact
-                                ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
-                                : isActive
-                                ? "bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-fg)]"
+                              "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] transition-all group relative cursor-pointer",
+                              isCurrent
+                                ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold shadow-2xs border-r-2 border-primary"
                                 : "text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)]"
                             )}
                           >
@@ -302,8 +333,8 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                               <span
                                 className={cn(
                                   "w-5 h-5 flex items-center justify-center shrink-0 transition-colors text-xs",
-                                  isExact
-                                    ? "text-[var(--sidebar-fg)]"
+                                  isCurrent
+                                    ? "text-primary"
                                     : "text-[var(--sidebar-fg-muted)] group-hover:text-[var(--sidebar-fg)]"
                                 )}
                               >

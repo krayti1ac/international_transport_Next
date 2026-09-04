@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageToggle } from '@/components/language-toggle';
+import { useLanguage } from '@/components/language-provider';
 import { Truck, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
@@ -117,7 +119,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-200 dark:from-[#070a12] dark:via-blue-950/20 dark:to-[#090d16] relative transition-colors" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="absolute top-4 left-4">
+      <div className={`absolute top-4 ${locale === 'ar' ? 'left-4' : 'right-4'} flex items-center gap-2 z-10`}>
+        <LanguageToggle userKey={email.trim() || undefined} />
         <ThemeToggle />
       </div>
 

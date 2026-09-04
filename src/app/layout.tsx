@@ -3,6 +3,7 @@ import { Cairo, Amiri } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { LanguageProvider } from "@/components/language-provider";
 import { ReactQueryProvider } from "@/lib/query/provider";
 import "./globals.css";
 
@@ -49,6 +50,12 @@ export default function RootLayout({
                   } else {
                     document.documentElement.classList.remove('dark');
                   }
+
+                  var savedEmail = localStorage.getItem('saved_login_email');
+                  var userLang = savedEmail ? localStorage.getItem('user_lang_' + savedEmail.trim().toLowerCase()) : null;
+                  var lang = userLang || localStorage.getItem('app_locale') || 'ar';
+                  document.documentElement.lang = lang;
+                  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
                 } catch (e) {}
               })();
             `,
@@ -57,12 +64,14 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground selection:bg-primary/20 selection:text-primary">
         <ThemeProvider>
-          <AuthProvider>
-            <ReactQueryProvider>
-              {children}
-              <Toaster />
-            </ReactQueryProvider>
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <ReactQueryProvider>
+                {children}
+                <Toaster />
+              </ReactQueryProvider>
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

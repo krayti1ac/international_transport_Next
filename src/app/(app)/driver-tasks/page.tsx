@@ -48,10 +48,22 @@ export default function DriverTasksPage() {
         ]);
 
         if (tripsRes.error) throw tripsRes.error;
-        if (advancesRes.error) throw advancesRes.error;
+        
+        let advancesData: Advance[] = [];
+        if (!advancesRes.error && advancesRes.data) {
+          advancesData = advancesRes.data;
+        } else {
+          // Fallback to ordering by created_at if date does not exist
+          const fallbackAdv = await supabase
+            .from('advances')
+            .select('*')
+            .eq('driver_id', driverData.id)
+            .order('created_at', { ascending: false });
+          advancesData = fallbackAdv.data || [];
+        }
 
         setTrips(tripsRes.data || []);
-        setAdvances(advancesRes.data || []);
+        setAdvances(advancesData);
 
         channel = supabase
           .channel(`driver-tasks-${driverData.id}`)

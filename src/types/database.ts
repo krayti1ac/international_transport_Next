@@ -8,6 +8,7 @@ export interface User {
   created_at: string;
   theme_mode?: 'light' | 'dark' | 'system';
   mfa_enabled?: boolean;
+  preferred_language?: 'ar' | 'fr';
 }
 
 export interface Client {
@@ -629,4 +630,28 @@ export interface GeofenceAlert {
   longitude: number;
   timestamp: string;
   notified: boolean;
+}
+
+export interface ForexRate {
+  id?: number;
+  rate_date: string;
+  eur_to_mad: number;
+  mad_to_eur: number;
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ForexGainLossEntry {
+  id: number;
+  trip_id?: number | null;
+  invoice_id?: number | null;
+  original_amount: number;
+  original_currency: string;
+  original_rate: number;
+  settlement_rate: number;
+  realized_gain_loss: number;
+  entry_type: 'gain' | 'loss';
+  notes?: string;
+  created_at?: string;
 }

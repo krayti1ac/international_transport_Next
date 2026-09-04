@@ -14,7 +14,75 @@ import {
   RefreshCw,
   Plus,
   Calendar,
+  AlertTriangle,
+  Copy,
+  Check,
 } from 'lucide-react';
+
+const FOREX_SQL_MIGRATION = `-- 1. إنشاء جدول أسعار الصرف اليومية
+CREATE TABLE IF NOT EXISTS public.forex_rates (
+  id BIGSERIAL PRIMARY KEY,
+  rate_date DATE NOT NULL UNIQUE,
+  eur_to_mad NUMERIC(12, 4) NOT NULL,
+  mad_to_eur NUMERIC(12, 6) NOT NULL,
+  source VARCHAR(50) DEFAULT 'manual',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_forex_rates_date ON public.forex_rates(rate_date DESC);
+
+-- 2. إنشاء جدول فروق الصرف المحققة
+CREATE TABLE IF NOT EXISTS public.forex_gain_loss_entries (
+  id BIGSERIAL PRIMARY KEY,
+  trip_id BIGINT,
+  invoice_id BIGINT,
+  original_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+  original_currency VARCHAR(10) NOT NULL DEFAULT 'EUR',
+  original_rate NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  settlement_rate NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  realized_gain_loss NUMERIC(14, 2) NOT NULL DEFAULT 0,
+  entry_type VARCHAR(10) NOT NULL CHECK (entry_type IN ('gain', 'loss')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. تفعيل صلاحيات الحماية (RLS)
+ALTER TABLE public.forex_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.forex_gain_loss_entries ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_rates' AND policyname = 'Authenticated users can view forex_rates') THEN
+    CREATE POLICY "Authenticated users can view forex_rates" ON public.forex_rates FOR SELECT TO authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_rates' AND policyname = 'Admins and secretaries can manage forex_rates') THEN
+    CREATE POLICY "Admins and secretaries can manage forex_rates" ON public.forex_rates FOR ALL TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.users WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')))
+      WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_rates' AND policyname = 'Service role full access on forex_rates') THEN
+    CREATE POLICY "Service role full access on forex_rates" ON public.forex_rates FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_gain_loss_entries' AND policyname = 'Authenticated users can view forex_gain_loss') THEN
+    CREATE POLICY "Authenticated users can view forex_gain_loss" ON public.forex_gain_loss_entries FOR SELECT TO authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_gain_loss_entries' AND policyname = 'Admins and secretaries can manage forex_gain_loss') THEN
+    CREATE POLICY "Admins and secretaries can manage forex_gain_loss" ON public.forex_gain_loss_entries FOR ALL TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.users WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')))
+      WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'forex_gain_loss_entries' AND policyname = 'Service role full access on forex_gain_loss') THEN
+    CREATE POLICY "Service role full access on forex_gain_loss" ON public.forex_gain_loss_entries FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- 4. إدراج سعر أولي لليوم
+INSERT INTO public.forex_rates (rate_date, eur_to_mad, mad_to_eur, source)
+VALUES (CURRENT_DATE, 10.8542, 0.092130, 'api_live')
+ON CONFLICT (rate_date) DO NOTHING;
+
+NOTIFY pgrst, 'reload schema';`;
 
 interface ForexRate {
   id?: number;
@@ -45,6 +113,9 @@ export default function ForexPage() {
   const [loading, setLoading] = useState(true);
   const [isSyncingLive, setIsSyncingLive] = useState(false);
   const [isAddRateOpen, setIsAddRateOpen] = useState(false);
+  const [isTableMissing, setIsTableMissing] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Form for manual rate
   const [manualRate, setManualRate] = useState({
@@ -71,9 +142,15 @@ export default function ForexPage() {
         supabase.from('forex_gain_loss_entries').select('*').order('created_at', { ascending: false }),
       ]);
 
-      if (ratesRes.data) {
+      if (ratesRes.error) {
+        if (ratesRes.error.code === 'PGRST205') {
+          setIsTableMissing(true);
+        }
+      } else if (ratesRes.data) {
         setRates(ratesRes.data as ForexRate[]);
+        setIsTableMissing(false);
       }
+
       if (glRes.data) {
         setGainLossEntries(glRes.data as ForexGainLossEntry[]);
       }
@@ -88,20 +165,43 @@ export default function ForexPage() {
     loadData();
   }, [loadData]);
 
-  // Live Sync using open.er-api.com
+  // Live Sync using backend API route (/api/forex/sync) with fallback
   const handleSyncLive = async () => {
     setIsSyncingLive(true);
     try {
-      const res = await fetch('https://open.er-api.com/v6/latest/EUR');
-      if (!res.ok) throw new Error('فشل الاتصال بخادم أسعار الصرف');
+      // 1. Try server-side sync API first
+      const res = await fetch('/api/forex/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
       const data = await res.json();
-      const eurToMad = data?.rates?.MAD;
+
+      if (res.ok && data.success) {
+        toast({
+          title: 'تم التحديث بنجاح',
+          description: `سعر اليوم: 1 EUR = ${Number(data.rate.eur_to_mad).toFixed(4)} MAD`,
+        });
+        setIsTableMissing(false);
+        loadData();
+        return;
+      }
+
+      if (data?.error === 'TABLE_MISSING' || data?.code === 'PGRST205') {
+        setIsTableMissing(true);
+        setShowSqlModal(true);
+        throw new Error('جداول أسعار الصرف غير موجودة في Supabase. يرجى تطبيق كود الـ SQL المرفق.');
+      }
+
+      // 2. Client-side fallback if server route failed for another reason
+      const extRes = await fetch('https://open.er-api.com/v6/latest/EUR');
+      if (!extRes.ok) throw new Error(data?.message || 'فشل الاتصال بمزود أسعار الصرف');
+      const extData = await extRes.json();
+      const eurToMad = extData?.rates?.MAD;
       if (!eurToMad) throw new Error('لم يتم العثور على سعر صرف الدرهم');
 
       const madToEur = 1 / eurToMad;
       const today = new Date().toISOString().split('T')[0];
 
-      // Upsert into forex_rates
       const { error } = await supabase.from('forex_rates').upsert(
         {
           rate_date: today,
@@ -112,17 +212,27 @@ export default function ForexPage() {
         { onConflict: 'rate_date' }
       );
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST205') {
+          setIsTableMissing(true);
+          setShowSqlModal(true);
+          throw new Error('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL.');
+        }
+        throw new Error(error.message || 'فشل حفظ سعر الصرف في قاعدة البيانات');
+      }
 
       toast({
         title: 'تم التحديث بنجاح',
         description: `سعر اليوم: 1 EUR = ${Number(eurToMad).toFixed(4)} MAD`,
       });
+      setIsTableMissing(false);
       loadData();
     } catch (err: unknown) {
+      const postgrestErr = err as { message?: string };
+      const msg = err instanceof Error ? err.message : postgrestErr?.message || 'تعذر جلب سعر الصرف';
       toast({
         title: 'خطأ في جلب السعر الحي',
-        description: err instanceof Error ? err.message : 'تعذر جلب سعر الصرف',
+        description: msg,
         variant: 'destructive',
       });
     } finally {
@@ -155,9 +265,17 @@ export default function ForexPage() {
         { onConflict: 'rate_date' }
       );
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST205') {
+          setIsTableMissing(true);
+          setShowSqlModal(true);
+          throw new Error('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL المرفق أولاً.');
+        }
+        throw new Error(error.message || 'فشل في حفظ سعر الصرف');
+      }
 
       toast({ title: 'تم الحفظ', description: 'تم تسجيل سعر الصرف بنجاح' });
+      setIsTableMissing(false);
       setIsAddRateOpen(false);
       setManualRate({
         rate_date: new Date().toISOString().split('T')[0],
@@ -165,8 +283,10 @@ export default function ForexPage() {
         mad_to_eur: '',
       });
       loadData();
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل في حفظ سعر الصرف', variant: 'destructive' });
+    } catch (err: unknown) {
+      const postgrestErr = err as { message?: string };
+      const msg = err instanceof Error ? err.message : postgrestErr?.message || 'فشل في حفظ سعر الصرف';
+      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
     }
   };
 
@@ -221,6 +341,30 @@ export default function ForexPage() {
           </Button>
         </div>
       </div>
+
+      {/* Missing table warning banner */}
+      {isTableMissing && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-bold text-sm text-amber-300">
+                جداول أسعار الصرف (Forex) بحاجة للإنشاء في قاعدة بيانات Supabase
+              </h4>
+              <p className="text-xs text-amber-200/80 mt-1">
+                سبب ظهور الخطأ: جدول <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300 font-mono">forex_rates</code> لم يتم تفعيله بعد في Supabase. يمكنك نسخ كود الـ SQL وتشغيله بنقرة زر واحدة في لوحة التحكم.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={() => setShowSqlModal(true)}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shrink-0 cursor-pointer shadow-sm"
+          >
+            عرض ونسخ كود الـ SQL
+          </Button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-border/80">
@@ -537,6 +681,62 @@ export default function ForexPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SQL Migration Modal */}
+      {showSqlModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl p-5 space-y-4 shadow-2xl animate-in fade-in-50 zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-base text-foreground flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                كود ترحيل قاعدة البيانات (SQL Migration)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSqlModal(false)}
+                className="text-muted-foreground hover:text-foreground text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              قم بنسخ هذا الاستعلام ولصقه في <strong className="text-foreground">Supabase Dashboard &gt; SQL Editor</strong> ثم الضغط على <strong className="text-emerald-400">Run</strong> لتفعيل ميزة وتخزين أسعار الصرف فوراً وبشكل دائم.
+            </p>
+
+            <div className="relative flex-1 min-h-0 bg-slate-950 text-slate-200 rounded-lg p-3 font-mono text-xs overflow-auto border border-border/60 dir-ltr text-left">
+              <pre>{FOREX_SQL_MIGRATION}</pre>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border">
+              <span className="text-[11px] text-muted-foreground dir-ltr">
+                الملف: <code className="text-purple-400 font-mono">supabase/migrations/20260904_create_forex_tables.sql</code>
+              </span>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowSqlModal(false)}
+                >
+                  إغلاق
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(FOREX_SQL_MIGRATION);
+                    setCopiedSql(true);
+                    setTimeout(() => setCopiedSql(false), 3000);
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedSql ? 'تم النسخ!' : 'نسخ كود الـ SQL'}</span>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

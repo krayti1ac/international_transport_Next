@@ -5,7 +5,10 @@ import { useRouter, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Sidebar, SidebarGroup } from '@/components/sidebar';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageToggle } from '@/components/language-toggle';
+import { useLanguage } from '@/components/language-provider';
 import { Button } from '@/components/ui/button';
+import { useExpirationCounts } from '@/features/notifications/hooks/useExpirationCounts';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -69,14 +72,14 @@ import { isRouteAllowed, ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
 const adminNavGroups: SidebarGroup[] = [
   {
     id: 'lists-management',
-    label: 'ادارة القوائم',
+    label: 'إدارة القوائم والبيانات',
     items: [
       { title: 'قائمة المركبات', href: '/fleet', icon: <Car className="w-4 h-4" /> },
       { title: 'قائمة المسارات', href: '/transport-routes', icon: <Route className="w-4 h-4" /> },
       { title: 'المناطق الجغرافية', href: '/geofence-zones', icon: <Map className="w-4 h-4" /> },
       { title: 'قائمة العملاء', href: '/clients', icon: <Users className="w-4 h-4" /> },
       { title: 'قائمة الموردين', href: '/providers', icon: <Wrench className="w-4 h-4" /> },
-      { title: 'قائمة السائقين', href: '/drivers', icon: <Users className="w-4 h-4" /> },
+      { title: 'قائمة السائقين', href: '/drivers', icon: <UserCheck className="w-4 h-4" /> },
       { title: 'أنواع وثائق الأسطول', href: '/fleet/documents', icon: <Shapes className="w-4 h-4" /> },
     ],
   },
@@ -85,114 +88,72 @@ const adminNavGroups: SidebarGroup[] = [
     label: 'الرحلات والسفر الدولي',
     items: [
       { title: 'إدارة الرحلات', href: '/trips', icon: <GitFork className="w-4 h-4" /> },
-      { title: 'مهام اليوم', href: '/driver-tasks', icon: <Calendar className="w-4 h-4" /> },
-      { title: 'مصاريف المعابر والموانئ', href: '/trips?tab=expenses', icon: <Ship className="w-4 h-4" /> },
+      { title: 'مهام اليوم للسائقين', href: '/driver-tasks', icon: <Calendar className="w-4 h-4" /> },
+      { title: 'مصاريف المعابر والموانئ', href: '/ferry-expenses', icon: <Ship className="w-4 h-4" /> },
     ],
   },
   {
     id: 'invoices-mgmt',
-    label: 'إدارة الفواتير',
+    label: 'إدارة الفواتير والتحصيل',
     items: [
-      { title: 'إنشاء فاتورة للرحلات', href: '/invoices?action=new', icon: <FilePlus className="w-4 h-4" /> },
-      { title: 'إنشاء طلب الدفع', href: '/invoices?action=payment_request', icon: <Receipt className="w-4 h-4" /> },
-      { title: 'إشعارات طلبات الدفع', href: '/invoices?tab=payment_notifications', icon: <ListChecks className="w-4 h-4" /> },
-      { title: 'قائمة الفواتير المتأخرة', href: '/invoices?status=overdue', icon: <Activity className="w-4 h-4" /> },
-      { title: 'كشف الفواتير المدفوعة', href: '/invoices?status=paid', icon: <BarChart2 className="w-4 h-4" /> },
+      { title: 'سجل وإدارة الفواتير', href: '/invoices', icon: <Receipt className="w-4 h-4" /> },
+      { title: 'إشعارات وتذكيرات الدفع (واتساب)', href: '/whatsapp-reminders', icon: <ListChecks className="w-4 h-4" /> },
     ],
   },
   {
-    id: 'forex-finance',
-    label: 'الصرف والمالية',
+    id: 'finance-treasury',
+    label: 'المالية والخزينة',
     items: [
-      { title: 'لوحة أسعار الصرف وفروقات الصرف', href: '/forex', icon: <CircleDollarSign className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'bank-accounts',
-    label: 'الحسابات البنكية',
-    items: [
-      { title: 'قائمة الحسابات البنكية', href: '/bank-reconciliation', icon: <Landmark className="w-4 h-4" /> },
-      { title: 'كشف الحسابات البنكية', href: '/bank-reconciliation?tab=statement', icon: <Receipt className="w-4 h-4" /> },
-      { title: 'أسعار الصرف', href: '/treasury?tab=exchange_rates', icon: <CircleDollarSign className="w-4 h-4" /> },
-      { title: 'فروق الصرف المحققة', href: '/treasury?tab=fx_gain_loss', icon: <TrendingUp className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'cash-accounts',
-    label: 'الحسابات النقدية',
-    items: [
-      { title: 'كشف الحسابات النقدية', href: '/treasury?tab=cash_statement', icon: <UserCog className="w-4 h-4" /> },
-      { title: 'قائمة الحسابات النقدية', href: '/treasury', icon: <Wallet className="w-4 h-4" /> },
+      { title: 'إدارة الخزينة والسيولة', href: '/treasury', icon: <Wallet className="w-4 h-4" /> },
+      { title: 'التسوية والمطابقة البنكية', href: '/bank-reconciliation', icon: <Landmark className="w-4 h-4" /> },
+      { title: 'أسعار وفروقات الصرف', href: '/forex', icon: <CircleDollarSign className="w-4 h-4" /> },
     ],
   },
   {
     id: 'drivers-mgmt',
-    label: 'السائقين',
+    label: 'شؤون السائقين',
     items: [
-      { title: 'أجور وبونص السائقين الدوليين', href: '/driver-settlements?tab=bonus', icon: <Coins className="w-4 h-4" /> },
-      { title: 'كشف راتب شهري (PDF)', href: '/driver-settlements?tab=salary_pdf', icon: <FileText className="w-4 h-4" /> },
-      { title: 'تسوية أرباح السائق بالرحلة', href: '/driver-settlements', icon: <Calculator className="w-4 h-4" /> },
-      { title: 'طلبات العُهد الطارئة', href: '/emergency-advance-requests', icon: <Asterisk className="w-4 h-4" /> },
-      { title: 'شاشة العهدة الخاصة بي', href: '/driver-advances', icon: <Wallet className="w-4 h-4" /> },
-      { title: 'تقريري المالي', href: '/driver-settlements?tab=financial_report', icon: <Wallet className="w-4 h-4" /> },
-      { title: 'تتبع صلاحية الفيزا', href: '/drivers?tab=visas', icon: <ShieldCheck className="w-4 h-4" /> },
-      { title: 'توقيع التسليم الإلكتروني', href: '/driver-delivery', icon: <PenTool className="w-4 h-4" /> },
+      { title: 'رواتب ومستحقات السائقين', href: '/driver-settlements', icon: <Calculator className="w-4 h-4" /> },
+      { title: 'طلبات العُهد الطارئة', href: '/emergency-advance-requests', icon: <AlertOctagon className="w-4 h-4" /> },
+      { title: 'شاشة العُهد والمصروفات', href: '/driver-advances', icon: <Wallet className="w-4 h-4" /> },
+      { title: 'تأكيد وتوقيع التسليم (POD)', href: '/driver-delivery', icon: <CheckCircle2 className="w-4 h-4" /> },
     ],
   },
   {
     id: 'fleet-vehicles',
-    label: 'الأسطول والمركبات',
+    label: 'الأسطول والصيانة',
     items: [
-      { title: 'وثائق الأسطول', href: '/fleet/documents', icon: <FileText className="w-4 h-4" /> },
+      { title: 'صيانة وإصلاحات الأسطول', href: '/maintenance', icon: <Wrench className="w-4 h-4" /> },
+      { title: 'مسح إيصالات الوقود (AI)', href: '/fuel-receipt', icon: <ScanText className="w-4 h-4" /> },
       { title: 'أرشيف الوثائق العام', href: '/documents', icon: <FileText className="w-4 h-4" /> },
-      { title: 'حجوزات وتذاكر العبّارات', href: '/ferry-expenses', icon: <Ship className="w-4 h-4" /> },
-      { title: 'قائمة فواتير الإصلاح', href: '/maintenance?tab=repair_invoices', icon: <List className="w-4 h-4" /> },
-      { title: 'الصيانة الدورية للأسطول', href: '/maintenance', icon: <Wrench className="w-4 h-4" /> },
-      { title: 'كشف مصاريف الصيانة', href: '/maintenance?tab=expenses', icon: <Receipt className="w-4 h-4" /> },
-      { title: '⚠️ تنبيهات الصيانة الوقائية', href: '/maintenance?tab=alerts', icon: <AlertTriangle className="w-4 h-4" /> },
-      { title: '⛽ مسح تذاكر الوقود (AI)', href: '/fuel-receipt', icon: <Scan className="w-4 h-4" /> },
     ],
   },
   {
-    id: 'suppliers-mgmt',
-    label: 'إدارة الموردين',
-    items: [
-      { title: 'كشف حساب المورد', href: '/providers', icon: <CreditCard className="w-4 h-4" /> },
-      { title: 'نموذج فاتورة مورد', href: '/providers?action=invoice', icon: <FileSignature className="w-4 h-4" /> },
-      { title: 'تسوية الديون', href: '/providers?tab=settlement', icon: <CreditCard className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'tracking-ai',
-    label: 'التتبع والذكاء الاصطناعي',
+    id: 'tracking-ops',
+    label: 'التتبع والمراقبة الحية',
     items: [
       { title: 'شاشة التتبع والخرائط الحية', href: '/truck-tracking', icon: <Map className="w-4 h-4" /> },
       { title: 'تنبيهات المناطق الجغرافية', href: '/geofence-alerts', icon: <AlertTriangle className="w-4 h-4" /> },
-      { title: 'مسح تذاكر المازوت (AI OCR)', href: '/fuel-receipt', icon: <ScanText className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'communication',
-    label: 'التواصل',
-    items: [
-      { title: 'دردشة داخلية', href: '/chat', icon: <MessageSquare className="w-4 h-4" /> },
-      { title: 'مركز إشعارات الواتساب', href: '/whatsapp-notifications', icon: <MessageSquare className="w-4 h-4" /> },
-      { title: 'تذكيرات الفواتير المتأخرة (واتساب)', href: '/whatsapp-reminders', icon: <Bell className="w-4 h-4" /> },
     ],
   },
   {
     id: 'analytics-reports',
     label: 'التحليلات والتقارير',
     items: [
-      { title: 'تقارير ذكية (AI)', href: '/advanced-reports', icon: <Sparkles className="w-4 h-4" /> },
-      { title: 'دفتر السكرتيرة الموحد', href: '/reports?tab=secretary', icon: <BookOpen className="w-4 h-4" /> },
-      { title: 'تقريري المالي', href: '/reports?tab=personal_finance', icon: <Wallet className="w-4 h-4" /> },
-      { title: 'لوحة التحكم والتحليلات', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-      { title: 'لوحة التحليلات المتقدمة', href: '/executive-dashboard', icon: <BarChart3 className="w-4 h-4" /> },
-      { title: '📊 التحليلات الذكية (AI)', href: '/fuel-analytics', icon: <Sparkles className="w-4 h-4" /> },
-      { title: 'تقرير أرباح الشركة', href: '/trip-profitability', icon: <PieChart className="w-4 h-4" /> },
-      { title: 'تقرير ربحية الأسطول', href: '/trip-profitability?tab=fleet', icon: <TrendingUp className="w-4 h-4" /> },
-      { title: 'تقرير السجل المالي للتدقيق والحذف', href: '/audit-logs', icon: <ShieldCheck className="w-4 h-4" /> },
+      { title: 'لوحة التحكم العامة', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+      { title: 'اللوحة التنفيذية المتقدمة', href: '/executive-dashboard', icon: <BarChart3 className="w-4 h-4" /> },
+      { title: 'تقرير أرباح الرحلات', href: '/trip-profitability', icon: <PieChart className="w-4 h-4" /> },
+      { title: 'تحليلات استهلاك الوقود (AI)', href: '/fuel-analytics', icon: <Sparkles className="w-4 h-4" /> },
+      { title: 'التقارير الشاملة', href: '/reports', icon: <BookOpen className="w-4 h-4" /> },
+      { title: 'سجل تدقيق العمليات', href: '/audit-logs', icon: <ShieldCheck className="w-4 h-4" /> },
+    ],
+  },
+  {
+    id: 'communication',
+    label: 'التواصل والمراسلات',
+    items: [
+      { title: 'دردشة العمل الداخلية', href: '/chat', icon: <MessageSquare className="w-4 h-4" /> },
+      { title: 'مركز إشعارات الواتساب', href: '/whatsapp-notifications', icon: <Bell className="w-4 h-4" /> },
     ],
   },
 ];
@@ -226,6 +187,8 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const expirationCounts = useExpirationCounts();
+  const { locale, dir } = useLanguage();
 
   useEffect(() => {
     if (user?.role && !isRouteAllowed(user.role, pathname)) {
@@ -241,9 +204,16 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
       : driverNavGroups;
 
   // Find current active item title
-  const currentItem = navGroups
-    .flatMap((g) => g.items)
-    .find((item) => item.href === pathname || pathname.startsWith(item.href.split('?')[0]));
+  const currentItem =
+    navGroups
+      .flatMap((g) => g.items)
+      .find((item) => item.href === pathname) ||
+    navGroups
+      .flatMap((g) => g.items)
+      .find((item) => {
+        const base = item.href.split('?')[0];
+        return base !== '/dashboard' && (pathname === base || pathname.startsWith(`${base}/`));
+      });
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -257,7 +227,7 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background" dir="rtl">
+    <div className="flex h-screen overflow-hidden bg-background" dir={dir}>
       {/* Mobile Backdrop */}
       {sidebarOpen && (
         <div
@@ -268,8 +238,8 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
 
       {/* Sidebar (Fixed on Mobile, Static on Desktop) */}
       <div
-        className={`fixed lg:static inset-y-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+        className={`fixed lg:static inset-y-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} z-50 transform transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? 'translate-x-0' : (dir === 'rtl' ? 'translate-x-full lg:translate-x-0' : '-translate-x-full lg:translate-x-0')
         }`}
       >
         <Sidebar
@@ -295,28 +265,36 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
             </Button>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground hidden sm:inline-block">الرئيسية</span>
-              <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground/60 hidden sm:inline-block" />
+              <span className="text-xs text-muted-foreground hidden sm:inline-block">
+                {locale === 'ar' ? 'الرئيسية' : 'Accueil'}
+              </span>
+              <ChevronLeft className={`w-3.5 h-3.5 text-muted-foreground/60 hidden sm:inline-block ${dir === 'ltr' ? 'rotate-180' : ''}`} />
               <h2 className="text-base sm:text-lg font-bold font-amiri text-foreground flex items-center gap-2">
-                {currentItem ? currentItem.title : 'لوحة التحكم'}
+                {currentItem ? currentItem.title : (locale === 'ar' ? 'لوحة التحكم' : 'Tableau de bord')}
               </h2>
             </div>
           </div>
 
-          {/* Controls matching Image 12: Notification Bell (34 badge), Theme Toggle, Power/Logout */}
+          {/* Controls matching Image 12: Language Switcher, Notification Bell, Theme Toggle, Power/Logout */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Notification Bell with 34 Badge (matching Image 12) */}
+            {/* Language Switcher Toggle (Bascule Ar / Fr) */}
+            <LanguageToggle userKey={user.id} />
+
+            {/* Notification Bell with dynamic Badge */}
             <div className="relative">
               <Button
                 variant="ghost"
                 size="icon"
+                onClick={() => router.push('/notifications/expiration')}
                 className="text-muted-foreground hover:text-foreground relative w-9 h-9 rounded-lg hover:bg-muted/80"
-                title="التنبيهات والإشعارات"
+                title={locale === 'ar' ? 'تنبيهات الانتهاء' : "Alertes d'expiration"}
               >
                 <Bell className="w-5 h-5 text-zinc-400" />
-                <span className="absolute -top-1 -left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-xs ring-2 ring-background flex items-center justify-center min-w-[18px] h-[18px]">
-                  34
-                </span>
+                {expirationCounts.total > 0 && (
+                  <span className="absolute -top-1 -left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-xs ring-2 ring-background flex items-center justify-center min-w-[18px] h-[18px]">
+                    {expirationCounts.total > 99 ? '99+' : expirationCounts.total}
+                  </span>
+                )}
               </Button>
             </div>
 
@@ -328,7 +306,7 @@ export function DashboardClient({ user, children }: { user: User; children: Reac
               variant="ghost"
               size="icon"
               onClick={handleSignOut}
-              title="تسجيل الخروج"
+              title={locale === 'ar' ? 'تسجيل الخروج' : 'Déconnexion'}
               className="w-9 h-9 rounded-full border border-amber-600/60 hover:bg-amber-500/10 text-amber-500 hover:text-amber-400 transition-colors"
             >
               <Power className="w-4 h-4 stroke-[2.5]" />

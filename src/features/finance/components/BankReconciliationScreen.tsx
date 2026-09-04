@@ -268,7 +268,8 @@ export default function BankReconciliationScreen() {
       else buckets.fresh++;
 
       const cur = tx.currency || 'MAD';
-      sumByCurrency[cur] = (sumByCurrency[cur] ?? 0) + (tx.type === 'income' ? tx.amount : -tx.amount);
+      const txAmt = Number(tx.amount) || 0;
+      sumByCurrency[cur] = (sumByCurrency[cur] ?? 0) + (tx.type === 'income' ? txAmt : -txAmt);
 
       if (ageDays > 60) staleItems.push(tx);
     }
@@ -277,7 +278,11 @@ export default function BankReconciliationScreen() {
     return { buckets, sumByCurrency, staleItems, selected };
   }, [allPendingTx, bankAccounts, selectedBankAccountId]);
 
-  const formatCurrency = (amount: number, currency: string) => `${amount.toFixed(2)} ${currency}`;
+  const formatCurrency = (amount?: number | string | null, currency?: string | null) => {
+    const num = typeof amount === 'number' ? amount : parseFloat(String(amount ?? 0));
+    const safeNum = Number.isFinite(num) ? num : 0;
+    return `${safeNum.toFixed(2)} ${currency || 'MAD'}`;
+  };
 
   const getMatchStrength = (confidence: 'high' | 'medium' | 'low') => {
     switch (confidence) {
@@ -431,7 +436,10 @@ export default function BankReconciliationScreen() {
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               {accountHealth.selected
-                ? `${accountHealth.selected.name || accountHealth.selected.bank_name} • رصيد مُسجَّل: ${formatCurrency(accountHealth.selected.current_balance, accountHealth.selected.currency)}`
+                ? `${accountHealth.selected.name || accountHealth.selected.bank_name || 'حساب بنكي'} • رصيد مُسجَّل: ${formatCurrency(
+                    accountHealth.selected.current_balance ?? (accountHealth.selected as unknown as Record<string, unknown>).balance as number ?? 0,
+                    accountHealth.selected.currency || 'MAD'
+                  )}`
                 : 'لم يتم اختيار حساب'}
             </p>
           </CardHeader>

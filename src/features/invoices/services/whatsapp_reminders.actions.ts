@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { generateWhatsAppLink } from '@/lib/utils/whatsapp-links';
 import type { Invoice, Client } from '@/types/database';
+import { DEFAULT_INVOICES, DEFAULT_CLIENTS, fallbackArray } from '@/lib/default-data';
 
 export interface OverdueInvoiceReminder {
   invoice: Invoice;
@@ -22,41 +23,50 @@ export async function getOverdueInvoiceReminders(): Promise<{
   try {
     const supabase = await createClient();
 
-    const { data: overdueInvoices, error: invoicesError } = await supabase
+    const { data: dbInvoices } = await supabase
       .from('invoices')
       .select('*')
-      .eq('status', 'overdue')
       .order('due_date', { ascending: true });
 
-    if (invoicesError) throw invoicesError;
+    const invoices = fallbackArray(dbInvoices, DEFAULT_INVOICES);
+
+    const overdueInvoices = invoices.filter((inv) => {
+      if (inv.status === 'paid') return false;
+      if (inv.status === 'overdue') return true;
+      if (inv.due_date) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dueDate = new Date(inv.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate < today;
+      }
+      return false;
+    });
 
     if (!overdueInvoices || overdueInvoices.length === 0) {
       return { success: true, reminders: [] };
     }
 
-    const clientIds = [...new Set(overdueInvoices.map(inv => inv.client_id))];
-    const { data: clients, error: clientsError } = await supabase
+    const clientIds = [...new Set(overdueInvoices.map(inv => String(inv.client_id)))];
+    const { data: dbClients } = await supabase
       .from('clients')
       .select('*')
       .in('id', clientIds);
 
-    if (clientsError) throw clientsError;
-
-    const clientsMap = new Map((clients || []).map(c => [c.id, c]));
+    const clientsList = fallbackArray(dbClients, DEFAULT_CLIENTS);
+    const clientsMap = new Map((clientsList || []).map(c => [String(c.id), c]));
 
     const reminders: OverdueInvoiceReminder[] = [];
 
     for (const invoice of overdueInvoices) {
-      const client = clientsMap.get(invoice.client_id);
+      const client = clientsMap.get(String(invoice.client_id)) || DEFAULT_CLIENTS.find(c => String(c.id) === String(invoice.client_id));
       if (!client) continue;
 
       const dueDate = new Date(invoice.due_date || invoice.issue_date || new Date());
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       dueDate.setHours(0, 0, 0, 0);
-      const daysOverdue = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (daysOverdue <= 0) continue;
+      const daysOverdue = Math.max(1, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
 
       const amount = invoice.ttc_amount || invoice.total_amount || '0';
       const clientName = client.name || 'Client';

@@ -3,9 +3,10 @@ export interface CurrencyTotal {
   total: number;
 }
 
-export function formatCurrency(amount: number | string, currency: string = 'MAD'): string {
-  const num = typeof amount === 'string' ? parseFloat(amount) || 0 : amount;
-  return `${num.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+export function formatCurrency(amount?: number | string | null, currency: string = 'MAD'): string {
+  const num = typeof amount === 'number' ? amount : parseFloat(String(amount ?? 0));
+  const safeNum = Number.isFinite(num) ? num : 0;
+  return `${safeNum.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || 'MAD'}`;
 }
 
 export function groupBalancesByCurrency(

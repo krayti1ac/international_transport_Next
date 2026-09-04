@@ -139,3 +139,5 @@ export function TrackingMap({ locations, selectedTruck, isSatellite, geofenceZon
     </MapContainer>
   );
 }
+
+export default TrackingMap;
