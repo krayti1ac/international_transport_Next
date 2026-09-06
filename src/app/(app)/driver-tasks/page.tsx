@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/components/language-provider';
 import { MapPin, Fuel, FileText, CheckCircle } from 'lucide-react';
+import { NavigationLauncher } from '@/features/trips/components/NavigationLauncher';
 import Decimal from 'decimal.js';
 
 export default function DriverTasksPage() {
@@ -216,6 +217,17 @@ export default function DriverTasksPage() {
                             {t('تأكيد التسليم', 'Confirmer la livraison')}
                           </a>
                         </Button>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                        <span className="text-xs text-muted-foreground">{t('توجيه الشاحنة عبر GPS:', 'Navigation GPS :')}</span>
+                        <NavigationLauncher
+                          target={{
+                            latitude: trip.unloading_latitude,
+                            longitude: trip.unloading_longitude,
+                            addressOrCity: trip.route_export || trip.route,
+                            label: trip.route,
+                          }}
+                        />
                       </div>
                     </CardContent>
                   </Card>

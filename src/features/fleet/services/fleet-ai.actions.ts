@@ -2,116 +2,231 @@
 
 import { createClient } from '@/lib/supabase/server';
 import Decimal from 'decimal.js';
+import type { TruckMaintenance, TrailerMaintenance, TripOrder, Truck, Trailer } from '@/types/database';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export interface AIInsight {
   type: 'success' | 'warning' | 'critical' | 'info';
+  category: 'fuel' | 'engine' | 'maintenance' | 'usage';
   message: string;
 }
 
 export interface FleetAIReport {
   success: boolean;
   healthScore: number;
+  fuelEfficiencyStatus: 'efficient' | 'normal' | 'high' | 'unknown';
+  averageLitersPer100Km?: number;
+  consumptionVariancePercent?: number;
   insights: AIInsight[];
   recentMaintenanceCost: number;
   tripsCount: number;
+  lastServiceDate?: string;
   error?: string;
 }
 
-export async function generateVehicleAIReport(vehicleId: number, type: 'truck' | 'trailer'): Promise<FleetAIReport> {
+export async function generateVehicleAIReport(
+  vehicleId: number,
+  type: 'truck' | 'trailer' = 'truck'
+): Promise<FleetAIReport> {
   try {
     const supabase = await createClient();
     const insights: AIInsight[] = [];
     let healthScore = 100;
 
-    // 1. جلب البيانات التاريخية للمركبة (آخر 6 أشهر)
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const dateStr = sixMonthsAgo.toISOString();
+    const dateLimit = sixMonthsAgo.toISOString().split('T')[0];
 
-    const maintColumn = type === 'truck' ? 'truck_id' : 'trailer_id';
-    
-    const [maintRes, tripsRes, vehicleRes] = await Promise.all([
-      supabase.from(type === 'truck' ? 'truck_maintenance' : ('trailer_maintenance' as any))
-        .select('amount, type, date')
-        .eq(maintColumn, vehicleId)
-        .gte('date', dateStr),
-      supabase.from('trip_orders')
-        .select('id, distance_km, status')
-        .eq(maintColumn, vehicleId)
-        .gte('departure_date', dateStr),
-      supabase.from(type === 'truck' ? 'trucks' : 'trailers')
-        .select('status, created_at')
-        .eq('id', vehicleId)
-        .single()
+    const foreignKey = type === 'truck' ? 'truck_id' : 'trailer_id';
+    const maintenanceTable = type === 'truck' ? 'truck_maintenance' : 'trailer_maintenance';
+    const vehicleTable = type === 'truck' ? 'trucks' : 'trailers';
+
+    const [vehicleRes, maintRes, tripsRes] = await Promise.all([
+      supabase.from(vehicleTable).select('*').eq('id', vehicleId).single(),
+      supabase
+        .from(maintenanceTable)
+        .select('*')
+        .eq(foreignKey, vehicleId)
+        .gte(type === 'truck' ? 'maintenance_date' : 'date', dateLimit)
+        .order(type === 'truck' ? 'maintenance_date' : 'date', { ascending: false }),
+      supabase
+        .from('trip_orders')
+        .select('*')
+        .eq(foreignKey, vehicleId)
+        .gte('departure_date', dateLimit)
+        .order('departure_date', { ascending: false }),
     ]);
 
-    const maintenance = (maintRes.data as Array<{ amount?: any; type?: string; date?: string }> | null) || [];
-    const trips = (tripsRes.data as Array<{ id: number; distance_km?: number | null; status?: string }> | null) || [];
-    const vehicle = vehicleRes.data as { status?: string; created_at?: string } | null;
-
-    if (!vehicle) throw new Error('المركبة غير موجودة');
-
-    // 2. تحليل وتيرة وتكاليف الصيانة (Maintenance Frequency & Cost)
-    const recentMaintenanceCost = maintenance.reduce((sum, record) => sum + (parseFloat(record.amount || '0')), 0);
-    const repairCount = maintenance.filter(m => m.type !== 'fuel').length;
-
-    if (repairCount > 4) {
-      healthScore -= 20;
-      insights.push({ type: 'critical', message: `المركبة خضعت لـ ${repairCount} عمليات إصلاح خلال 6 أشهر. هنالك خطر تعطل وشيك، يُنصح بإجراء فحص شامل للمحرك أو الأجزاء الحيوية.` });
-    } else if (repairCount > 2) {
-      healthScore -= 10;
-      insights.push({ type: 'warning', message: 'معدل زيارات ورشة الصيانة أعلى من المتوسط المعتاد.' });
-    } else if (repairCount === 0 && trips.length > 5) {
-      insights.push({ type: 'info', message: 'لم يتم إجراء أي صيانة وقائية مؤخراً رغم كثرة الرحلات. يُنصح بجدولة فحص روتيني (زيت، فلاتر، فرامل).' });
+    if (vehicleRes.error || !vehicleRes.data) {
+      return {
+        success: false,
+        healthScore: 0,
+        fuelEfficiencyStatus: 'unknown',
+        insights: [],
+        recentMaintenanceCost: 0,
+        tripsCount: 0,
+        error: 'تعذر العثور على بيانات المركبة',
+      };
     }
 
-    // 3. تحليل استهلاك الوقود (للشاحنات فقط)
-    if (type === 'truck') {
-      const fuelRecords = maintenance.filter(m => m.type === 'fuel');
-      if (fuelRecords.length > 3) {
-        // خوارزمية مبسطة لمحاكاة تزايد الاستهلاك
-        const firstHalf = fuelRecords.slice(0, Math.floor(fuelRecords.length / 2));
-        const secondHalf = fuelRecords.slice(Math.floor(fuelRecords.length / 2));
-        
-        const avgFirst = firstHalf.reduce((s, r) => s + parseFloat(r.amount || '0'), 0) / firstHalf.length;
-        const avgSecond = secondHalf.reduce((s, r) => s + parseFloat(r.amount || '0'), 0) / secondHalf.length;
+    const vehicle = vehicleRes.data as Truck | Trailer;
+    const typedMaintenanceRecords = type === 'truck'
+      ? (maintRes.data || []) as TruckMaintenance[]
+      : (maintRes.data || []) as TrailerMaintenance[];
+    const maintenanceRecords = typedMaintenanceRecords;
+    const trips = (tripsRes.data || []) as TripOrder[];
 
-        if (avgFirst > 0 && avgSecond > avgFirst * 1.15) {
-          healthScore -= 15;
-          insights.push({ type: 'warning', message: `اكتشف الذكاء الاصطناعي زيادة بنسبة ${( ((avgSecond - avgFirst) / avgFirst) * 100 ).toFixed(1)}% في معدل الإنفاق على الوقود مؤخراً. راجع ضغط الإطارات أو سلوك القيادة.` });
+    const recentMaintenanceCost = maintenanceRecords.reduce(
+      (sum, r) => sum.plus(new Decimal(r.amount || 0)),
+      new Decimal(0)
+    );
+    const recentMaintenanceCostNum = parseFloat(recentMaintenanceCost.toFixed(2));
+
+    const getExpenseType = (r: TruckMaintenance | TrailerMaintenance): string => {
+      if ('expense_type' in r && r.expense_type) return r.expense_type;
+      return r.type || '';
+    };
+
+    const repairRecords = maintenanceRecords.filter((r) => {
+      const expType = getExpenseType(r).toLowerCase();
+      return expType !== 'fuel' && expType !== 'carburant' && expType !== 'gasoil';
+    });
+
+    if (repairRecords.length >= 4) {
+      healthScore -= 25;
+      insights.push({
+        type: 'critical',
+        category: 'maintenance',
+        message: `خضعت الشاحنة لـ ${repairRecords.length} إصلاحات خلال 6 أشهر، مما يشير إلى تكرار الأعطال الميكانيكية واقتراب عمر بعض القطع الحيوية.`,
+      });
+    } else if (repairRecords.length >= 2) {
+      healthScore -= 10;
+      insights.push({
+        type: 'warning',
+        category: 'maintenance',
+        message: 'معدل زيارات الورشة أعلى من المتوسط السنوي المعتاد.',
+      });
+    } else if (repairRecords.length === 0 && trips.length >= 5) {
+      healthScore -= 5;
+      insights.push({
+        type: 'info',
+        category: 'maintenance',
+        message: 'أكملت المركبة أكثر من 5 رحلات دولية دون أي فحص وقائي دوري. يُنصح بجدولة تغيير الزيت وفحص دورة التبريد.',
+      });
+    }
+
+    let fuelEfficiencyStatus: 'efficient' | 'normal' | 'high' | 'unknown' = 'unknown';
+    let averageLitersPer100Km: number | undefined;
+    let consumptionVariancePercent: number | undefined;
+
+    if (type === 'truck') {
+      const fuelEntries = maintenanceRecords.filter((r) => {
+        const expType = getExpenseType(r).toLowerCase();
+        return expType === 'fuel' || expType === 'carburant' || expType === 'gasoil';
+      });
+
+      const totalFuelAmount = fuelEntries.reduce(
+        (sum, f) => sum.plus(new Decimal(f.amount || 0)),
+        new Decimal(0)
+      );
+
+      const estimatedTotalDistance = trips.length > 0 ? trips.length * 1800 : 0;
+      const estimatedLiters = totalFuelAmount.greaterThan(0) ? totalFuelAmount.dividedBy(12.5) : new Decimal(0);
+
+      if (estimatedTotalDistance > 0 && estimatedLiters.greaterThan(0)) {
+        averageLitersPer100Km = parseFloat(estimatedLiters.dividedBy(estimatedTotalDistance).times(100).toFixed(1));
+
+        if (averageLitersPer100Km < 31) {
+          fuelEfficiencyStatus = 'efficient';
+          insights.push({
+            type: 'success',
+            category: 'fuel',
+            message: `معدل استهلاك ممتاز (${averageLitersPer100Km} L/100 km) يعكس كفاءة المحرك وسلاسة أسلوب القيادة.`,
+          });
+        } else if (averageLitersPer100Km <= 35) {
+          fuelEfficiencyStatus = 'normal';
+          insights.push({
+            type: 'success',
+            category: 'fuel',
+            message: `معدل الاستهلاك طبيعي (${averageLitersPer100Km} L/100 km) وضمن الحدود القياسية المعتمدة.`,
+          });
         } else {
-          insights.push({ type: 'success', message: 'استهلاك الوقود مستقر وضمن النطاق الطبيعي والاقتصادي.' });
+          fuelEfficiencyStatus = 'high';
+          healthScore -= 20;
+          insights.push({
+            type: 'critical',
+            category: 'fuel',
+            message: `ارتفاع ملحوظ في استهلاك الوقود (${averageLitersPer100Km} L/100 km). يُحتمل وجود انسداد في فلاتر الهواء أو خلل بنظام البخاخات (Injecteurs).`,
+          });
+        }
+      }
+
+      if (fuelEntries.length >= 4) {
+        const midPoint = Math.floor(fuelEntries.length / 2);
+        const olderEntries = fuelEntries.slice(midPoint);
+        const recentEntries = fuelEntries.slice(0, midPoint);
+
+        const olderAvg = olderEntries.reduce((s, e) => s.plus(new Decimal(e.amount || 0)), new Decimal(0)).dividedBy(olderEntries.length);
+        const recentAvg = recentEntries.reduce((s, e) => s.plus(new Decimal(e.amount || 0)), new Decimal(0)).dividedBy(recentEntries.length);
+
+        if (olderAvg.greaterThan(0)) {
+          consumptionVariancePercent = parseFloat(recentAvg.minus(olderAvg).dividedBy(olderAvg).times(100).toFixed(1));
+          if (consumptionVariancePercent > 15) {
+            healthScore -= 15;
+            insights.push({
+              type: 'warning',
+              category: 'fuel',
+              message: `اكتشف النظام قفزة بنسبة ${consumptionVariancePercent}% في الإنفاق على الديزل مؤخراً. تأكد من ضغط الإطارات أو ضبط مسارات التزود.`,
+            });
+          }
         }
       }
     }
 
-    // 4. تحليل عبء العمل (Workload Fatigue)
-    if (trips.length > 15) {
+    if (trips.length >= 12) {
       healthScore -= 5;
-      insights.push({ type: 'info', message: 'المركبة تعمل بجهد عالٍ (إجهاد تشغيلي). تأكد من إراحة المعدات وتبريد الأنظمة بين الرحلات الطويلة.' });
+      insights.push({
+        type: 'info',
+        category: 'usage',
+        message: `ضغط تشغيلي مرتفع (${trips.length} رحلة خلال نصف سنة). يرجى إخضاع نظام التعليق والفرامل لفحص وقائي.`,
+      });
     }
 
-    // 5. تقييم الحالة العامة
-    if (vehicle.status === 'in_maintenance') {
+    if (vehicle.status === 'maintenance' || vehicle.status === 'inactive') {
       healthScore -= 30;
-      insights.push({ type: 'critical', message: 'المركبة حالياً في ورشة الصيانة.' });
-    } else if (healthScore > 85) {
-      insights.push({ type: 'success', message: 'الحالة الميكانيكية والتشغيلية ممتازة ومطابقة لمعايير السلامة الدولية.' });
+      insights.push({
+        type: 'critical',
+        category: 'engine',
+        message: 'المركبة متوقفة حالياً في الورشة أو معطلة عن الخدمة.',
+      });
     }
 
-    // ضمان بقاء النتيجة بين 0 و 100
-    healthScore = Math.max(0, Math.min(100, healthScore));
+    healthScore = Math.max(10, Math.min(100, healthScore));
 
     return {
       success: true,
       healthScore,
+      fuelEfficiencyStatus,
+      averageLitersPer100Km,
+      consumptionVariancePercent,
       insights,
-      recentMaintenanceCost,
-      tripsCount: trips.length
+      recentMaintenanceCost: recentMaintenanceCostNum,
+      tripsCount: trips.length,
+      lastServiceDate: type === 'truck'
+        ? (maintenanceRecords[0] as TruckMaintenance | undefined)?.maintenance_date
+        : (maintenanceRecords[0] as TrailerMaintenance | undefined)?.date,
     };
-
-  } catch (err: any) {
-    return { success: false, healthScore: 0, insights: [], recentMaintenanceCost: 0, tripsCount: 0, error: err?.message || 'حدث خطأ غير متوقع' };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'فشل توليد التحليل التنبؤي';
+    return {
+      success: false,
+      healthScore: 0,
+      fuelEfficiencyStatus: 'unknown',
+      insights: [],
+      recentMaintenanceCost: 0,
+      tripsCount: 0,
+      error: message,
+    };
   }
 }
-

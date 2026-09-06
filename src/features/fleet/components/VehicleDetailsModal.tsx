@@ -795,56 +795,7 @@ export function VehicleDetailsModal({
             )}
           </div>
 
-          {/* Bottom Summary Section matching screenshot ("السجل") */}
-          <div className="bg-slate-50/80 dark:bg-[#171d25] border border-slate-200/80 dark:border-border/60 rounded-2xl p-5 space-y-3 shadow-xs">
-            <h3 className="text-sm font-bold font-amiri text-slate-900 dark:text-foreground pb-2 border-b border-slate-200 dark:border-border/30">
-              {t('السجل', 'Registre / Historique')}
-            </h3>
 
-            <div className="space-y-2.5 text-xs">
-              {/* Row 1: رحلات */}
-              <div
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-200/50 dark:hover:bg-muted/30 cursor-pointer transition-colors"
-                onClick={() => setTripsOpen(!tripsOpen)}
-              >
-                <div className="flex items-center gap-2">
-                  <TruckIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-slate-800 dark:text-foreground font-medium">{t('رحلات', 'Voyages')}</span>
-                </div>
-                <span className="w-7 h-6 rounded-md bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/20 font-mono font-bold flex items-center justify-center text-xs">
-                  {trips.length}
-                </span>
-              </div>
-
-              {/* Row 2: صيانة */}
-              <div
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-200/50 dark:hover:bg-muted/30 cursor-pointer transition-colors"
-                onClick={() => setMaintOpen(!maintOpen)}
-              >
-                <div className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  <span className="text-slate-800 dark:text-foreground font-medium">{t('صيانة', 'Maintenance')}</span>
-                </div>
-                <span className="w-7 h-6 rounded-md bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/20 font-mono font-bold flex items-center justify-center text-xs">
-                  {maintenanceRecords.length}
-                </span>
-              </div>
-
-              {/* Row 3: وثائق */}
-              <div
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-200/50 dark:hover:bg-muted/30 cursor-pointer transition-colors"
-                onClick={() => setDocsOpen(!docsOpen)}
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-slate-800 dark:text-foreground font-medium">{t('وثائق', 'Documents')}</span>
-                </div>
-                <span className="w-7 h-6 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/20 font-mono font-bold flex items-center justify-center text-xs">
-                  {documents.length}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

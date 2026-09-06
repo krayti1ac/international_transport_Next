@@ -25,6 +25,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Box,
+  Printer,
 } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 
@@ -46,6 +47,11 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   const [trailer, setTrailer] = useState<Trailer | null>(null);
   const [financials, setFinancials] = useState<TripFinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const handleDownloadDossier = () => {
+    const dossierUrl = `/api/trips/${tripId}/dossier-pdf`;
+    window.open(dossierUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -239,9 +245,21 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             </p>
           </div>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusInfo.color}`}>
-          {statusInfo.text}
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadDossier}
+            className="rounded-xl text-xs gap-1.5 font-bold border-primary/30 hover:bg-primary/10"
+          >
+            <Printer className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">{t('تحميل الملف اللوجستي الموحد (Dossier PDF)', 'Télécharger le dossier unifié (PDF)', 'Download unified logistics dossier (PDF)')}</span>
+            <span className="sm:hidden">{t('Dossier PDF', 'Dossier PDF', 'Dossier PDF')}</span>
+          </Button>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusInfo.color}`}>
+            {statusInfo.text}
+          </span>
+        </div>
       </div>
 
       {/* Overview Cards */}

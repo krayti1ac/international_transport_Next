@@ -192,3 +192,130 @@ ON CONFLICT DO NOTHING;
 
 -- Refresh PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
+
+-- DOCUMENT CATEGORIES
+INSERT INTO document_categories (id, name, description, entity_type, is_mandatory, created_at) VALUES
+(1, 'Insurance', 'Truck/Trailer insurance certificate', 'truck', true, '2025-01-01T08:00:00Z'),
+(2, 'Registration', 'Vehicle registration document', 'trailer', true, '2025-01-01T08:00:00Z'),
+(3, 'License', 'Driving license', 'driver', true, '2025-01-01T08:00:00Z'),
+(4, 'Visa', 'Work visa / residence permit', 'driver', true, '2025-01-01T08:00:00Z'),
+(5, 'Technical Inspection', 'Controle technique', 'truck', true, '2025-01-01T08:00:00Z'),
+(6, 'Ferry Ticket', 'Billet ferry', 'trip', false, '2025-01-01T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- FLEET DOCUMENT RENEWALS
+INSERT INTO fleet_document_renewals (id, fleet_document_id, renewal_date, expiry_date, cost, currency, provider_id, status, notes, created_at) VALUES
+(1, 1, '2026-01-01', '2027-01-15', 18500.00, 'MAD', 1, 'in_progress', 'Renouvellement assurance camion Mercedes', '2025-12-01T08:00:00Z'),
+(2, 2, '2026-02-01', '2027-02-20', 21000.00, 'EUR', 2, 'pending', 'Renouvellement assurance Scania', '2025-12-15T08:00:00Z'),
+(3, 4, '2026-05-01', '2027-05-20', 450.00, 'MAD', NULL, 'completed', 'Renouvellement permis Ahmed Benali', '2026-04-15T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- PROVIDERS
+INSERT INTO providers (id, name, contact_name, phone, email, address, city, country, service_type, rating, is_active, created_at) VALUES
+(1, 'AXA Assurance Maroc', 'Karim Benani', '+212522887766', 'karim.benani@axa.ma', 'Route de Casablanca, Maarif', 'Casablanca', 'Morocco', 'insurance', 4.5, true, '2025-01-01T08:00:00Z'),
+(2, 'Mapfre Espana', 'Laura Mendez', '+34912345678', 'laura.mendez@mapfre.es', 'Calle de Alcala 29', 'Madrid', 'Spain', 'insurance', 4.2, true, '2025-01-01T08:00:00Z'),
+(3, 'Garage Auto Tanger', 'Omar Chaouki', '+212539998877', 'garage.tanger@gmail.com', 'Zone Industrielle, Tanger', 'Tanger', 'Morocco', 'maintenance', 4.0, true, '2025-01-01T08:00:00Z'),
+(4, 'Balearia Ferry', 'Customer Service', '+34901400000', 'info@balearia.com', 'Muelle de Poniente', 'Almería', 'Spain', 'ferry', 3.8, true, '2025-01-01T08:00:00Z'),
+(5, 'Comanav Ferry', 'Service Commercial', '+212522309600', 'commercial@comanav.ma', 'Port de Tanger Med', 'Tanger', 'Morocco', 'ferry', 3.9, true, '2025-01-01T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- REPAIR INVOICES
+INSERT INTO repair_invoices (id, truck_id, provider_id, invoice_number, description, amount, currency, tax_amount, total_amount, issue_date, due_date, status, payment_date, created_at) VALUES
+(1, 1, 3, 'FAC-REP-2025-001', 'Vidange + filtres + embrayage Mercedes Actros', 7500.00, 'MAD', 1500.00, 9000.00, '2025-08-25', '2025-09-24', 'paid', '2025-08-26', '2025-08-25T08:00:00Z'),
+(2, 2, 3, 'FAC-REP-2025-002', 'Changement freins + pneus Scania R450', 6200.00, 'EUR', 1302.00, 7502.00, '2025-08-28', '2025-09-27', 'pending', NULL, '2025-08-28T08:00:00Z'),
+(3, 4, 3, 'FAC-REP-2025-003', 'Reparation boite de vitesse MAN TGX', 4200.00, 'MAD', 840.00, 5040.00, '2025-09-05', '2025-10-05', 'pending', NULL, '2025-09-05T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- FERRY EXPENSES
+INSERT INTO ferry_expenses (id, trip_order_id, company, localizador, departure_port, arrival_port, departure_date, arrival_date, tickets_count, amount, currency, status, created_at) VALUES
+(1, 1, 'Balearia', 'BAL-2025-88432', 'Tanger Med', 'Almería', '2025-08-16T18:00:00Z', '2025-08-17T06:00:00Z', 1, 850.00, 'EUR', 'paid', '2025-08-15T08:00:00Z'),
+(2, 2, 'Comanav', 'COM-2025-55123', 'Tanger Med', 'Sete', '2025-08-21T20:00:00Z', '2025-08-22T12:00:00Z', 1, 1200.00, 'EUR', 'paid', '2025-08-20T08:00:00Z'),
+(3, 3, 'GNV', 'GNV-2025-99876', 'Casablanca', 'Barcelona', '2025-09-04T22:00:00Z', '2025-09-05T14:00:00Z', 1, 980.00, 'EUR', 'pending', '2025-09-01T08:00:00Z'),
+(4, 7, 'Grimaldi', 'GRI-2025-44556', 'Tanger Med', 'Hamburg', '2025-09-11T10:00:00Z', '2025-09-13T08:00:00Z', 1, 1450.00, 'EUR', 'pending', '2025-09-09T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- EMERGENCY ADVANCE REQUESTS
+INSERT INTO emergency_advance_requests (id, driver_id, truck_id, trip_order_id, amount, currency, reason, urgency, status, requested_at, reviewed_by, reviewed_at, created_at) VALUES
+(1, 1, 1, 1, 2000.00, 'MAD', 'Panne mecanique urgente autoroute', 'high', 'approved', '2025-08-16T14:00:00Z', '00000000-0000-0000-0000-000000000001', '2025-08-16T15:00:00Z', '2025-08-16T14:00:00Z'),
+(2, 2, 2, 2, 1500.00, 'EUR', 'Frais de remorquage Marseille', 'medium', 'pending', '2025-08-23T09:00:00Z', NULL, NULL, '2025-08-23T09:00:00Z'),
+(3, 5, 5, 8, 3000.00, 'EUR', 'Retard prolonge besoin argent urgent', 'low', 'rejected', '2025-09-13T16:00:00Z', '00000000-0000-0000-0000-000000000001', '2025-09-13T17:00:00Z', '2025-09-13T16:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- FOREX GAIN/LOSS ENTRIES
+INSERT INTO forex_gain_loss_entries (id, entity_type, entity_id, currency_from, currency_to, amount_from, amount_to, exchange_rate, rate_date, realized, notes, created_at) VALUES
+(1, 'invoice', 2, 'EUR', 'MAD', 11000.00, 121000.00, 11.00, '2025-08-24', true, 'Acompte facture Inditex - taux jour', '2025-08-24T10:00:00Z'),
+(2, 'advance', 2, 'EUR', 'MAD', 6000.00, 66000.00, 11.00, '2025-08-20', true, 'Avance Mohamed Amrani - taux jour', '2025-08-20T07:00:00Z'),
+(3, 'ferry', 1, 'EUR', 'MAD', 850.00, 9180.00, 10.80, '2025-08-17', true, 'Ticket ferry Balearia voyage 1', '2025-08-17T06:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- TRUCK LOCATIONS (expanded GPS history)
+INSERT INTO truck_locations (id, truck_id, latitude, longitude, timestamp) VALUES
+(6, 1, 37.3891, -5.9845, '2025-09-02T08:00:00Z'),
+(7, 1, 37.1773, -3.5986, '2025-09-03T06:30:00Z'),
+(8, 2, 35.7595, -5.8340, '2025-09-02T07:00:00Z'),
+(9, 2, 36.8423, -2.4623, '2025-09-02T19:00:00Z'),
+(10, 3, 41.3851, 2.1734, '2025-09-02T08:00:00Z'),
+(11, 3, 42.4602, 6.8356, '2025-09-03T05:00:00Z'),
+(12, 4, 34.0209, -6.8416, '2025-09-01T08:00:00Z'),
+(13, 5, 36.1680, -5.3473, '2025-09-02T09:00:00Z'),
+(14, 5, 37.3891, -5.9845, '2025-09-03T08:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- NOTIFICATIONS
+INSERT INTO notifications (id, user_id, type, title, message, is_read, created_at, related_entity_type, related_entity_id) VALUES
+(1, '00000000-0000-0000-0000-000000000002', 'trip', 'Nouveau trajet assigne', 'Trajet CMR-2025-007 assigne a Omar Tazi (MAN TGX)', false, '2025-09-09T08:30:00Z', 'trip_order', 7),
+(2, '00000000-0000-0000-0000-000000000003', 'advance', 'Avance approuvee', 'Avance de 3000 MAD approuvee pour frais supplementaires', true, '2025-08-18T09:00:00Z', 'advance', 4),
+(3, '00000000-0000-0000-0000-000000000001', 'invoice', 'Facture en retard', 'Facture FAC-2025-2001 en retard de paiement (Inditex)', false, '2025-09-01T08:00:00Z', 'invoice', 2),
+(4, '00000000-0000-0000-0000-000000000002', 'document', 'Document expire bientot', 'Assurance truck 2 expire le 20/02/2026', false, '2025-09-03T08:00:00Z', 'fleet_document', 2),
+(5, '00000000-0000-0000-0000-000000000005', 'trip', 'Trajet annule', 'Trajet CMR-2025-006 (Casablanca-Lyon) a ete annule', true, '2025-08-25T08:00:00Z', 'trip_order', 6),
+(6, '00000000-0000-0000-0000-000000000001', 'system', 'Sauvegarde effectuee', 'Sauvegarde automatique de la base de donnees reussie', true, '2025-09-04T02:00:00Z', NULL, NULL)
+ON CONFLICT DO NOTHING;
+
+-- AUDIT LOGS
+INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at) VALUES
+(1, '00000000-0000-0000-0000-000000000001', 'create', 'trip_order', 7, NULL, '{"status":"loading","route":"Tanger → Hamburg"}', '192.168.1.10', 'Mozilla/5.0', '2025-09-09T08:00:00Z'),
+(2, '00000000-0000-0000-0000-000000000002', 'update', 'invoice', 2, '{"status":"pending"}', '{"status":"partial"}', '192.168.1.11', 'Mozilla/5.0', '2025-08-24T10:05:00Z'),
+(3, '00000000-0000-0000-0000-000000000001', 'update', 'trip_order', 6, '{"status":"scheduled"}', '{"status":"cancelled"}', '192.168.1.10', 'Mozilla/5.0', '2025-08-25T08:30:00Z'),
+(4, '00000000-0000-0000-0000-000000000002', 'create', 'advance', 4, NULL, '{"amount":3000,"currency":"MAD","status":"approved"}', '192.168.1.11', 'Mozilla/5.0', '2025-08-18T08:30:00Z'),
+(5, '00000000-0000-0000-0000-000000000001', 'login', 'user', 1, NULL, '{"last_login":"2025-09-06T19:00:00Z"}', '192.168.1.10', 'Mozilla/5.0', '2025-09-06T19:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- SYSTEM SETTINGS
+INSERT INTO system_settings (id, key, value, description, updated_by, updated_at, is_public) VALUES
+(1, 'company_name', 'Trans Bodanon SARL', 'Nom de l''entreprise sur les documents', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(2, 'default_tva_rate', '20', 'Taux TVA par defaut Maroc', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(2, 'default_tva_rate_eu', '21', 'Taux TVA par defaut Espagne', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(3, 'currency_exchange_eur_mad', '11.00', 'Taux de change EUR -> MAD', '00000000-0000-0000-0000-000000000001', '2025-09-01T08:00:00Z', true),
+(4, 'invoice_prefix_mad', 'FAC-2025-1', 'Prefix factures MAD', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(5, 'invoice_prefix_eur', 'FAC-2025-2', 'Prefix factures EUR', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(6, 'cmr_prefix', 'CMR-2025', 'Prefix numeros CMR', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(7, 'maintenance_alert_days', '30', 'Jours avant expiration pour alerte maintenance', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true),
+(8, 'sms_notifications_enabled', 'false', 'Activer notifications SMS', '00000000-0000-0000-0000-000000000001', '2025-01-01T08:00:00Z', true)
+ON CONFLICT DO NOTHING;
+
+-- CHAT MESSAGES
+INSERT INTO chat_messages (id, sender_id, receiver_id, message, is_read, created_at) VALUES
+(1, '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', 'Ahmed, peux-tu confirmer le chargement pour CMR-2025-001 ?', false, '2025-08-14T06:30:00Z'),
+(2, '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'Oui patron, tout est pret a Tanger', true, '2025-08-14T06:35:00Z'),
+(3, '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'Karim, le client demande un statut sur CMR-2025-008', false, '2025-09-12T10:00:00Z'),
+(4, '00000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000001', 'Je suis arrive a Casablanca, dechargement en cours', true, '2025-09-12T10:20:00Z'),
+(5, '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'Besoin d''une avance supplementaire pour l''autoroute', false, '2025-09-06T07:00:00Z')
+ON CONFLICT DO NOTHING;
+
+-- ADDITIONAL GEOFENCE ZONES (ports and hubs)
+INSERT INTO geofence_zones (id, name, latitude, longitude, radius_km, zone_type, is_active, created_at, created_by) VALUES
+(5, 'Sete Port', 43.3959, 3.6966, 2.5, 'port', true, '2025-01-01T08:00:00Z', '00000000-0000-0000-0000-000000000001'),
+(6, 'Barcelona Port', 41.3462, 2.1666, 3.0, 'port', true, '2025-01-01T08:00:00Z', '00000000-0000-0000-0000-000000000001'),
+(7, 'Valencia Port', 39.4489, -0.3156, 3.0, 'port', true, '2025-01-01T08:00:00Z', '00000000-0000-0000-0000-000000000001'),
+(8, 'Hamburg Port', 53.5412, 9.9856, 3.0, 'port', true, '2025-01-01T08:00:00Z', '00000000-0000-0000-0000-000000000001'),
+(9, 'Casablanca Port', 33.6061, -7.6326, 2.5, 'port', true, '2025-01-01T08:00:00Z', '00000000-0000-0000-0000-000000000001')
+ON CONFLICT DO NOTHING;
+
+-- ADDITIONAL GEOFENCE ALERTS
+INSERT INTO geofence_alerts (id, zone_id, truck_id, event_type, latitude, longitude, timestamp, notified) VALUES
+(4, 1, 2, 'enter', 35.8067, -5.8103, '2025-09-02T08:10:00Z', true),
+(5, 6, 3, 'enter', 41.3462, 2.1666, '2025-09-03T12:00:00Z', true),
+(6, 7, 1, 'enter', 39.4489, -0.3156, '2025-09-10T08:00:00Z', false),
+(7, 3, 1, 'exit', 35.7595, -5.8340, '2025-09-11T10:00:00Z', false)
+ON CONFLICT DO NOTHING;
+

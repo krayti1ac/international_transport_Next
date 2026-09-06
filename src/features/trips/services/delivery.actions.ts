@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
 
 export async function submitProofOfDelivery(input: {
   tripOrderId: number;
@@ -84,6 +85,11 @@ export async function submitProofOfDelivery(input: {
     revalidatePath('/trips');
     revalidatePath('/driver-tasks');
     revalidatePath('/dashboard');
+
+    dispatchTripLifecycleNotifications(input.tripOrderId, 'delivery_completed', {
+      signatureUrl,
+      cmrUrl,
+    }).catch((notifyErr) => console.warn('Notification trigger error:', notifyErr));
 
     return { success: true, signatureUrl, cmrUrl };
   } catch (error) {

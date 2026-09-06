@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
 import type { TripOrder } from '@/types/database';
 
 export async function createTripOrder(data: Partial<TripOrder>) {
@@ -32,6 +33,10 @@ export async function updateTripStatus(tripId: number, status: string) {
       .single();
 
     if (error) throw error;
+
+    dispatchTripLifecycleNotifications(tripId, 'status_update').catch((err) =>
+      console.warn('Status notification trigger error:', err)
+    );
 
     return { success: true, data: result as TripOrder };
   } catch (error: unknown) {

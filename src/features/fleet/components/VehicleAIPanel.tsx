@@ -1,115 +1,181 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BrainCircuit, Activity, AlertTriangle, CheckCircle, Info, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  RefreshCw,
+  Fuel,
+  Wrench,
+  Activity,
+} from 'lucide-react';
 import { generateVehicleAIReport, type FleetAIReport } from '../services/fleet-ai.actions';
-import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/forex';
 
 interface VehicleAIPanelProps {
   vehicleId: number;
-  vehicleType: 'truck' | 'trailer';
+  vehicleType?: 'truck' | 'trailer';
 }
 
-export function VehicleAIPanel({ vehicleId, vehicleType }: VehicleAIPanelProps) {
+export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPanelProps) {
   const [report, setReport] = useState<FleetAIReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
 
-  const fetchAIReport = async () => {
+  const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
       const res = await generateVehicleAIReport(vehicleId, vehicleType);
       if (res.success) {
         setReport(res);
-      } else {
-        toast({ title: 'فشل تحليل الذكاء الاصطناعي', description: res.error, variant: 'destructive' });
       }
-    } catch (err: any) {
-      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAIReport();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleId, vehicleType]);
 
-  const getHealthColor = (score: number) => {
-    if (score >= 80) return 'text-emerald-500';
-    if (score >= 50) return 'text-amber-500';
-    return 'text-rose-500';
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-emerald-500 border-emerald-500';
+    if (score >= 60) return 'text-amber-500 border-amber-500';
+    return 'text-rose-500 border-rose-500';
+  };
+
+  const getBadgeVariant = (type: string) => {
+    switch (type) {
+      case 'critical':
+        return 'bg-rose-500/15 text-rose-600 border-rose-500/30';
+      case 'warning':
+        return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
+      case 'info':
+        return 'bg-blue-500/15 text-blue-600 border-blue-500/30';
+      default:
+        return 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30';
+    }
   };
 
   const getInsightIcon = (type: string) => {
     switch (type) {
-      case 'success': return <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />;
-      case 'warning': return <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />;
-      case 'critical': return <Activity className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />;
-      default: return <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />;
+      case 'critical':
+        return <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />;
+      case 'warning':
+        return <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />;
+      case 'info':
+        return <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />;
+      default:
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 text-center border border-dashed border-border/60 rounded-2xl flex flex-col items-center justify-center bg-muted/10">
-        <BrainCircuit className="w-10 h-10 text-primary animate-pulse mb-3" />
-        <p className="text-sm text-muted-foreground font-medium animate-pulse">محرك الذكاء التنبؤي يحلل سجلات المركبة...</p>
-      </div>
-    );
-  }
-
-  if (!report) return null;
-
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-slate-50 to-indigo-50/30 dark:from-slate-950 dark:to-indigo-950/20 shadow-md" dir="rtl">
-      <CardHeader className="pb-2 flex flex-row items-center justify-between border-b border-border/50">
-        <CardTitle className="text-primary font-amiri text-lg flex items-center gap-2">
-          <BrainCircuit className="w-5 h-5" />
-          التشخيص التنبؤي للأسطول (AI Health)
+    <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5 shadow-xs overflow-hidden" dir="rtl">
+      <CardHeader className="py-3 px-4 border-b border-border/60 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-amiri font-bold flex items-center gap-2 text-foreground">
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>التشخيص التنبؤي وصحة المركبة (Predictive Health AI)</span>
         </CardTitle>
-        <Button variant="ghost" size="icon" onClick={fetchAIReport} className="h-8 w-8 rounded-full">
-          <RefreshCw className="w-4 h-4 text-muted-foreground" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={fetchReport}
+          disabled={loading}
+          className="h-7 w-7 p-0 rounded-lg"
+          title="تحديث التحليل"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </CardHeader>
-      <CardContent className="pt-4 flex flex-col md:flex-row gap-6">
-        
-        {/* مؤشر الصحة (Health Score) */}
-        <div className="flex flex-col items-center justify-center min-w-[120px]">
-          <div className="relative flex items-center justify-center w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-inner">
-            <svg className="absolute w-full h-full transform -rotate-90">
-              <circle cx="44" cy="44" r="44" stroke="currentColor" strokeWidth="8" fill="transparent"
-                className="text-slate-200 dark:text-slate-800 translate-x-1 translate-y-1" />
-              <circle cx="44" cy="44" r="44" stroke="currentColor" strokeWidth="8" fill="transparent"
-                strokeDasharray={`${report.healthScore * 2.76} 276`}
-                className={`transition-all duration-1000 ease-out translate-x-1 translate-y-1 ${getHealthColor(report.healthScore)}`} />
-            </svg>
-            <div className="text-center z-10">
-              <span className={`text-2xl font-black font-mono block ${getHealthColor(report.healthScore)}`}>{report.healthScore}%</span>
-            </div>
-          </div>
-          <p className="text-xs font-bold text-muted-foreground mt-2 uppercase tracking-wide">صحة المركبة</p>
-        </div>
 
-        {/* التوصيات والرؤى (Insights) */}
-        <div className="flex-1 space-y-2.5">
-          {report.insights.length === 0 ? (
-            <p className="text-sm text-muted-foreground">لا توجد ملاحظات استثنائية مسجلة مؤخراً.</p>
-          ) : (
-            report.insights.map((insight, idx) => (
-              <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-border/50 text-sm">
-                {getInsightIcon(insight.type)}
-                <span className="text-foreground leading-relaxed font-medium">{insight.message}</span>
+      <CardContent className="p-4 space-y-4">
+        {loading ? (
+          <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+            <p className="text-xs">جاري فحص البيانات التاريخية والتشخيص التنبؤي...</p>
+          </div>
+        ) : !report ? (
+          <p className="text-xs text-center text-muted-foreground py-4">لا تتوفر بيانات تشخيصية كافية لهذه المركبة.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-card border border-border flex items-center gap-3">
+                <div
+                  className={`w-12 h-12 rounded-full border-4 flex items-center justify-center font-bold font-mono text-base shrink-0 ${getScoreColor(
+                    report.healthScore
+                  )}`}
+                >
+                  {report.healthScore}%
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">مؤشر الجاهزية والسلامة</p>
+                  <p className="text-xs font-bold text-foreground mt-0.5">
+                    {report.healthScore >= 80 ? 'حالة ممتازة' : report.healthScore >= 60 ? 'تحتاج مراقبة' : 'فحص عاجل مطلوب'}
+                  </p>
+                </div>
               </div>
-            ))
-          )}
-        </div>
-        
+
+              {vehicleType === 'truck' && (
+                <div className="p-3 rounded-xl bg-card border border-border flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                    <Fuel className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">معدل الاستهلاك التقديري</p>
+                    <p className="text-xs font-bold font-mono text-foreground mt-0.5">
+                      {report.averageLitersPer100Km ? `${report.averageLitersPer100Km} L/100 km` : 'قيد التجميع'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-card border border-border flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">صيانة آخر 6 أشهر</p>
+                  <p className="text-xs font-bold font-mono text-foreground mt-0.5">
+                    {formatCurrency(report.recentMaintenanceCost, 'MAD')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-primary" />
+                <span>رؤى وتوصيات الصيانة الوقائية:</span>
+              </p>
+
+              {report.insights.length === 0 ? (
+                <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg text-center">
+                  جميع المؤشرات الحيوية مستقرة وضمن الحدود المعتمدة.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {report.insights.map((insight, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-2.5 rounded-xl border flex items-start gap-2.5 text-xs ${getBadgeVariant(
+                        insight.type
+                      )}`}
+                    >
+                      {getInsightIcon(insight.type)}
+                      <span className="leading-relaxed">{insight.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
 }
-

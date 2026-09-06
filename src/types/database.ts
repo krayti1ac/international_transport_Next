@@ -494,13 +494,15 @@ export interface ChatMessage {
 
 export interface AuditLog {
   id: number;
+  user_id: string;
+  action: string;
   entity_type: string;
   entity_id: number;
-  action_type: 'soft_delete' | 'update' | 'duplicate';
-  employee_id: string;
-  old_data?: string;
-  new_data?: string;
-  reason: string;
+  old_values?: string;
+  new_values?: string;
+  reason?: string;
+  ip_address?: string;
+  user_agent?: string;
   created_at: string;
 }
 

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/server';
 
 export type AuditAction = 'soft_delete' | 'update' | 'duplicate' | 'create' | 'auth_login' | 'role_change' | 'security_alert';
 
@@ -24,7 +24,7 @@ export async function recordAuditLog({
   userAgent,
 }: LogActionParams): Promise<void> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'system';
 

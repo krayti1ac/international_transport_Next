@@ -2,478 +2,326 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { RepairInvoice, Truck, Trailer, Provider, TruckMaintenance } from '@/types/database';
-import { MaintenanceAlertsPanel } from '@/features/maintenance/components/MaintenanceAlertsPanel';
+import type { TruckMaintenance, Truck, Trailer } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Wrench, Trash2, Calendar, DollarSign } from 'lucide-react';
+import {
+  Wrench,
+  Search,
+  Plus,
+  Trash2,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Gauge,
+} from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
-import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
-import { DEFAULT_TRUCKS, DEFAULT_TRAILERS, DEFAULT_PROVIDERS, fallbackArray } from '@/lib/default-data';
-import { useLanguage } from '@/components/language-provider';
-import Decimal from 'decimal.js';
+import { MatriculeBadge } from '@/components/ui/matricule-badge';
+import {
+  getMaintenanceSchedules,
+  deleteMaintenanceSchedule,
+  type EnrichedMaintenanceSchedule,
+} from '@/features/fleet/services/maintenance-schedule.actions';
+import { MaintenanceSchedulerModal } from '@/features/fleet/components/MaintenanceSchedulerModal';
+import { CompleteMaintenanceModal } from '@/features/fleet/components/CompleteMaintenanceModal';
 
 export default function MaintenancePage() {
-  const { t, dir, locale } = useLanguage();
-  const [invoices, setInvoices] = useState<RepairInvoice[]>([]);
-  const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [trailers, setTrailers] = useState<Trailer[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [maintenance, setMaintenance] = useState<TruckMaintenance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [cardLayout, setCardLayout] = useCardViewMode('maintenance', 'grid');
-  const [showModal, setShowModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [formData, setFormData] = useState({
-    workshop_name: '',
-    workshop_id: '',
-    amount: '',
-    currency: 'MAD',
-    date: new Date().toISOString().split('T')[0],
-    repair_path: 'workshop',
-    payment_method: 'cash',
-    notes: '',
-  });
-
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
+  const [records, setRecords] = useState<TruckMaintenance[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [trailers, setTrailers] = useState<Trailer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const [schedules, setSchedules] = useState<EnrichedMaintenanceSchedule[]>([]);
+  const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
+  const [selectedScheduleToComplete, setSelectedScheduleToComplete] = useState<EnrichedMaintenanceSchedule | null>(null);
+
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [invoicesRes, trucksRes, trailersRes, providersRes, maintenanceRes] = await Promise.all([
-        supabase.from('repair_invoices').select('*').order('date', { ascending: false }),
+      const [maintRes, trucksRes, trailersRes, schedRes] = await Promise.all([
+        supabase.from('truck_maintenance').select('*').order('maintenance_date', { ascending: false }),
         supabase.from('trucks').select('*'),
         supabase.from('trailers').select('*'),
-        supabase.from('providers').select('*'),
-        supabase.from('truck_maintenance').select('*'),
+        getMaintenanceSchedules(),
       ]);
 
-      if (invoicesRes.error) throw invoicesRes.error;
-      if (trucksRes.error) throw trucksRes.error;
-      if (trailersRes.error) throw trailersRes.error;
-      if (providersRes.error) throw providersRes.error;
-
-      setInvoices(invoicesRes.data || []);
-      setTrucks(fallbackArray(trucksRes.data, DEFAULT_TRUCKS));
-      setTrailers(fallbackArray(trailersRes.data, DEFAULT_TRAILERS));
-      setProviders(fallbackArray(providersRes.data, DEFAULT_PROVIDERS));
-      setMaintenance(maintenanceRes.data || []);
-    } catch {
-      setTrucks((prev) => fallbackArray(prev, DEFAULT_TRUCKS));
-      setTrailers((prev) => fallbackArray(prev, DEFAULT_TRAILERS));
-      setProviders((prev) => fallbackArray(prev, DEFAULT_PROVIDERS));
+      setRecords(maintRes.data || []);
+      setTrucks(trucksRes.data || []);
+      setTrailers(trailersRes.data || []);
+      if (schedRes.success && schedRes.data) {
+        setSchedules(schedRes.data);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'فشل تحميل سجلات الصيانة';
+      toast({ title: 'خطأ', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, toast]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
 
-    const channel = supabase
-      .channel('repair-invoices-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'repair_invoices' }, () => fetchData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchData, supabase]);
-
-  const handleCreateInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const parsedAmount = new Decimal(formData.amount || '0').toNumber();
-      const { error } = await supabase.from('repair_invoices').insert({
-        workshop_name: formData.workshop_name,
-        workshop_id: formData.workshop_id ? parseInt(formData.workshop_id) : undefined,
-        amount: parsedAmount,
-        currency: formData.currency,
-        date: formData.date,
-        repair_path: formData.repair_path,
-        payment_method: formData.payment_method,
-        notes: formData.notes || null,
-      });
-
-      if (error) throw error;
-       toast({ title: t('تم تسجيل فاتورة الصيانة بنجاح', 'Facture de maintenance enregistrée avec succès', 'Maintenance invoice recorded successfully') });
-      setShowModal(false);
-      setFormData({
-        workshop_name: '',
-        workshop_id: '',
-        amount: '',
-        currency: 'MAD',
-        date: new Date().toISOString().split('T')[0],
-        repair_path: 'workshop',
-        payment_method: 'cash',
-        notes: '',
-      });
+  const handleDeleteSchedule = async (id: number) => {
+    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الموعد المجدول؟')) return;
+    const res = await deleteMaintenanceSchedule(id);
+    if (res.success) {
+      toast({ title: 'تم حذف الموعد المجدول' });
       fetchData();
-    } catch (error: any) {
-      toast({
-        title: t('خطأ أثناء التسجيل', 'Erreur lors de l\'enregistrement', 'Error while recording'),
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      toast({ title: 'خطأ', description: res.error, variant: 'destructive' });
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm(t('هل أنت متأكد من حذف هذا السجل؟', 'Êtes-vous sûr de vouloir supprimer cet enregistrement ?', 'Are you sure you want to delete this record?'))) return;
-    try {
-      const { error } = await supabase.from('repair_invoices').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: t('تم الحذف بنجاح', 'Supprimé avec succès', 'Deleted successfully') });
-      fetchData();
-    } catch (error: any) {
-      toast({
-        title: t('خطأ', 'Erreur', 'Error'),
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const totalMaintenanceMAD = invoices
-    .filter((inv) => inv.currency === 'MAD')
-    .reduce((sum, inv) => sum.plus(new Decimal(inv.amount || 0)), new Decimal(0))
-    .toNumber();
-
-  const totalMaintenanceEUR = invoices
-    .filter((inv) => inv.currency === 'EUR')
-    .reduce((sum, inv) => sum.plus(new Decimal(inv.amount || 0)), new Decimal(0))
-    .toNumber();
-
-  const filteredInvoices = invoices.filter(
-    (inv) =>
-      inv.workshop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inv.notes?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const scheduleStats = useMemo(() => {
+    const overdue = schedules.filter((s) => s.urgency === 'overdue').length;
+    const dueSoon = schedules.filter((s) => s.urgency === 'due_soon').length;
+    const total = schedules.length;
+    return { overdue, dueSoon, total };
+  }, [schedules]);
 
   return (
-    <div className="space-y-6" dir={dir}>
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-12" dir="rtl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">
-             {t('الصيانة والورش وقطع الغيار', 'Maintenance, Ateliers et Pièces de Rechange', 'Maintenance, Workshops & Spare Parts')}
+          <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
+            <Wrench className="w-6 h-6 text-primary" />
+            الصيانة العامة والوقائية للأسطول
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-             {t('متابعة فواتير الإصلاحات المحلية والدولية ومصروفات الورش', 'Suivi des factures de réparations nationales & internationales et frais d\'ateliers', 'Track local & international repair invoices and workshop expenses')}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            متابعة فواتير الإصلاح، جدولة الصيانة الدورية، ومراقبة استهلاك القطع الحيوية
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
-           {t('تسجيل فاتورة صيانة', 'Enregistrer facture de maintenance', 'Record maintenance invoice')}
+
+        <Button
+          onClick={() => setIsSchedulerOpen(true)}
+          className="rounded-xl gap-2 font-bold shadow-xs self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>جدولة صيانة وقائية جديدة</span>
         </Button>
       </div>
 
-      <MaintenanceAlertsPanel trucks={trucks} maintenance={maintenance} />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-r-4 border-r-amber-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-amber-500" />
-               {t('إجمالي الصيانة المحلية', 'Total Maintenance Nationale', 'Total Local Maintenance')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-foreground">
-              {formatCurrency(totalMaintenanceMAD, 'MAD')}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-               {t('مصاريف الصيانة داخل المغرب', 'Dépenses d\'entretien au Maroc', 'Maintenance expenses in Morocco')}
-            </p>
+            <div>
+              <p className="text-xs text-muted-foreground">صيانة متأخرة تجاوزت الموعد</p>
+              <p className="text-xl font-bold font-mono text-rose-600 mt-0.5">
+                {scheduleStats.overdue} مركبات
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-r-4 border-r-blue-600">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-               {t('إجمالي الصيانة الدولية', 'Total Maintenance Internationale', 'Total International Maintenance')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
-              {formatCurrency(totalMaintenanceEUR, 'EUR')}
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-               {t('إصلاحات وقطع غيار في أوروبا', 'Réparations et pièces détachées en Europe', 'Repairs and spare parts in Europe')}
-            </p>
+            <div>
+              <p className="text-xs text-muted-foreground">مستحقة خلال 14 يوماً</p>
+              <p className="text-xl font-bold font-mono text-amber-600 mt-0.5">
+                {scheduleStats.dueSoon} مركبات
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-r-4 border-r-emerald-600">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-               {t('عدد الفواتير المسجلة', 'Nombre de Factures', 'Registered Invoices Count')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-               {invoices.length} {t('فاتورة', 'facture(s)', 'invoice(s)')}
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-               {t('من', 'auprès de', 'from')} {providers.length} {t('ورشة ومزود معتمد', 'ateliers & prestataires', 'workshops & approved providers')}
-            </p>
+            <div>
+              <p className="text-xs text-muted-foreground">إجمالي العمليات المجدولة</p>
+              <p className="text-xl font-bold font-mono text-foreground mt-0.5">
+                {scheduleStats.total} مهام
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-        <div className="relative flex-1">
-          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
-          <Input
-             placeholder={t('بحث بالورشة، البيان، أو الملاحظات...', 'Rechercher par atelier, désignation, notes...', 'Search by workshop, description, or notes...')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
-          />
-        </div>
-        <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
-      </div>
+      <Tabs defaultValue="scheduler" className="w-full">
+        <TabsList className="grid w-full sm:w-80 grid-cols-2 h-11 rounded-xl mb-4">
+          <TabsTrigger value="scheduler" className="rounded-lg text-xs font-bold gap-2">
+            <Calendar className="w-3.5 h-3.5" />
+            جدول المواعيد والتنبيهات ({schedules.length})
+          </TabsTrigger>
+          <TabsTrigger value="history" className="rounded-lg text-xs font-bold gap-2">
+            <Wrench className="w-3.5 h-3.5" />
+            سجل الصيانة المنفذة ({records.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {loading ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">{t('جاري تحميل سجلات الصيانة...', 'Chargement des factures de maintenance...', 'Loading maintenance records...')}</p>
-        </div>
-      ) : cardLayout === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInvoices.map((invoice) => (
-            <Card key={invoice.id} className="hover:shadow-md transition-shadow flex flex-col justify-between">
-              <div>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-amiri font-bold flex items-center gap-2 text-foreground">
-                      <Wrench className="w-4 h-4 text-amber-500" />
-                       {invoice.workshop_name || `${t('ورشة', 'Atelier', 'Workshop')} #${invoice.workshop_id}`}
-                    </CardTitle>
-                    <span className="font-mono font-bold text-sm text-primary">
-                      {formatCurrency(invoice.amount, invoice.currency)}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center text-foreground">
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Calendar className="w-3.5 h-3.5" />
-                       {t('التاريخ:', 'Date :', 'Date:')}
-                    </span>
-                    <span className="font-medium">{invoice.date}</span>
-                  </div>
-                  <div className="flex justify-between text-foreground">
-                     <span className="text-muted-foreground">{t('طريقة الأداء:', 'Mode de paiement :', 'Payment method:')}</span>
-                    <span className="font-medium capitalize">
-                       {invoice.payment_method === 'cash' ? t('نقداً', 'Espèces', 'Cash') :
-                        invoice.payment_method === 'bank_transfer' ? t('تحويل بنكي', 'Virement', 'Bank Transfer') :
-                        invoice.payment_method === 'check' ? t('شيك', 'Chèque', 'Cheque') : invoice.payment_method}
-                    </span>
-                  </div>
-                  {invoice.notes && (
-                    <div className="bg-muted/50 p-2.5 rounded-lg text-xs text-muted-foreground mt-2 border border-border">
-                      {invoice.notes}
-                    </div>
-                  )}
-                </CardContent>
-              </div>
-              <div className="p-4 pt-0 border-t border-border mt-3 flex justify-end">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => handleDelete(invoice.id)}
-                >
-                  <Trash2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
-                  {t('حذف السجل', 'Supprimer')}
-                </Button>
-              </div>
-            </Card>
-          ))}
-          {filteredInvoices.length === 0 && (
-            <div className="col-span-full text-center py-12">
-               <p className="text-muted-foreground">{t('لا توجد فواتير صيانة مطابقة للبحث', 'Aucune facture ne correspond à la recherche', 'No maintenance invoices match your search')}</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* List View Cards */
-        <div className="flex flex-col gap-3">
-          {filteredInvoices.map((invoice) => (
-            <Card key={invoice.id} className="hover:shadow-md transition-shadow overflow-hidden">
-              <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-                {/* Right: Workshop & Date */}
-                <div className="flex items-center gap-3 min-w-[200px]">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                    <Wrench className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base font-amiri font-bold text-foreground">
-                       {invoice.workshop_name || `${t('ورشة', 'Atelier', 'Workshop')} #${invoice.workshop_id}`}
-                    </CardTitle>
-                    <span className="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-muted-foreground" />
-                      {invoice.date}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Middle: Amount, Payment Method, Notes */}
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                    <span className="text-muted-foreground">{t('المبلغ:', 'Montant :')}</span>
-                    <span className="font-mono font-bold text-sm text-primary">
-                      {formatCurrency(invoice.amount, invoice.currency)}
-                    </span>
-                  </div>
-
-                  <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5 text-foreground">
-                    <span className="text-muted-foreground">{t('طريقة الأداء:', 'Paiement :')}</span>
-                    <span className="font-medium capitalize">
-                       {invoice.payment_method === 'cash' ? t('نقداً', 'Espèces', 'Cash') :
-                        invoice.payment_method === 'bank_transfer' ? t('تحويل بنكي', 'Virement', 'Bank Transfer') :
-                        invoice.payment_method === 'check' ? t('شيك', 'Chèque', 'Cheque') : invoice.payment_method}
-                    </span>
-                  </div>
-
-                  {invoice.notes && (
-                    <span className="text-xs text-muted-foreground italic max-w-xs truncate" title={invoice.notes}>
-                      {invoice.notes}
-                    </span>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end border-t lg:border-t-0 pt-2.5 lg:pt-0 border-border/40">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="text-xs rounded-xl h-8 px-3"
-                    onClick={() => handleDelete(invoice.id)}
-                  >
-                    <Trash2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
-                    {t('حذف السجل', 'Supprimer', 'Delete')}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-          {filteredInvoices.length === 0 && (
-            <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-               <p className="text-muted-foreground">{t('لا توجد فواتير صيانة مطابقة للبحث', 'Aucune facture ne correspond à la recherche', 'No maintenance invoices match your search')}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4" dir={dir}>
-          <Card className="w-full max-w-lg shadow-2xl border-border bg-card">
-            <CardHeader>
-              <CardTitle className="font-amiri text-foreground">
-                 {t('تسجيل فاتورة صيانة / ورشة', 'Enregistrer une facture de maintenance', 'Record maintenance/workshop invoice')}
+        <TabsContent value="scheduler" className="space-y-4">
+          <Card className="border-border overflow-hidden">
+            <CardHeader className="border-b border-border/70 py-3.5 px-5 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary" />
+                <span>مواعيد الصيانة الوقائية القادمة</span>
               </CardTitle>
+              <Button variant="ghost" size="sm" onClick={fetchData} className="h-8 text-xs gap-1">
+                <RefreshCw className="w-3.5 h-3.5" />
+                تحديث
+              </Button>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCreateInvoice} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                     {t('اسم الورشة أو المزود *', 'Nom de l\'atelier ou prestataire *', 'Workshop or provider name *')}
-                  </label>
-                  <Input
-                    value={formData.workshop_name}
-                    onChange={(e) => setFormData({ ...formData, workshop_name: e.target.value })}
-                     placeholder={t('مثال: ورشة الأمل للإصلاح / Scania Service', 'Ex: Garage Al Amal / Scania Service', 'Example: Repair workshop / Service center')}
-                    required
-                  />
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">جاري تحميل جدول الصيانة...</div>
+              ) : schedules.length === 0 ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">
+                  لا توجد مواعيد صيانة مجدولة حالياً. اضغط على "جدولة صيانة وقائية جديدة" للإضافة.
                 </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
+                        <th className="py-3 px-4 text-start font-semibold">المركبة</th>
+                        <th className="py-3 px-4 text-start font-semibold">نوع الصيانة المجدولة</th>
+                        <th className="py-3 px-4 text-start font-semibold">تاريخ الاستحقاق</th>
+                        <th className="py-3 px-4 text-start font-semibold">الحالة والمهلة</th>
+                        <th className="py-3 px-4 text-start font-semibold">التكلفة التقديرية</th>
+                        <th className="py-3 px-4 text-end font-semibold">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 text-xs">
+                      {schedules.map((item) => {
+                        const isOverdue = item.urgency === 'overdue';
+                        const isDueSoon = item.urgency === 'due_soon';
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                     <label className="text-sm font-medium text-foreground">{t('المبلغ *', 'Montant *', 'Amount *')}</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.amount}
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                      placeholder="0.00"
-                      required
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                     <label className="text-sm font-medium text-foreground">{t('العملة', 'Devise', 'Currency')}</label>
-                    <select
-                      value={formData.currency}
-                      onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                      <option value="MAD">MAD (درهم)</option>
-                      <option value="EUR">EUR (Euro)</option>
-                    </select>
-                  </div>
+                        return (
+                          <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4">
+                              <MatriculeBadge plate={item.plateNumber} variant="badge" size="xs" />
+                              <span className="text-[11px] text-muted-foreground block mt-0.5">{item.model}</span>
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-foreground">{item.maintenance_type}</td>
+                            <td className="py-3 px-4 font-mono">{item.scheduled_date}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  isOverdue
+                                    ? 'bg-rose-500/15 text-rose-700 border-rose-500/30'
+                                    : isDueSoon
+                                    ? 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+                                    : 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30'
+                                }`}
+                              >
+                                {isOverdue
+                                  ? `متأخرة (${Math.abs(item.daysRemaining)} يوم)`
+                                  : isDueSoon
+                                  ? `مستحقة قريباً (${item.daysRemaining} يوم)`
+                                  : `متبقي ${item.daysRemaining} يوم`}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-foreground">
+                              {formatCurrency(item.amount_estimate || 0, item.currency || 'MAD')}
+                            </td>
+                            <td className="py-3 px-4 text-end">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={() => setSelectedScheduleToComplete(item)}
+                                  className="h-8 text-xs rounded-xl gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  إتمام وصرف
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSchedule(item.id)}
+                                  className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-500/10 rounded-lg"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                     <label className="text-sm font-medium text-foreground">{t('تاريخ الفاتورة', 'Date de la facture', 'Invoice date')}</label>
-                    <Input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                     <label className="text-sm font-medium text-foreground">{t('طريقة الدفع', 'Mode de paiement', 'Payment method')}</label>
-                    <select
-                      value={formData.payment_method}
-                      onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                       <option value="cash">{t('نقداً (Cash)', 'Espèces (Cash)', 'Cash')}</option>
-                       <option value="bank_transfer">{t('تحويل بنكي', 'Virement bancaire', 'Bank Transfer')}</option>
-                       <option value="check">{t('شيك', 'Chèque', 'Cheque')}</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                   <label className="text-sm font-medium text-foreground">{t('بيان القطع والخدمات (Détails)', 'Détails des pièces et prestations', 'Parts and services details')}</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                     placeholder={t('مثال: تبديل الفرامل وتغيير الزيت والفلاتر...', 'Ex: Remplacement plaquettes de frein, vidange et filtres...', 'Example: Brake pads replacement, oil change and filters...')}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2 border-t border-border">
-                  <Button type="submit" disabled={isSubmitting} className="flex-1">
-                     {isSubmitting ? t('جاري الحفظ...', 'Enregistrement...', 'Saving...') : t('حفظ الفاتورة', 'Enregistrer', 'Save Invoice')}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
-                     {t('إلغاء', 'Annuler', 'Cancel')}
-                  </Button>
-                </div>
-              </form>
+              )}
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <Card className="border-border overflow-hidden">
+            <CardHeader className="border-b border-border/70 py-3.5 px-5">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-primary" />
+                <span>سجل مصاريف الصيانة السابقة</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
+                      <th className="py-3 px-4 text-start font-semibold">رقم الشاحنة</th>
+                      <th className="py-3 px-4 text-start font-semibold">نوع الصيانة</th>
+                      <th className="py-3 px-4 text-start font-semibold">التاريخ</th>
+                      <th className="py-3 px-4 text-start font-semibold">المبلغ</th>
+                      <th className="py-3 px-4 text-start font-semibold">الورشة / الملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60 text-xs">
+                    {records.slice(0, 15).map((rec) => {
+                      const truck = trucks.find((t) => t.id === rec.truck_id);
+                      return (
+                        <tr key={rec.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold">
+                            {truck ? <MatriculeBadge plate={truck.plate_number} variant="badge" size="xs" /> : `شاحنة #${rec.truck_id}`}
+                          </td>
+                          <td className="py-3 px-4 font-medium">{rec.expense_type || rec.type || 'صيانة عامة'}</td>
+                          <td className="py-3 px-4 font-mono">{rec.maintenance_date || rec.date || '—'}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                            -{formatCurrency(rec.amount, rec.currency || 'MAD')}
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground truncate max-w-xs">{rec.description || rec.notes || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <MaintenanceSchedulerModal
+        isOpen={isSchedulerOpen}
+        onClose={() => setIsSchedulerOpen(false)}
+        onSaved={fetchData}
+        trucks={trucks}
+        trailers={trailers}
+      />
+
+      <CompleteMaintenanceModal
+        schedule={selectedScheduleToComplete}
+        onClose={() => setSelectedScheduleToComplete(null)}
+        onCompleted={fetchData}
+      />
     </div>
   );
 }
