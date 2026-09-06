@@ -185,7 +185,7 @@ export default function MaintenancePage() {
                 <div className="py-12 text-center text-xs text-muted-foreground">جاري تحميل جدول الصيانة...</div>
               ) : schedules.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">
-                  لا توجد مواعيد صيانة مجدولة حالياً. اضغط على "جدولة صيانة وقائية جديدة" للإضافة.
+                  لا توجد مواعيد صيانة مجدولة حالياً. اضغط على &quot;جدولة صيانة وقائية جديدة&quot; للإضافة.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
