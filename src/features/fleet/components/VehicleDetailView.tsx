@@ -23,8 +23,10 @@ import {
   AlertTriangle,
   RefreshCw,
   Zap,
+  Calculator,
 } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
+import { TcoDashboard } from './TcoDashboard';
 
 interface VehicleDetailViewProps {
   vehicleId: number;
@@ -243,7 +245,7 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
       </div>
 
       <Tabs defaultValue="documents" className="w-full">
-        <TabsList className="grid w-full sm:w-auto grid-cols-3 h-11 rounded-xl mb-4">
+        <TabsList className="grid w-full sm:w-auto grid-cols-4 h-11 rounded-xl mb-4">
           <TabsTrigger value="documents" className="rounded-lg text-xs flex gap-1.5">
             <FileText className="w-4 h-4" />
             {t('الوثائق والتراخيص', 'Documents et Licences', 'Documents & Licenses')} ({documents.length})
@@ -255,6 +257,10 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
           <TabsTrigger value="trips" className="rounded-lg text-xs flex gap-1.5">
             <MapPin className="w-4 h-4" />
             {t('تاريخ الرحلات', 'Historique des Trajets', 'Trip History')} ({trips.length})
+          </TabsTrigger>
+          <TabsTrigger value="tco" className="rounded-lg text-xs flex gap-1.5">
+            <Calculator className="w-4 h-4" />
+            {t('تكلفة الكيلومتر', 'Coût par km', 'Cost per km')}
           </TabsTrigger>
         </TabsList>
 
@@ -363,8 +369,12 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
               ))}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+
+          <TabsContent value="tco" className="space-y-4">
+            <TcoDashboard vehicleId={vehicleId} vehicleType={vehicleType} />
+          </TabsContent>
+        </Tabs>
     </div>
   );
 }

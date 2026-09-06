@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
-import { Printer, X, PlaneTakeoff, PlaneLanding } from 'lucide-react';
-import type { TripOrder, Client, Driver, Truck } from '@/types/database';
+import { Printer, X, PlaneTakeoff, PlaneLanding, ExternalLink } from 'lucide-react';
+import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
+import { generateCMRQrCodeBase64, buildCMRVerificationUrl } from '@/lib/cmr-qr';
+import { useLanguage } from '@/components/language-provider';
 
 interface CMRModalProps {
   isOpen: boolean;
@@ -14,11 +16,22 @@ interface CMRModalProps {
   clientImport?: Client;
   driver?: Driver;
   truck?: Truck;
+  trailer?: Trailer;
 }
 
-export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, driver, truck }: CMRModalProps) {
+export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, driver, truck, trailer }: CMRModalProps) {
   const [cmrType, setCmrType] = useState<'export' | 'import'>('export');
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const [qrCodeBase64, setQrCodeBase64] = useState<string>('');
+  const { t, dir } = useLanguage();
+
+  const trackingUrl = buildCMRVerificationUrl(trip.id);
+
+  useEffect(() => {
+    if (isOpen && trip?.id) {
+      generateCMRQrCodeBase64(trackingUrl).then(setQrCodeBase64);
+    }
+  }, [isOpen, trip?.id, trackingUrl]);
 
   if (!isOpen) return null;
 
@@ -76,7 +89,16 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
 
             <Button onClick={handlePrint} className="flex items-center gap-2 mr-2">
               <Printer className="w-4 h-4" />
-              طباعة {isExport ? 'CMR الذهاب' : 'CMR العودة'} (PDF)
+              {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF', 'Print / Export PDF')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(trackingUrl, '_blank')}
+              className="flex items-center gap-1.5 text-xs text-blue-600"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              {t('معاينة رابط التتبع الحي', 'Aperçu du lien de suivi', 'Preview live tracking')}
             </Button>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -97,9 +119,19 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
                 </div>
                 <p className="text-sm font-bold text-slate-700">LETTRE DE VOITURE INTERNATIONALE (CMR)</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500">CMR Document N°</p>
-                <p className="text-base font-mono font-bold">{cmrDocNumber}</p>
+              
+              <div className="flex items-center gap-3">
+                {qrCodeBase64 && (
+                  <div className="text-center">
+                    <img src={qrCodeBase64} alt="e-CMR QR Code" className="w-20 h-20 border border-slate-300 rounded p-0.5" />
+                    <span className="text-[8px] font-mono text-slate-500 uppercase block mt-0.5">Scan to Verify (GPS)</span>
+                  </div>
+                )}
+                <div className="text-right">
+                  <p className="text-xs text-slate-500 font-bold uppercase">CMR Document N°</p>
+                  <p className="text-base font-mono font-black text-slate-900">{cmrDocNumber}</p>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">TRIP REF: #{trip.id}</p>
+                </div>
               </div>
             </div>
 

@@ -17,11 +17,13 @@ import {
   Trash2,
   Activity,
   FileText,
+  Upload,
 } from 'lucide-react';
 import { FleetFormModal } from '@/components/fleet-form-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { VehicleDetailsModal } from '@/features/fleet/components/VehicleDetailsModal';
+import { BulkImportModal } from '@/components/bulk-import-modal';
 import { DEFAULT_TRUCKS, DEFAULT_DRIVERS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
 import { useFleetDataQuery } from '@/lib/query/hooks';
@@ -48,6 +50,7 @@ export default function FleetPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [selectedDetailsVehicle, setSelectedDetailsVehicle] = useState<{ entity: Truck | Trailer; type: EntityType } | null>(null);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -237,18 +240,28 @@ export default function FleetPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setEditingItem(null);
-            setIsModalOpen(true);
-          }}
-          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
-        >
-          <Plus className="w-4 h-4 me-2" />
-          {activeTab === 'trucks'
-            ? t('إضافة شاحنة جديدة', 'Ajouter un camion')
-            : t('إضافة مقطورة جديدة', 'Ajouter une remorque')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setEditingItem(null);
+              setIsModalOpen(true);
+            }}
+            className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
+          >
+            <Plus className="w-4 h-4 me-2" />
+            {activeTab === 'trucks'
+              ? t('إضافة شاحنة جديدة', 'Ajouter un camion')
+              : t('إضافة مقطورة جديدة', 'Ajouter une remorque')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsBulkImportOpen(true)}
+            className="h-10 px-4 text-xs sm:text-sm rounded-xl border-primary/40 text-primary hover:bg-primary/10"
+          >
+            <Upload className="w-4 h-4 me-2" />
+            {t('استيراد من Excel', 'Importer Excel')}
+          </Button>
+        </div>
       </div>
 
       {/* Bento Grid Fleet KPI Cards */}
@@ -795,6 +808,13 @@ export default function FleetPage() {
           onRefresh={refreshData}
         />
       )}
+
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        entityType={activeTab === 'trucks' ? 'truck' : 'trailer'}
+        onSuccess={refreshData}
+      />
     </div>
   );
 }

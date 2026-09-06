@@ -529,7 +529,7 @@ export default function TripsHubScreen() {
           initialData={editingTrip}
         />
       )}
-      {activeCMRTrip && <CMRPrintModal isOpen={!!activeCMRTrip} onClose={() => setActiveCMRTrip(null)} trip={activeCMRTrip} client={clients.find(c => c.id === activeCMRTrip.client_id)} driver={drivers.find(d => d.id === activeCMRTrip.driver_id)} truck={trucks.find(t => t.id === activeCMRTrip.truck_id)} />}
+      {activeCMRTrip && <CMRPrintModal isOpen={!!activeCMRTrip} onClose={() => setActiveCMRTrip(null)} trip={activeCMRTrip} client={clients.find(c => c.id === activeCMRTrip.client_id)} driver={drivers.find(d => d.id === activeCMRTrip.driver_id)} truck={trucks.find(t => t.id === activeCMRTrip.truck_id)} trailer={trailers.find(tr => tr.id === activeCMRTrip.trailer_id)} />}
       {selectedTrip && (
         <TripOrderDetails
           trip={selectedTrip}

@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Phone, MapPin, Edit2, Trash2, Mail, Building, PlaneTakeoff, PlaneLanding } from 'lucide-react';
+import { Plus, Search, Phone, MapPin, Edit2, Trash2, Mail, Building, PlaneTakeoff, PlaneLanding, Upload } from 'lucide-react';
 import { ClientFormModal } from '@/components/client-form-modal';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { BulkImportModal } from '@/components/bulk-import-modal';
 import { useLanguage } from '@/components/language-provider';
 
 import { useClientsDataQuery } from '@/lib/query/hooks';
@@ -27,6 +28,7 @@ export default function ClientsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [cardLayout, setCardLayout] = useCardViewMode('clients', 'grid');
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -116,15 +118,25 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-bold font-amiri text-foreground">{t('إدارة العملاء', 'Gestion des Clients')}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t('قاعدة بيانات العملاء، تصنيف الرحلات، أرقام ICE ومعلومات الفوترة', 'Base de données clients, type de transport, numéros ICE et facturation')}</p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingClient(null);
-            setIsModalOpen(true);
-          }}
-        >
-          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
-          {t('عميل جديد', 'Nouveau client')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setEditingClient(null);
+              setIsModalOpen(true);
+            }}
+          >
+            <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+            {t('عميل جديد', 'Nouveau client')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsBulkImportOpen(true)}
+            className="border-primary/40 text-primary hover:bg-primary/10"
+          >
+            <Upload className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+            {t('استيراد من Excel', 'Importer Excel')}
+          </Button>
+        </div>
       </div>
 
       {/* Filter Tabs: الكل / رحلات الذهاب / رحلات العودة */}
@@ -408,6 +420,13 @@ export default function ClientsPage() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveClient}
         initialData={editingClient}
+      />
+
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        entityType="client"
+        onSuccess={refreshClients}
       />
     </div>
   );
