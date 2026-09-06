@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { useLanguage } from '@/components/language-provider';
@@ -16,11 +15,25 @@ import {
   Route,
   Calculator,
   RefreshCw,
-  AlertTriangle,
+  BarChart3,
+  PieChartIcon,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 
 export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; vehicleType: 'truck' | 'trailer' }) {
-  const { t, dir, locale } = useLanguage();
+  const { t, dir } = useLanguage();
   const { toast } = useToast();
   const [rows, setRows] = useState<TcoBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +80,86 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
     };
   }, [rows]);
 
+  const isFleetView = rows.length > 1;
+
+  const costBreakdownChartData = useMemo(() => {
+    if (rows.length === 0) return [];
+
+    if (!isFleetView && rows.length === 1) {
+      const r = rows[0];
+      return [
+        {
+          name: t('وقود', 'Carburant', 'Fuel'),
+          value: r.fuelCost,
+          color: '#3b82f6',
+        },
+        {
+          name: t('صيانة', 'Maintenance', 'Maintenance'),
+          value: r.maintenanceCost,
+          color: '#f59e0b',
+        },
+        {
+          name: t('رحلات', 'Trajets', 'Trips'),
+          value: r.tripCost,
+          color: '#10b981',
+        },
+      ].filter((d) => d.value > 0);
+    }
+
+    return [
+      {
+        name: t('وقود', 'Carburant', 'Fuel'),
+        value: aggregates?.totalFuel || 0,
+        color: '#3b82f6',
+      },
+      {
+        name: t('صيانة', 'Maintenance', 'Maintenance'),
+        value: aggregates?.totalMaint || 0,
+        color: '#f59e0b',
+      },
+      {
+        name: t('رحلات', 'Trajets', 'Trips'),
+        value: aggregates?.totalTrip || 0,
+        color: '#10b981',
+      },
+    ].filter((d) => d.value > 0);
+  }, [rows, aggregates, isFleetView, t]);
+
+  const fleetComparisonData = useMemo(() => {
+    if (!isFleetView) return [];
+    const sorted = [...rows]
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 10);
+    return sorted.map((r) => ({
+      name: r.truckName.length > 14 ? r.truckName.slice(0, 14) + '…' : r.truckName,
+      fullName: r.truckName,
+      وقود: parseFloat(r.fuelCost.toFixed(2)),
+      صيانة: parseFloat(r.maintenanceCost.toFixed(2)),
+      رحلات: parseFloat(r.tripCost.toFixed(2)),
+    }));
+  }, [rows, isFleetView]);
+
+  const distanceChartData = useMemo(() => {
+    if (!isFleetView) return [];
+    const sorted = [...rows]
+      .sort((a, b) => b.totalDistanceKm - a.totalDistanceKm)
+      .slice(0, 10);
+    return sorted.map((r) => ({
+      name: r.truckName.length > 14 ? r.truckName.slice(0, 14) + '…' : r.truckName,
+      fullName: r.truckName,
+      km: parseFloat(r.totalDistanceKm.toFixed(2)),
+    }));
+  }, [rows, isFleetView]);
+
+  const formatMoney = (value: number) =>
+    `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
+
+  const getHealthColor = (value: number, threshold: number) => {
+    if (value <= threshold) return 'text-emerald-600 dark:text-emerald-400';
+    if (value <= threshold * 1.4) return 'text-amber-600 dark:text-amber-400';
+    return 'text-rose-600 dark:text-rose-400';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-10 text-muted-foreground" dir={dir}>
@@ -86,17 +179,9 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
     );
   }
 
-  const formatMoney = (value: number) =>
-    `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
-
-  const getHealthColor = (value: number, threshold: number) => {
-    if (value <= threshold) return 'text-emerald-600 dark:text-emerald-400';
-    if (value <= threshold * 1.4) return 'text-amber-600 dark:text-amber-400';
-    return 'text-rose-600 dark:text-rose-400';
-  };
-
   return (
     <div className="space-y-5" dir={dir}>
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-amiri text-lg font-bold text-foreground">
@@ -112,6 +197,7 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
         </Button>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 space-y-2">
@@ -166,13 +252,221 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
         </Card>
       </div>
 
+      {/* Charts Section */}
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Cost Breakdown Bar Chart */}
+          <Card className={isFleetView ? 'lg:col-span-2' : 'lg:col-span-1'}>
+            <CardHeader className="pb-3 border-b border-border/60">
+              <CardTitle className="font-amiri text-sm flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                {isFleetView
+                  ? t('مقارنة التكاليف حسب الشاحنة', 'Comparaison des coûts par camion', 'Cost comparison by truck')
+                  : t('تفكيك التكاليف', 'Décomposition des coûts', 'Cost breakdown')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {isFleetView && fleetComparisonData.length > 0 ? (
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={fleetComparisonData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                      <XAxis
+                        dataKey="name"
+                        stroke="var(--muted-foreground)"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        interval={0}
+                      />
+                      <YAxis
+                        stroke="var(--muted-foreground)"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--card)',
+                          borderColor: 'var(--border)',
+                          color: 'var(--foreground)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        formatter={(val) => [formatMoney(typeof val === 'number' ? val : 0), '']}
+                      />
+                      <Legend />
+                      <Bar dataKey="وقود" stackId="1" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="صيانة" stackId="1" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="رحلات" stackId="1" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : costBreakdownChartData.length > 0 ? (
+                <div className="h-[260px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={costBreakdownChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                      <XAxis
+                        dataKey="name"
+                        stroke="var(--muted-foreground)"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="var(--muted-foreground)"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--card)',
+                          borderColor: 'var(--border)',
+                          color: 'var(--foreground)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        formatter={(val) => [formatMoney(typeof val === 'number' ? val : 0), '']}
+                      />
+                      <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                        {costBreakdownChartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-center text-xs text-muted-foreground py-6">
+                  {t('لا توجد بيانات كافية للرسم', 'Données insuffisantes pour le graphique')}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Cost Composition Donut */}
+          {costBreakdownChartData.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3 border-b border-border/60">
+                <CardTitle className="font-amiri text-sm flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-primary" />
+                  {t('توزيع التكاليف', 'Répartition des coûts', 'Cost distribution')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <div className="h-[220px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={costBreakdownChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {costBreakdownChartData.map((entry, idx) => (
+                          <Cell key={`pie-${idx}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--card)',
+                          borderColor: 'var(--border)',
+                          color: 'var(--foreground)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        formatter={(val) => [formatMoney(typeof val === 'number' ? val : 0), '']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2 w-full pt-3 border-t border-border">
+                  {costBreakdownChartData.map((entry, idx) => {
+                    const total = costBreakdownChartData.reduce((s, d) => s + d.value, 0);
+                    const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                          <span className="text-muted-foreground">{entry.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-foreground">{pct}%</span>
+                          <span className="text-muted-foreground font-mono text-[10px]">{formatMoney(entry.value)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Distance Chart (Fleet View Only) */}
+      {isFleetView && distanceChartData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3 border-b border-border/60">
+            <CardTitle className="font-amiri text-sm flex items-center gap-2">
+              <Route className="w-4 h-4 text-primary" />
+              {t('المسافة المقطوعة حسب الشاحنة (كم)', 'Distance parcourue par camion (km)', 'Distance traveled by truck (km)')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="h-[220px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={distanceChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis
+                    dataKey="name"
+                    stroke="var(--muted-foreground)"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis
+                    stroke="var(--muted-foreground)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => `${val.toLocaleString()}`}
+                  />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      borderColor: 'var(--border)',
+                      color: 'var(--foreground)',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                     formatter={(val) => [`${typeof val === 'number' ? val.toLocaleString() : val} km`, '']}
+                  />
+                  <Bar dataKey="km" fill="#8b5cf6" radius={[6, 6, 0, 0]} maxBarSize={50} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Vehicle Details List */}
       {rows.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="border-b border-border/60">
             <CardTitle className="font-amiri text-sm text-foreground">
               {vehicleType === 'truck'
                 ? t('تفاصيل الشاحنة', 'Détails du camion')
-                : t('لا توجد تكلفة TCO مخصصة للمقطورات حالياً', 'Pas de TCO spécifique pour les remorques pour le moment')}
+                : t('تفاصيل أسطول الشاحنات', 'Détails de la flotte')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -191,6 +485,9 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
                         {' • '}
                         {t('الرحلات: ', 'Trajets: ')}
                         {row.tripsCount}
+                        {' • '}
+                        {t('الصيانة: ', 'Maintenance: ')}
+                        {row.maintenanceCount}
                       </p>
                     </div>
                   </div>

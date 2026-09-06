@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { DashboardClient } from '@/app/(app)/dashboard/dashboard-client';
+import { AppShell } from '@/components/app-shell';
 
 export default async function AppLayout({
   children,
@@ -26,5 +26,9 @@ export default async function AppLayout({
     redirect('/login');
   }
 
-  return <DashboardClient />;
+  return (
+    <AppShell userRole={userProfile.role as string | null}>
+      {children}
+    </AppShell>
+  );
 }
