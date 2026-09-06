@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Decimal from 'decimal.js';
 import { calculateFuelAnalytics, detectFuelAnomalies } from '@/features/fleet/services/fuel_intelligence.actions';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +30,10 @@ export async function GET(request: NextRequest) {
     const trucks = analyticsResult.trucks || [];
     const overallAvg =
       trucks.length > 0
-        ? trucks.reduce((sum, t) => sum + t.lPer100km, 0) / trucks.length
+        ? trucks
+            .reduce((sum, t) => sum.plus(new Decimal(t.lPer100km || 0)), new Decimal(0))
+            .dividedBy(new Decimal(trucks.length))
+            .toNumber()
         : 0;
 
     const truckStats = trucks.map((t) => ({

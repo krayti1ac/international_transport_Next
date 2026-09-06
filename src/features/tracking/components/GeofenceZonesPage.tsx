@@ -1,26 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import type { GeofenceZone } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Plus, Pencil, Trash2, Navigation, X } from 'lucide-react';
+import { MapPin, Plus, Pencil, Trash2, Navigation, X, RefreshCw } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
-
-const ZONE_TYPE_LABELS: Record<string, string> = {
-  port: 'ميناء',
-  border: 'منطقة حدودية',
-  customs: 'جمارك',
-  logistics_hub: 'محطة لوجستية',
-  client_warehouse: 'مستودع عميل',
-  other: 'أخرى',
-};
+import { useLanguage } from '@/components/language-provider';
 
 type ZoneType = 'port' | 'border' | 'customs' | 'logistics_hub' | 'client_warehouse' | 'other';
 
 export default function GeofenceZonesPage() {
+  const { t, dir } = useLanguage();
   const [zones, setZones] = useState<GeofenceZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -29,6 +22,17 @@ export default function GeofenceZonesPage() {
   const [cardLayout, setCardLayout] = useCardViewMode('geofence_zones', 'grid');
   const { toast } = useToast();
   const supabase = useCallback(() => createClient(), []);
+
+  const getZoneTypeLabel = (type: string) => {
+    switch (type) {
+      case 'port': return t('ميناء', 'Port');
+      case 'border': return t('منطقة حدودية', 'Poste frontière');
+      case 'customs': return t('جمارك', 'Douane');
+      case 'logistics_hub': return t('محطة لوجستية', 'Hub logistique');
+      case 'client_warehouse': return t('مستودع عميل', 'Entrepôt client');
+      default: return t('أخرى', 'Autre');
+    }
+  };
 
   const fetchZones = useCallback(async () => {
     try {
@@ -40,31 +44,32 @@ export default function GeofenceZonesPage() {
       if (error) throw error;
       setZones(data || []);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
+      const message = error instanceof Error ? error.message : t('خطأ غير معروف', 'Erreur inconnue');
       toast({
-        title: 'خطأ في تحميل البيانات',
+        title: t('خطأ في تحميل البيانات', 'Erreur lors du chargement des données'),
         description: message,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   useEffect(() => {
     fetchZones();
   }, [fetchZones]);
 
   const handleDelete = async (id: number) => {
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذه المنطقة؟', 'Êtes-vous sûr de vouloir supprimer cette zone ?'))) return;
     try {
       const { error } = await supabase().from('geofence_zones').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم حذف المنطقة بنجاح' });
+      toast({ title: t('تم حذف المنطقة بنجاح', 'Zone supprimée avec succès') });
       fetchZones();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
+      const message = error instanceof Error ? error.message : t('خطأ غير معروف', 'Erreur inconnue');
       toast({
-        title: 'خطأ في الحذف',
+        title: t('خطأ في الحذف', 'Erreur lors de la suppression'),
         description: message,
         variant: 'destructive',
       });
@@ -73,21 +78,22 @@ export default function GeofenceZonesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-slate-500">جاري تحميل البيانات...</p>
+      <div className="flex flex-col items-center justify-center h-96 gap-3" dir={dir}>
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">{t('جاري تحميل البيانات...', 'Chargement des données...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold font-amiri">المناطق الجغرافية</h1>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">{t('المناطق الجغرافية', 'Zones de Géorepérage')}</h1>
         <div className="flex items-center gap-2">
           <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
           <Button onClick={() => { setEditingZone(null); setShowModal(true); }} className="rounded-xl h-9 text-xs">
-            <Plus className="w-4 h-4 ml-1.5" />
-            إضافة منطقة
+            <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+            {t('إضافة منطقة', 'Ajouter une zone')}
           </Button>
         </div>
       </div>
@@ -104,8 +110,8 @@ export default function GeofenceZonesPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm">
-                  <p><span className="text-slate-500">النوع:</span> {ZONE_TYPE_LABELS[zone.zone_type] || zone.zone_type}</p>
-                  <p><span className="text-slate-500">الحالة:</span> {zone.is_active ? 'فعالة' : 'متوقفة'}</p>
+                  <p><span className="text-muted-foreground">{t('النوع:', 'Type :')}</span> {getZoneTypeLabel(zone.zone_type)}</p>
+                  <p><span className="text-muted-foreground">{t('الحالة:', 'Statut :')}</span> {zone.is_active ? t('فعالة', 'Active') : t('متوقفة', 'Inactive')}</p>
                 </div>
                 <div className="flex gap-2 mt-4">
                   <Button
@@ -113,16 +119,16 @@ export default function GeofenceZonesPage() {
                     size="sm"
                     onClick={(e) => { e.stopPropagation(); setEditingZone(zone); setShowModal(true); }}
                   >
-                    <Pencil className="w-4 h-4 ml-1" />
-                    تعديل
+                    <Pencil className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                    {t('تعديل', 'Modifier')}
                   </Button>
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={(e) => { e.stopPropagation(); handleDelete(zone.id); }}
                   >
-                    <Trash2 className="w-4 h-4 ml-1" />
-                    حذف
+                    <Trash2 className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                    {t('حذف', 'Supprimer')}
                   </Button>
                 </div>
               </CardContent>
@@ -144,7 +150,7 @@ export default function GeofenceZonesPage() {
                       {zone.name}
                     </CardTitle>
                     <span className="text-[11px] text-muted-foreground">
-                      {ZONE_TYPE_LABELS[zone.zone_type] || zone.zone_type}
+                      {getZoneTypeLabel(zone.zone_type)}
                     </span>
                   </div>
                 </div>
@@ -155,7 +161,7 @@ export default function GeofenceZonesPage() {
                       ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                       : 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/25'
                   }`}>
-                    {zone.is_active ? 'فعالة' : 'متوقفة'}
+                    {zone.is_active ? t('فعالة', 'Active') : t('متوقفة', 'Inactive')}
                   </span>
                 </div>
 
@@ -167,8 +173,8 @@ export default function GeofenceZonesPage() {
                       className="text-xs rounded-xl h-8 px-3"
                       onClick={(e) => { e.stopPropagation(); setEditingZone(zone); setShowModal(true); }}
                     >
-                      <Pencil className="w-3.5 h-3.5 ml-1" />
-                      تعديل
+                      <Pencil className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                      {t('تعديل', 'Modifier')}
                     </Button>
                     <Button
                       variant="destructive"
@@ -188,8 +194,8 @@ export default function GeofenceZonesPage() {
 
       {zones.length === 0 && (
         <Card>
-          <CardContent className="py-12 text-center text-slate-500">
-            لا توجد مناطق جغرافية. أضف منطقة للبدء.
+          <CardContent className="py-12 text-center text-muted-foreground">
+            {t('لا توجد مناطق جغرافية. أضف منطقة للبدء.', 'Aucune zone géographique. Ajoutez une zone pour commencer.')}
           </CardContent>
         </Card>
       )}
@@ -219,6 +225,7 @@ interface ZoneFormModalProps {
 }
 
 function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
+  const { t, dir } = useLanguage();
   const [name, setName] = useState(zone?.name || '');
   const [latitude, setLatitude] = useState(zone?.latitude?.toString() || '');
   const [longitude, setLongitude] = useState(zone?.longitude?.toString() || '');
@@ -253,12 +260,12 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
       }
 
       if (error) throw error;
-      toast({ title: zone ? 'تم تحديث المنطقة بنجاح' : 'تم إضافة المنطقة بنجاح' });
+      toast({ title: zone ? t('تم تحديث المنطقة بنجاح', 'Zone mise à jour avec succès') : t('تم إضافة المنطقة بنجاح', 'Zone ajoutée avec succès') });
       onSaved();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
+      const message = error instanceof Error ? error.message : t('خطأ غير معروف', 'Erreur inconnue');
       toast({
-        title: 'خطأ في الحفظ',
+        title: t('خطأ في الحفظ', 'Erreur d’enregistrement'),
         description: message,
         variant: 'destructive',
       });
@@ -268,15 +275,15 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir={dir}>
       <Card className="w-full max-w-md mx-4">
         <CardHeader>
-          <CardTitle className="font-amiri">{zone ? 'تعديل المنطقة' : 'إضافة منطقة جديدة'}</CardTitle>
+          <CardTitle className="font-amiri">{zone ? t('تعديل المنطقة', 'Modifier la zone') : t('إضافة منطقة جديدة', 'Ajouter une nouvelle zone')}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">اسم المنطقة</label>
+              <label className="block text-sm font-medium mb-1">{t('اسم المنطقة', 'Nom de la zone')}</label>
               <input
                 type="text"
                 value={name}
@@ -286,23 +293,23 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">نوع المنطقة</label>
+              <label className="block text-sm font-medium mb-1">{t('نوع المنطقة', 'Type de zone')}</label>
               <select
                 value={zoneType}
                 onChange={(e) => setZoneType(e.target.value as ZoneType)}
                 className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="port">ميناء</option>
-                <option value="border">منطقة حدودية</option>
-                <option value="customs">جمارك</option>
-                <option value="logistics_hub">محطة لوجستية</option>
-                <option value="client_warehouse">مستودع عميل</option>
-                <option value="other">أخرى</option>
+                <option value="port">{t('ميناء', 'Port')}</option>
+                <option value="border">{t('منطقة حدودية', 'Poste frontière')}</option>
+                <option value="customs">{t('جمارك', 'Douane')}</option>
+                <option value="logistics_hub">{t('محطة لوجستية', 'Hub logistique')}</option>
+                <option value="client_warehouse">{t('مستودع عميل', 'Entrepôt client')}</option>
+                <option value="other">{t('أخرى', 'Autre')}</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">خط العرض</label>
+                <label className="block text-sm font-medium mb-1">{t('خط العرض', 'Latitude')}</label>
                 <input
                   type="number"
                   step="any"
@@ -314,7 +321,7 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">خط الطول</label>
+                <label className="block text-sm font-medium mb-1">{t('خط الطول', 'Longitude')}</label>
                 <input
                   type="number"
                   step="any"
@@ -327,7 +334,7 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">نصف القطر (كم)</label>
+              <label className="block text-sm font-medium mb-1">{t('نصف القطر (كم)', 'Rayon (km)')}</label>
               <input
                 type="number"
                 step="any"
@@ -344,16 +351,16 @@ function ZoneFormModal({ zone, onClose, onSaved }: ZoneFormModalProps) {
                 id="isActive"
                 checked={isActive}
                 onChange={(e) => setIsActive(e.target.checked)}
-                className="w-4 h-4"
+                className="w-4 h-4 rounded"
               />
-              <label htmlFor="isActive" className="text-sm">منطقة فعالة</label>
+              <label htmlFor="isActive" className="text-sm cursor-pointer">{t('منطقة فعالة', 'Zone active')}</label>
             </div>
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={saving} className="flex-1">
-                {saving ? 'جاري الحفظ...' : 'حفظ'}
+                {saving ? t('جاري الحفظ...', 'Enregistrement...') : t('حفظ', 'Enregistrer')}
               </Button>
               <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-                إلغاء
+                {t('إلغاء', 'Annuler')}
               </Button>
             </div>
           </form>
@@ -369,8 +376,21 @@ interface ZoneDetailModalProps {
 }
 
 function ZoneDetailModal({ zone, onClose }: ZoneDetailModalProps) {
+  const { t, dir } = useLanguage();
+
+  const getZoneTypeLabel = (type: string) => {
+    switch (type) {
+      case 'port': return t('ميناء', 'Port');
+      case 'border': return t('منطقة حدودية', 'Poste frontière');
+      case 'customs': return t('جمارك', 'Douane');
+      case 'logistics_hub': return t('محطة لوجستية', 'Hub logistique');
+      case 'client_warehouse': return t('مستودع عميل', 'Entrepôt client');
+      default: return t('أخرى', 'Autre');
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <Card className="w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <CardTitle className="font-amiri text-xl flex items-center gap-2 text-foreground">
@@ -381,39 +401,39 @@ function ZoneDetailModal({ zone, onClose }: ZoneDetailModalProps) {
             <X className="w-5 h-5" />
           </Button>
         </CardHeader>
-        <CardContent className="pt-5 space-y-4" dir="rtl">
+        <CardContent className="pt-5 space-y-4" dir={dir}>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-3 bg-muted/40 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground mb-1">خط العرض (Latitude)</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('خط العرض (Latitude)', 'Latitude')}</p>
               <p className="font-mono text-sm font-bold text-foreground" dir="ltr">{zone.latitude.toFixed(6)}</p>
             </div>
             <div className="p-3 bg-muted/40 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground mb-1">خط الطول (Longitude)</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('خط الطول (Longitude)', 'Longitude')}</p>
               <p className="font-mono text-sm font-bold text-foreground" dir="ltr">{zone.longitude.toFixed(6)}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-3 bg-muted/40 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground mb-1">نوع المنطقة</p>
-              <p className="text-sm font-semibold text-foreground">{ZONE_TYPE_LABELS[zone.zone_type] || zone.zone_type}</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('نوع المنطقة', 'Type de zone')}</p>
+              <p className="text-sm font-semibold text-foreground">{getZoneTypeLabel(zone.zone_type)}</p>
             </div>
             <div className="p-3 bg-muted/40 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground mb-1">نصف القطر</p>
-              <p className="text-sm font-semibold text-foreground">{zone.radius_km} كم</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('نصف القطر', 'Rayon')}</p>
+              <p className="text-sm font-semibold text-foreground">{zone.radius_km} {t('كم', 'km')}</p>
             </div>
           </div>
           <div className="p-3 bg-muted/40 rounded-lg border border-border">
-            <p className="text-xs text-muted-foreground mb-1">الحالة</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('الحالة', 'Statut')}</p>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
               zone.is_active
                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                 : 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/25'
             }`}>
-              {zone.is_active ? 'فعالة' : 'متوقفة'}
+              {zone.is_active ? t('فعالة', 'Active') : t('متوقفة', 'Inactive')}
             </span>
           </div>
           <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
-            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-1">رابط الخريطة</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-1">{t('رابط الخريطة', 'Lien de la carte')}</p>
             <a
               href={`https://www.google.com/maps?q=${zone.latitude},${zone.longitude}`}
               target="_blank"
@@ -429,3 +449,4 @@ function ZoneDetailModal({ zone, onClose }: ZoneDetailModalProps) {
     </div>
   );
 }
+

@@ -24,13 +24,23 @@ import {
   X
 } from 'lucide-react';
 import { formatCurrency, groupBalancesByCurrency } from '@/lib/forex';
+import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_BANK_ACCOUNTS, DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
 
+import { useTreasuryDataQuery } from '@/lib/query/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import Decimal from 'decimal.js';
+
 export default function TreasuryPage() {
-  const [transactions, setTransactions] = useState<TreasuryTransaction[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { t, dir } = useLanguage();
+  const { data: treasuryData, isLoading } = useTreasuryDataQuery();
+  const queryClient = useQueryClient();
+
+  const transactions = treasuryData?.transactions || [];
+  const bankAccounts = treasuryData?.bankAccounts || [];
+  const cashBoxes = treasuryData?.cashBoxes || [];
+  const loading = isLoading;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,56 +58,28 @@ export default function TreasuryPage() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [transactionsRes, bankAccountsRes, cashBoxesRes] = await Promise.all([
-        supabase.from('treasury_transactions').select('*').order('created_at', { ascending: false }),
-        supabase.from('bank_accounts').select('*').order('id', { ascending: true }),
-        supabase.from('cash_boxes').select('*').order('id', { ascending: true }),
-      ]);
-
-      if (transactionsRes.error) throw transactionsRes.error;
-      if (bankAccountsRes.error) throw bankAccountsRes.error;
-      if (cashBoxesRes.error) throw cashBoxesRes.error;
-
-      setTransactions(transactionsRes.data || []);
-      setBankAccounts(fallbackArray(bankAccountsRes.data, DEFAULT_BANK_ACCOUNTS));
-      setCashBoxes(fallbackArray(cashBoxesRes.data, DEFAULT_CASH_BOXES));
-    } catch {
-      setBankAccounts((prev) => fallbackArray(prev, DEFAULT_BANK_ACCOUNTS));
-      setCashBoxes((prev) => fallbackArray(prev, DEFAULT_CASH_BOXES));
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
+  const refreshData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['treasury-data'] });
+  }, [queryClient]);
 
   useEffect(() => {
-    fetchData();
-
     const channel = supabase
       .channel('treasury-realtime-sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'treasury_transactions' },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setTransactions((prev) => [payload.new as TreasuryTransaction, ...prev]);
-            toast({ title: '💰 تم تسجيل معاملة مالية جديدة' });
-          } else if (payload.eventType === 'UPDATE') {
-            setTransactions((prev) =>
-              prev.map((t) => (t.id === payload.new.id ? (payload.new as TreasuryTransaction) : t))
-            );
-          }
+        () => {
+          refreshData();
         }
       )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bank_accounts' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cash_boxes' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bank_accounts' }, () => refreshData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cash_boxes' }, () => refreshData())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchData, supabase, toast]);
+  }, [refreshData, supabase]);
 
   const handleCreateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +87,8 @@ export default function TreasuryPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const numericAmount = parseFloat(formData.amount);
+      const decAmount = new Decimal(formData.amount || 0);
+      const numericAmount = decAmount.toNumber();
 
       const payload: Partial<TreasuryTransaction> = {
         type: formData.type,
@@ -125,12 +108,12 @@ export default function TreasuryPage() {
       if (formData.destinationType === 'bank' && formData.destinationId) {
         const targetBank = bankAccounts.find((b) => b.id === parseInt(formData.destinationId));
         if (targetBank) {
-          const newBal = (targetBank.current_balance || 0) + numericAmount;
+          const newBal = new Decimal(targetBank.current_balance || 0).plus(decAmount).toNumber();
           await supabase.from('bank_accounts').update({ current_balance: newBal }).eq('id', targetBank.id);
         }
       }
 
-      toast({ title: 'تم تسجيل المعاملة وتحديث الرصيد بنجاح' });
+      toast({ title: t('تم تسجيل المعاملة وتحديث الرصيد بنجاح', 'Transaction enregistrée et solde mis à jour avec succès') });
       setShowModal(false);
       setFormData({
         type: 'trip_revenue',
@@ -141,11 +124,11 @@ export default function TreasuryPage() {
         description: '',
         reference: '',
       });
-      fetchData();
+      refreshData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء تسجيل المعاملة',
-        description: error?.message || 'خطأ غير متوقع',
+        title: t('خطأ أثناء تسجيل المعاملة', 'Erreur lors de l\'enregistrement de la transaction'),
+        description: error?.message || t('خطأ غير متوقع', 'Erreur inattendue'),
         variant: 'destructive',
       });
     } finally {
@@ -155,43 +138,43 @@ export default function TreasuryPage() {
 
   const bankBalances = groupBalancesByCurrency(bankAccounts);
   const filteredTransactions = transactions.filter(
-    (t) =>
-      t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.reference?.toLowerCase().includes(searchQuery.toLowerCase())
+    (item) =>
+      item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.reference?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getTypeText = (type: string) => {
     switch (type) {
       case 'capital_injection':
-        return 'ضخ رأس مال';
+        return t('ضخ رأس مال', 'Injection de capital');
       case 'trip_revenue':
-        return 'عائدات رحلة';
+        return t('عائدات رحلة', 'Recette voyage');
       case 'expense':
-        return 'مصروفات تشغيلية';
+        return t('مصروفات تشغيلية', 'Dépense opérationnelle');
       case 'transfer':
-        return 'تحويل مالي';
+        return t('تحويل مالي', 'Virement / Transfert');
       case 'payment':
-        return 'استلام دفعة عميل';
+        return t('استلام دفعة عميل', 'Encaissement client');
       default:
         return type;
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>الخزينة والسيولة النقدية</span>
+            <span>{t('الخزينة والسيولة النقدية', 'Trésorerie et liquidités')}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
-            الحسابات البنكية والصناديق النقدية
+            {t('الحسابات البنكية والصناديق النقدية', 'Comptes bancaires et caisses')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            إدارة الأرصدة المتعددة العملات (MAD / EUR / USD) وتدفق السيولة للعمليات الدولية.
+            {t('إدارة الأرصدة المتعددة العملات (MAD / EUR / USD) وتدفق السيولة للعمليات الدولية.', 'Gestion des soldes multi-devises (MAD / EUR / USD) et flux de liquidités.')}
           </p>
         </div>
 
@@ -199,8 +182,8 @@ export default function TreasuryPage() {
           onClick={() => setShowModal(true)}
           className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
         >
-          <Plus className="w-4 h-4 ml-2" />
-          تسجيل حركة مالية جديدة
+          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('تسجيل حركة مالية جديدة', 'Nouvelle transaction')}
         </Button>
       </div>
 
@@ -208,10 +191,10 @@ export default function TreasuryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* MAD Liquidity Card */}
         <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
-              السيولة البنكية (MAD)
+              {t('السيولة البنكية (MAD)', 'Liquidité Bancaire (MAD)')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
               <Building2 className="w-4 h-4" />
@@ -222,17 +205,17 @@ export default function TreasuryPage() {
               {formatCurrency(bankBalances['MAD'] || 0, 'MAD')}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              الحسابات بالدرهم المغربي
+              {t('الحسابات بالدرهم المغربي', 'Comptes en dirham marocain')}
             </div>
           </div>
         </div>
 
         {/* EUR Liquidity Card */}
         <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
-              السيولة الدولية (EUR)
+              {t('السيولة الدولية (EUR)', 'Liquidité Internationale (EUR)')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <Coins className="w-4 h-4" />
@@ -243,17 +226,17 @@ export default function TreasuryPage() {
               {formatCurrency(bankBalances['EUR'] || 0, 'EUR')}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              حسابات اليورو للعمليات الدولية
+              {t('حسابات اليورو للعمليات الدولية', 'Comptes en euro pour l\'international')}
             </div>
           </div>
         </div>
 
         {/* Cash Boxes Card */}
         <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
-              الصناديق النقدية (Cash Boxes)
+              {t('الصناديق النقدية (Cash Boxes)', 'Caisses Espèces (Cash Boxes)')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <Wallet className="w-4 h-4" />
@@ -262,10 +245,10 @@ export default function TreasuryPage() {
           <div className="relative z-10">
             <div className="text-3xl font-extrabold font-mono text-foreground">
               {cashBoxes.length}{' '}
-              <span className="text-xs text-muted-foreground font-normal font-sans">صناديق نقدية</span>
+              <span className="text-xs text-muted-foreground font-normal font-sans">{t('صناديق نقدية', 'caisses')}</span>
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              المصاريف النثرية وسلف السائقين الميدانية
+              {t('المصاريف النثرية وسلف السائقين الميدانية', 'Frais divers et avances chauffeurs')}
             </div>
           </div>
         </div>
@@ -273,29 +256,29 @@ export default function TreasuryPage() {
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Search className={`absolute ${dir === 'rtl' ? 'right-3.5' : 'left-3.5'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
         <Input
-          placeholder="بحث في الحركات المالية بالوصف، المرجع، أو نوع العملية..."
+          placeholder={t('بحث في الحركات المالية بالوصف، المرجع، أو نوع العملية...', 'Rechercher par description, référence ou type d\'opération...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pr-10 h-10 rounded-xl bg-card border-border/80 text-xs"
+          className={`${dir === 'rtl' ? 'pr-10' : 'pl-10'} h-10 rounded-xl bg-card border-border/80 text-xs`}
         />
       </div>
 
       {/* Transactions List */}
       {loading ? (
         <div className="text-center py-16 bg-card rounded-2xl border border-border">
-          <p className="text-xs text-muted-foreground">جاري تحميل السجلات المالية...</p>
+          <p className="text-xs text-muted-foreground">{t('جاري تحميل السجلات المالية...', 'Chargement des enregistrements financiers...')}</p>
         </div>
       ) : (
         <Card className="rounded-2xl border border-border/80 bg-card shadow-xs overflow-hidden">
           <CardHeader className="p-4 pb-3 border-b border-border/60 bg-muted/20 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-bold font-amiri text-foreground flex items-center gap-2">
               <Receipt className="w-4 h-4 text-primary" />
-              سجل العمليات والتدفقات المالية الأخيرة
+              {t('سجل العمليات والتدفقات المالية الأخيرة', 'Dernières opérations et flux financiers')}
             </CardTitle>
             <span className="text-xs font-mono text-muted-foreground">
-              {filteredTransactions.length} حركة مسجلة
+              {t(`${filteredTransactions.length} حركة مسجلة`, `${filteredTransactions.length} opération(s)`)}
             </span>
           </CardHeader>
           <CardContent className="p-4">
@@ -326,13 +309,13 @@ export default function TreasuryPage() {
                           {transaction.reference && (
                             <>
                               <span>•</span>
-                              <span className="font-mono">مرجع: {transaction.reference}</span>
+                              <span className="font-mono">{t('مرجع: ', 'Réf : ')}{transaction.reference}</span>
                             </>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="text-left">
+                    <div className="text-start">
                       <p
                         className={`font-bold font-mono text-sm sm:text-base ${
                           isPositive
@@ -344,7 +327,7 @@ export default function TreasuryPage() {
                         {formatCurrency(transaction.amount, transaction.currency)}
                       </p>
                       <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                        {new Date(transaction.created_at).toLocaleDateString('ar-MA')}
+                        {new Date(transaction.created_at).toLocaleDateString(dir === 'rtl' ? 'ar-MA' : 'fr-FR')}
                       </p>
                     </div>
                   </div>
@@ -353,7 +336,7 @@ export default function TreasuryPage() {
 
               {filteredTransactions.length === 0 && (
                 <div className="text-center py-12">
-                  <p className="text-xs text-muted-foreground">لا توجد حركات مالية مسجلة</p>
+                  <p className="text-xs text-muted-foreground">{t('لا توجد حركات مالية مسجلة', 'Aucune transaction financière enregistrée')}</p>
                 </div>
               )}
             </div>
@@ -367,7 +350,7 @@ export default function TreasuryPage() {
           <Card className="w-full max-w-lg rounded-2xl shadow-2xl border-border bg-card overflow-hidden">
             <CardHeader className="p-4 border-b border-border/60 bg-muted/20 flex flex-row items-center justify-between">
               <CardTitle className="text-base font-bold font-amiri text-foreground">
-                تسجيل حركة مالية جديدة
+                {t('تسجيل حركة مالية جديدة', 'Nouvelle transaction financière')}
               </CardTitle>
               <Button
                 variant="ghost"
@@ -382,35 +365,35 @@ export default function TreasuryPage() {
               <form onSubmit={handleCreateTransaction} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">نوع العملية</label>
+                    <label className="text-xs font-semibold text-foreground">{t('نوع العملية', 'Type d\'opération')}</label>
                     <select
                       value={formData.type}
                       onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                       className="w-full h-9 px-3 border border-border bg-card text-foreground rounded-xl text-xs font-medium focus:ring-1 focus:ring-primary shadow-2xs"
                     >
-                      <option value="trip_revenue">عائدات رحلة (+)</option>
-                      <option value="payment">استلام دفعة عميل (+)</option>
-                      <option value="capital_injection">ضخ رأس مال (+)</option>
-                      <option value="expense">مصروفات تشغيلية (-)</option>
+                      <option value="trip_revenue">{t('عائدات رحلة (+)', 'Recette voyage (+)')}</option>
+                      <option value="payment">{t('استلام دفعة عميل (+)', 'Encaissement client (+)')}</option>
+                      <option value="capital_injection">{t('ضخ رأس مال (+)', 'Injection de capital (+)')}</option>
+                      <option value="expense">{t('مصروفات تشغيلية (-)', 'Dépenses d\'exploitation (-)')}</option>
                     </select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">العملة</label>
+                    <label className="text-xs font-semibold text-foreground">{t('العملة', 'Devise')}</label>
                     <select
                       value={formData.currency}
                       onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                       className="w-full h-9 px-3 border border-border bg-card text-foreground rounded-xl text-xs font-mono font-bold focus:ring-1 focus:ring-primary shadow-2xs"
                     >
-                      <option value="MAD">MAD (درهم مغربي)</option>
-                      <option value="EUR">EUR (يورو)</option>
-                      <option value="USD">USD (دولار)</option>
+                      <option value="MAD">MAD ({t('درهم مغربي', 'Dirham marocain')})</option>
+                      <option value="EUR">EUR ({t('يورو', 'Euro')})</option>
+                      <option value="USD">USD ({t('دولار', 'Dollar')})</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">المبلغ (سالب للمصاريف)</label>
+                  <label className="text-xs font-semibold text-foreground">{t('المبلغ (سالب للمصاريف)', 'Montant (négatif pour les dépenses)')}</label>
                   <Input
                     type="number"
                     step="0.01"
@@ -425,36 +408,36 @@ export default function TreasuryPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">الجهة المالية</label>
+                    <label className="text-xs font-semibold text-foreground">{t('الجهة المالية', 'Entité financière')}</label>
                     <select
                       value={formData.destinationType}
                       onChange={(e) => setFormData({ ...formData, destinationType: e.target.value, destinationId: '' })}
                       className="w-full h-9 px-3 border border-border bg-card text-foreground rounded-xl text-xs font-medium focus:ring-1 focus:ring-primary shadow-2xs"
                     >
-                      <option value="bank">حساب بنكي</option>
-                      <option value="cashbox">صندوق نقدي (Cash Box)</option>
+                      <option value="bank">{t('حساب بنكي', 'Compte bancaire')}</option>
+                      <option value="cashbox">{t('صندوق نقدي (Cash Box)', 'Caisse (Cash Box)')}</option>
                     </select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">الحساب / الصندوق</label>
+                    <label className="text-xs font-semibold text-foreground">{t('الحساب / الصندوق', 'Compte / Caisse')}</label>
                     <select
                       value={formData.destinationId}
                       onChange={(e) => setFormData({ ...formData, destinationId: e.target.value })}
                       className="w-full h-9 px-3 border border-border bg-card text-foreground rounded-xl text-xs font-medium focus:ring-1 focus:ring-primary shadow-2xs"
                       required
                     >
-                      <option value="">-- اختر الحساب --</option>
+                      <option value="">{t('-- اختر الحساب --', '-- Choisir le compte --')}</option>
                       {formData.destinationType === 'bank' &&
                         bankAccounts.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.bank_name || b.name || `حساب #${b.id}`} ({b.currency || 'MAD'})
+                            {b.bank_name || b.name || `${t('حساب', 'Compte')} #${b.id}`} ({b.currency || 'MAD'})
                           </option>
                         ))}
                       {formData.destinationType === 'cashbox' &&
                         cashBoxes.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.name || c.code || `صندوق #${c.id}`} ({c.currency || 'MAD'})
+                            {c.name || c.code || `${t('صندوق', 'Caisse')} #${c.id}`} ({c.currency || 'MAD'})
                           </option>
                         ))}
                     </select>
@@ -462,18 +445,18 @@ export default function TreasuryPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">بيان العملية (الوصف)</label>
+                  <label className="text-xs font-semibold text-foreground">{t('بيان العملية (الوصف)', 'Description de l\'opération')}</label>
                   <Input
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="بيان العملية المالية..."
+                    placeholder={t('بيان العملية المالية...', 'Libellé de l\'opération...')}
                     required
                     className="h-9 text-xs rounded-xl"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">المرجع / الشيك (اختياري)</label>
+                  <label className="text-xs font-semibold text-foreground">{t('المرجع / الشيك (اختياري)', 'N° Référence / Chèque (optionnel)')}</label>
                   <Input
                     value={formData.reference}
                     onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
@@ -488,7 +471,7 @@ export default function TreasuryPage() {
                     disabled={isSubmitting}
                     className="flex-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl h-9 text-xs font-semibold"
                   >
-                    {isSubmitting ? 'جاري الحفظ...' : 'حفظ المعاملة'}
+                    {isSubmitting ? t('جاري الحفظ...', 'Enregistrement...') : t('حفظ المعاملة', 'Enregistrer la transaction')}
                   </Button>
                   <Button
                     type="button"
@@ -496,7 +479,7 @@ export default function TreasuryPage() {
                     onClick={() => setShowModal(false)}
                     className="rounded-xl h-9 text-xs"
                   >
-                    إلغاء
+                    {t('إلغاء', 'Annuler')}
                   </Button>
                 </div>
               </form>

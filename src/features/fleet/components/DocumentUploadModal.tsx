@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { saveFleetDocument } from '@/features/fleet/services/fleet-documents.actions';
-import { DOCUMENT_TYPE_LABELS, CORE_DOC_TYPES } from '@/features/fleet/services/fleet-documents.constants';
+import { saveFleetDocument, getDocumentCategories } from '@/features/fleet/services/fleet-documents.actions';
+import { DOCUMENT_TYPE_LABELS } from '@/features/fleet/services/fleet-documents.constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileText, Calendar, DollarSign, RefreshCw, Truck, Check } from 'lucide-react';
-import type { FleetDocument, Truck as TruckType, Trailer as TrailerType } from '@/types/database';
+import { Upload, FileText, Calendar, DollarSign, RefreshCw, Check, FolderCog } from 'lucide-react';
+import type { FleetDocument, Truck as TruckType, Trailer as TrailerType, DocumentCategory } from '@/types/database';
 import { DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
+import { DocumentCategoriesModal } from './DocumentCategoriesModal';
+import { useLanguage } from '@/components/language-provider';
 
 interface DocumentUploadModalProps {
   isOpen: boolean;
@@ -34,6 +36,7 @@ export function DocumentUploadModal({
   initialDocType,
   editingDoc,
 }: DocumentUploadModalProps) {
+  const { locale, dir, t } = useLanguage();
   const trucks = fallbackArray(rawTrucks, DEFAULT_TRUCKS);
   const trailers = fallbackArray(rawTrailers, DEFAULT_TRAILERS);
 
@@ -49,8 +52,32 @@ export function DocumentUploadModal({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  const [categories, setCategories] = useState<DocumentCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+
   const { toast } = useToast();
   const supabase = createClient();
+
+  const loadCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const res = await getDocumentCategories({ activeOnly: true, vehicleType: entityType });
+      if (res.success && res.data) {
+        setCategories(res.data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadCategories();
+    }
+  }, [isOpen, entityType]);
 
   useEffect(() => {
     if (editingDoc) {
@@ -77,7 +104,7 @@ export function DocumentUploadModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!entityId || !documentType) {
-      toast({ title: 'يرجى اختيار المركبة ونوع الوثيقة', variant: 'destructive' });
+      toast({ title: t('يرجى اختيار المركبة ونوع الوثيقة', 'Veuillez sélectionner le véhicule et le type de document'), variant: 'destructive' });
       return;
     }
 
@@ -119,14 +146,16 @@ export function DocumentUploadModal({
       if (!res.success) throw new Error(res.error);
 
       toast({
-        title: editingDoc ? 'تم تعديل الوثيقة بنجاح' : 'تم إضافة الوثيقة وتثبيتها بنجاح',
+        title: editingDoc
+          ? t('تم تعديل الوثيقة بنجاح', 'Document modifié avec succès')
+          : t('تم إضافة الوثيقة وتثبيتها بنجاح', 'Document ajouté avec succès'),
       });
 
       onSuccess();
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل في حفظ الوثيقة';
-      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
+      const msg = err instanceof Error ? err.message : t('فشل في حفظ الوثيقة', 'Échec de l\'enregistrement du document');
+      toast({ title: t('خطأ', 'Erreur'), description: msg, variant: 'destructive' });
     } finally {
       setUploading(false);
     }
@@ -134,17 +163,22 @@ export function DocumentUploadModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto" dir={dir}>
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wide mb-1">
             <FileText className="w-4 h-4 text-blue-500" />
-            <span>إدارة وثائق الأسطول</span>
+            <span>{t('إدارة وثائق الأسطول', 'Gestion des documents de flotte')}</span>
           </div>
           <DialogTitle className="font-amiri text-xl">
-            {editingDoc ? 'تعديل وثيقة مسجلة' : 'إضافة وثيقة جديدة للأسطول'}
+            {editingDoc
+              ? t('تعديل وثيقة مسجلة', 'Modifier un document')
+              : t('إضافة وثيقة جديدة للأسطول', 'Ajouter un document à la flotte')}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            تسجيل وتحديث وثائق الشاحنات والمقطورات مع تواريخ الصلاحية والتنبيهات.
+            {t(
+              'تسجيل وتحديث وثائق الشاحنات والمقطورات مع تواريخ الصلاحية والتنبيهات.',
+              'Enregistrement et mise à jour des documents de camions et remorques avec dates d\'expiration et alertes.'
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -152,7 +186,7 @@ export function DocumentUploadModal({
           {/* Vehicle Type & Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">نوع المركبة</label>
+              <label className="text-xs font-semibold text-foreground">{t('نوع المركبة', 'Type de véhicule')}</label>
               <Select
                 value={entityType}
                 onValueChange={(val: 'truck' | 'trailer') => {
@@ -165,17 +199,17 @@ export function DocumentUploadModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="truck">🚛 رأس شاحنة (Tracteur)</SelectItem>
-                  <SelectItem value="trailer">🚚 مقطورة (Remorque)</SelectItem>
+                  <SelectItem value="truck">{t('🚛 رأس شاحنة (Tracteur)', '🚛 Tracteur')}</SelectItem>
+                  <SelectItem value="trailer">{t('🚚 مقطورة (Remorque)', '🚚 Remorque')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">المركبة / الترقيم</label>
+              <label className="text-xs font-semibold text-foreground">{t('المركبة / الترقيم', 'Véhicule / Immatriculation')}</label>
               <Select value={entityId} onValueChange={setEntityId}>
                 <SelectTrigger className="rounded-xl font-mono">
-                  <SelectValue placeholder="اختر المركبة" />
+                  <SelectValue placeholder={t('اختر المركبة', 'Sélectionner le véhicule')} />
                 </SelectTrigger>
                 <SelectContent>
                   {entityType === 'truck'
@@ -197,27 +231,59 @@ export function DocumentUploadModal({
           {/* Document Type & Number */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">نوع الوثيقة</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">{t('نوع الوثيقة', 'Type de document')}</label>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoriesModalOpen(true)}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                  title={t('إضافة، تعديل، أو حذف أنواع الوثائق', 'Ajouter, modifier ou supprimer des types')}
+                >
+                  <FolderCog className="w-3.5 h-3.5 text-primary" />
+                  <span>{t('إدارة الأنواع', 'Gérer les types')}</span>
+                </button>
+              </div>
               <Select value={documentType} onValueChange={setDocumentType}>
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue />
+                  <SelectValue placeholder={t('اختر نوع الوثيقة', 'Sélectionner le type de document')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {CORE_DOC_TYPES.map((typeKey) => (
-                    <SelectItem key={typeKey} value={typeKey}>
-                      {DOCUMENT_TYPE_LABELS[typeKey]?.label_ar || typeKey}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="other">وثيقة أخرى</SelectItem>
+                  {categoriesLoading ? (
+                    <div className="p-2 text-center text-xs text-muted-foreground">
+                      {t('جاري تحميل الأنواع...', 'Chargement des types...')}
+                    </div>
+                  ) : (
+                    <>
+                      {categories.map((cat) => {
+                        const label = locale === 'fr'
+                          ? (cat.name_fr || cat.name)
+                          : `${cat.name}${cat.name_fr ? ` (${cat.name_fr})` : ''}`;
+                        return (
+                          <SelectItem key={cat.id} value={cat.name}>
+                            {label}
+                          </SelectItem>
+                        );
+                      })}
+                      {/* Ensure current documentType is selectable even if legacy key or custom */}
+                      {documentType &&
+                        !categories.some((c) => c.name === documentType) && (
+                          <SelectItem value={documentType}>
+                            {locale === 'fr'
+                              ? (DOCUMENT_TYPE_LABELS[documentType]?.label_fr || documentType)
+                              : (DOCUMENT_TYPE_LABELS[documentType]?.label_ar || documentType)}
+                          </SelectItem>
+                        )}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">رقم الوثيقة / العقد (اختياري)</label>
+              <label className="text-xs font-semibold text-foreground">{t('رقم الوثيقة / العقد (اختياري)', 'Numéro du document / contrat (Optionnel)')}</label>
               <Input
                 type="text"
-                placeholder="مثال: POL-2026-991"
+                placeholder="Ex: POL-2026-991"
                 value={documentNumber}
                 onChange={(e) => setDocumentNumber(e.target.value)}
                 className="rounded-xl font-mono text-xs"
@@ -230,7 +296,7 @@ export function DocumentUploadModal({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
-                تاريخ الإصدار
+                {t('تاريخ الإصدار', 'Date d\'émission')}
               </label>
               <Input
                 type="date"
@@ -243,7 +309,7 @@ export function DocumentUploadModal({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-blue-500" />
-                تاريخ انتهاء الصلاحية
+                {t('تاريخ انتهاء الصلاحية', 'Date d\'expiration')}
               </label>
               <Input
                 type="date"
@@ -259,7 +325,7 @@ export function DocumentUploadModal({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
                 <DollarSign className="w-3.5 h-3.5" />
-                تكلفة الوثيقة / التأمين
+                {t('تكلفة الوثيقة / التأمين', 'Coût du document / assurance')}
               </label>
               <Input
                 type="number"
@@ -273,14 +339,14 @@ export function DocumentUploadModal({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground">العملة</label>
+              <label className="text-xs font-semibold text-muted-foreground">{t('العملة', 'Devise')}</label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MAD">MAD (درهم)</SelectItem>
-                  <SelectItem value="EUR">EUR (يورو)</SelectItem>
+                  <SelectItem value="MAD">{t('MAD (درهم)', 'MAD (Dirham)')}</SelectItem>
+                  <SelectItem value="EUR">{t('EUR (يورو)', 'EUR (Euro)')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -290,7 +356,7 @@ export function DocumentUploadModal({
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <Upload className="w-3.5 h-3.5 text-indigo-500" />
-              مرفق الوثيقة (PDF / صورة)
+              {t('مرفق الوثيقة (PDF / صورة)', 'Fichier joint (PDF / Image)')}
             </label>
             <Input
               type="file"
@@ -300,14 +366,14 @@ export function DocumentUploadModal({
             />
             {editingDoc?.file_url && !file && (
               <p className="text-[11px] text-muted-foreground">
-                يوجد ملف مرفق حالياً:{' '}
+                {t('يوجد ملف مرفق حالياً:', 'Fichier joint existant :')}{' '}
                 <a
                   href={editingDoc.file_url}
                   target="_blank"
                   rel="noreferrer"
                   className="text-primary underline font-medium"
                 >
-                  معاينة الملف الحالي
+                  {t('معاينة الملف الحالي', 'Voir le fichier')}
                 </a>
               </p>
             )}
@@ -315,10 +381,10 @@ export function DocumentUploadModal({
 
           {/* Notes */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">ملاحظات إضافية</label>
+            <label className="text-xs font-semibold text-muted-foreground">{t('ملاحظات إضافية', 'Remarques additionnelles')}</label>
             <Input
               type="text"
-              placeholder="مثال: تأمين شامل مع المساعدة على الطريق الدولية"
+              placeholder={t('مثال: تأمين شامل مع المساعدة على الطريق الدولية', 'Ex: Tous risques avec assistance routière internationale')}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="rounded-xl text-xs"
@@ -327,7 +393,7 @@ export function DocumentUploadModal({
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-border/50">
             <Button type="button" variant="ghost" onClick={onClose} disabled={uploading} className="rounded-xl">
-              إلغاء
+              {t('إلغاء', 'Annuler')}
             </Button>
             <Button
               type="submit"
@@ -335,15 +401,21 @@ export function DocumentUploadModal({
               className="rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium"
             >
               {uploading ? (
-                <RefreshCw className="w-4 h-4 ml-1.5 animate-spin" />
+                <RefreshCw className="w-4 h-4 me-1.5 animate-spin" />
               ) : (
-                <Check className="w-4 h-4 ml-1.5" />
+                <Check className="w-4 h-4 me-1.5" />
               )}
-              {editingDoc ? 'حفظ التعديلات' : 'حفظ وتثبيت الوثيقة'}
+              {editingDoc ? t('حفظ التعديلات', 'Enregistrer les modifications') : t('حفظ وتثبيت الوثيقة', 'Enregistrer le document')}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <DocumentCategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        onCategoriesUpdated={loadCategories}
+      />
     </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import type { Client, Driver, Truck, Trailer, CashBox, BankAccount, TripOrder, Provider, TransportRoute, Invoice } from '@/types/database';
+import type { User, Client, Driver, Truck, Trailer, CashBox, BankAccount, TripOrder, Provider, TransportRoute, Invoice } from '@/types/database';
 
 export const DEFAULT_CLIENTS: Client[] = [
   {
@@ -718,6 +718,59 @@ export const DEFAULT_INVOICES: Invoice[] = [
     trip_order_id: 1004,
     payment_request_ref: 'DEM-2025-103',
     created_at: '2025-09-03T16:00:00Z',
+  },
+];
+
+export const DEFAULT_USERS: User[] = [
+  {
+    id: '00000000-0000-0000-0000-000000000001',
+    email: 'admin@transbodanon.ma',
+    role: 'admin',
+    name: 'Admin Trans Bodanon',
+    created_at: '2025-01-01T08:00:00Z',
+    theme_mode: 'system',
+    mfa_enabled: false,
+    preferred_language: 'ar',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000002',
+    email: 'secretary@transbodanon.ma',
+    role: 'secretary',
+    name: 'فاطمة الزهراء',
+    created_at: '2025-01-01T08:00:00Z',
+    theme_mode: 'light',
+    mfa_enabled: false,
+    preferred_language: 'fr',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000003',
+    email: 'driver1@transbodanon.ma',
+    role: 'driver',
+    name: 'أحمد بنعلي',
+    created_at: '2025-01-01T08:00:00Z',
+    theme_mode: 'system',
+    mfa_enabled: false,
+    preferred_language: 'ar',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000004',
+    email: 'driver2@transbodanon.ma',
+    role: 'driver',
+    name: 'محمد العمراني',
+    created_at: '2025-01-01T08:00:00Z',
+    theme_mode: 'system',
+    mfa_enabled: false,
+    preferred_language: 'ar',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000005',
+    email: 'driver3@transbodanon.ma',
+    role: 'driver',
+    name: 'يوسف الإدريسي',
+    created_at: '2025-01-01T08:00:00Z',
+    theme_mode: 'system',
+    mfa_enabled: false,
+    preferred_language: 'ar',
   },
 ];
 

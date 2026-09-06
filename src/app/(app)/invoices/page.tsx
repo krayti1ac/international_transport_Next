@@ -52,18 +52,28 @@ import {
   type OverdueInvoiceReminder
 } from '@/features/invoices/services/whatsapp_reminders.actions';
 
+import { useInvoicesDataQuery } from '@/lib/query/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import Decimal from 'decimal.js';
+import { useLanguage } from '@/components/language-provider';
+
 function InvoicesPageContent() {
+  const { t, dir, locale } = useLanguage();
   const searchParams = useSearchParams();
   const actionParam = searchParams.get('action');
   const statusParam = searchParams.get('status');
   const tabParam = searchParams.get('tab');
 
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [trips, setTrips] = useState<TripOrder[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: invoicesData, isLoading } = useInvoicesDataQuery();
+  const queryClient = useQueryClient();
+
+  const invoices = invoicesData?.invoices || [];
+  const clients = invoicesData?.clients || [];
+  const trips = invoicesData?.trips || [];
+  const bankAccounts = invoicesData?.bankAccounts || [];
+  const cashBoxes = invoicesData?.cashBoxes || [];
+  const loading = isLoading;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(statusParam || 'all');
   const [activeTab, setActiveTab] = useState<'invoices' | 'payment_notifications'>(
@@ -88,33 +98,9 @@ function InvoicesPageContent() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchInvoices = useCallback(async () => {
-    try {
-      const [invoicesRes, clientsRes, tripsRes, banksRes, cashBoxesRes] = await Promise.all([
-        supabase.from('invoices').select('*').order('issue_date', { ascending: false }),
-        supabase.from('clients').select('*').order('name'),
-        supabase.from('trip_orders').select('*').order('created_at', { ascending: false }),
-        supabase.from('bank_accounts').select('*').order('name'),
-        supabase.from('cash_boxes').select('*').order('name'),
-      ]);
-
-      if (invoicesRes.error) throw invoicesRes.error;
-
-      setInvoices(fallbackArray(invoicesRes.data, DEFAULT_INVOICES));
-      setClients(fallbackArray(clientsRes.data, DEFAULT_CLIENTS));
-      setTrips(fallbackArray(tripsRes.data, DEFAULT_TRIPS));
-      setBankAccounts(fallbackArray(banksRes.data, DEFAULT_BANK_ACCOUNTS));
-      setCashBoxes(fallbackArray(cashBoxesRes.data, DEFAULT_CASH_BOXES));
-    } catch {
-      setInvoices((prev) => fallbackArray(prev, DEFAULT_INVOICES));
-      setClients((prev) => fallbackArray(prev, DEFAULT_CLIENTS));
-      setTrips((prev) => fallbackArray(prev, DEFAULT_TRIPS));
-      setBankAccounts((prev) => fallbackArray(prev, DEFAULT_BANK_ACCOUNTS));
-      setCashBoxes((prev) => fallbackArray(prev, DEFAULT_CASH_BOXES));
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
+  const refreshInvoices = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['invoices-data'] });
+  }, [queryClient]);
 
   const loadReminders = useCallback(async () => {
     setRemindersLoading(true);
@@ -131,13 +117,12 @@ function InvoicesPageContent() {
   }, []);
 
   useEffect(() => {
-    fetchInvoices();
     loadReminders();
 
     const channel = supabase
       .channel('invoices-realtime-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => {
-        fetchInvoices();
+        refreshInvoices();
         loadReminders();
       })
       .subscribe();
@@ -145,7 +130,7 @@ function InvoicesPageContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchInvoices, loadReminders, supabase]);
+  }, [refreshInvoices, loadReminders, supabase]);
 
   // Handle URL Query Params
   useEffect(() => {
@@ -180,16 +165,16 @@ function InvoicesPageContent() {
           .update(invoiceData)
           .eq('id', editingInvoice.id);
         if (error) throw error;
-        toast({ title: 'تم تعديل الفاتورة بنجاح' });
+        toast({ title: t('تم تعديل الفاتورة بنجاح', 'Facture modifiée avec succès') });
       } else {
         const { error } = await supabase.from('invoices').insert(invoiceData);
         if (error) throw error;
-        toast({ title: 'تم إنشاء الفاتورة بنجاح' });
+        toast({ title: t('تم إنشاء الفاتورة بنجاح', 'Facture créée avec succès') });
       }
-      fetchInvoices();
+      refreshInvoices();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحفظ',
+        title: t('خطأ أثناء الحفظ', "Erreur lors de l'enregistrement"),
         description: error.message,
         variant: 'destructive',
       });
@@ -203,11 +188,11 @@ function InvoicesPageContent() {
         .update({ status })
         .eq('id', invoiceId);
       if (error) throw error;
-      toast({ title: `تم تغيير حالة الفاتورة إلى "${getStatusText(status)}"` });
-      fetchInvoices();
+      toast({ title: `${t('تم تغيير حالة الفاتورة إلى', 'Statut de facture mis à jour :')} "${getStatusText(status)}"` });
+      refreshInvoices();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -215,16 +200,16 @@ function InvoicesPageContent() {
   };
 
   const handleDeleteInvoice = async (id: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذه الفاتورة؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذه الفاتورة؟', 'Êtes-vous sûr de vouloir supprimer cette facture ?'))) return;
 
     try {
       const { error } = await supabase.from('invoices').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم حذف الفاتورة بنجاح' });
-      fetchInvoices();
+      toast({ title: t('تم حذف الفاتورة بنجاح', 'Facture supprimée avec succès') });
+      refreshInvoices();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحذف',
+        title: t('خطأ أثناء الحذف', 'Erreur lors de la suppression'),
         description: error.message,
         variant: 'destructive',
       });
@@ -237,13 +222,13 @@ function InvoicesPageContent() {
       const res = await sendOverdueInvoiceReminders();
       if (res.success) {
         toast({
-          title: '✅ تم إرسال التذكيرات بنجاح',
-          description: `تم توجيه ${res.sentCount} إشعار سداد للعملاء عبر WhatsApp.`,
+          title: t('✅ تم إرسال التذكيرات بنجاح', '✅ Rappels envoyés avec succès'),
+          description: t(`تم توجيه ${res.sentCount} إشعار سداد للعملاء عبر WhatsApp.`, `${res.sentCount} notifications de paiement envoyées via WhatsApp.`),
         });
         loadReminders();
       } else {
         toast({
-          title: 'خطأ أثناء إرسال التذكيرات',
+          title: t('خطأ أثناء إرسال التذكيرات', "Erreur lors de l'envoi des rappels"),
           description: res.error,
           variant: 'destructive',
         });
@@ -270,19 +255,19 @@ function InvoicesPageContent() {
     const isObj = typeof statusOrInvoice === 'object' && statusOrInvoice !== null;
     const status = isObj ? statusOrInvoice.status : statusOrInvoice;
     if (isObj && isInvoiceOverdue(statusOrInvoice) && status !== 'paid') {
-      return 'متأخرة عن الدفع';
+      return t('متأخرة عن الدفع', 'En retard de paiement');
     }
     switch (status) {
       case 'paid':
-        return 'مدفوعة بالكامل';
+        return t('مدفوعة بالكامل', 'Payée en totalité');
       case 'partially_paid':
-        return 'مدفوعة جزئياً';
+        return t('مدفوعة جزئياً', 'Partiellement payée');
       case 'unpaid':
-        return 'غير مدفوعة';
+        return t('غير مدفوعة', 'Non payée');
       case 'overdue':
-        return 'متأخرة';
+        return t('متأخرة', 'En retard');
       default:
-        return status || 'غير محدد';
+        return status || t('غير محدد', 'Non défini');
     }
   };
 
@@ -307,10 +292,12 @@ function InvoicesPageContent() {
   };
 
   // KPIs
-  const totalAmountMAD = invoices.reduce(
-    (acc, inv) => (inv.currency !== 'EUR' ? acc + parseFloat(String(inv.total_amount || 0)) : acc),
-    0
-  );
+  const totalAmountMAD = useMemo(() => {
+    return invoices.reduce(
+      (acc, inv) => (inv.currency !== 'EUR' ? acc.plus(new Decimal(inv.total_amount || 0)) : acc),
+      new Decimal(0)
+    ).toNumber();
+  }, [invoices]);
   const paidCount = invoices.filter((i) => i.status === 'paid').length;
   const overdueCount = invoices.filter((i) => isInvoiceOverdue(i)).length;
   const unpaidCount = invoices.filter((i) => i.status !== 'paid').length;
@@ -342,19 +329,23 @@ function InvoicesPageContent() {
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" dir="rtl">
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>الإدارة المالية والمحاسبة</span>
+            <span>{t('الإدارة المالية والمحاسبة', 'Gestion Financière & Comptabilité')}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
-            الفواتير وطلبات الدفع الدولية
+            {t('الفواتير وطلبات الدفع الدولية', 'Factures & Demandes de Paiement')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            إصدار الفواتير الرسمية، إنشاء طلبات السداد (Demandes de Paiement)، ومتابعة التحصيلات بنظام FIFO.
+            {t(
+              'إصدار الفواتير الرسمية، إنشاء طلبات السداد (Demandes de Paiement)، ومتابعة التحصيلات بنظام FIFO.',
+              'Émission des factures officielles, demandes de paiement et suivi des encaissements FIFO.'
+            )}
           </p>
         </div>
 
@@ -369,7 +360,7 @@ function InvoicesPageContent() {
             className="bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
           >
             <Receipt className="w-4 h-4" />
-            إنشاء طلب الدفع
+            {t('إنشاء طلب الدفع', 'Demande de paiement')}
           </Button>
 
           {/* FIFO Payment Button */}
@@ -382,7 +373,7 @@ function InvoicesPageContent() {
             className="border-emerald-600/40 bg-card hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
           >
             <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
-            تحصيل دفعة (FIFO)
+            {t('تحصيل دفعة (FIFO)', 'Encaissement (FIFO)')}
           </Button>
 
           {/* Create Invoice Button */}
@@ -394,7 +385,7 @@ function InvoicesPageContent() {
             className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-3.5 transition-all gap-1.5"
           >
             <Plus className="w-4 h-4" />
-            إنشاء فاتورة جديدة
+            {t('إنشاء فاتورة جديدة', 'Nouvelle facture')}
           </Button>
         </div>
       </div>
@@ -411,7 +402,7 @@ function InvoicesPageContent() {
             }`}
           >
             <FileText className="w-4 h-4" />
-            سجل الفواتير
+            {t('سجل الفواتير', 'Registre des factures')}
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 font-mono">
               {invoices.length}
             </span>
@@ -426,10 +417,10 @@ function InvoicesPageContent() {
             }`}
           >
             <ListChecks className="w-4 h-4" />
-            إشعارات طلبات الدفع (WhatsApp)
+            {t('إشعارات طلبات الدفع (WhatsApp)', 'Rappels WhatsApp')}
             {overdueCount > 0 && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono animate-pulse">
-                {overdueCount} متأخرة
+                {overdueCount} {t('متأخرة', 'en retard')}
               </span>
             )}
           </button>
@@ -443,12 +434,12 @@ function InvoicesPageContent() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
               <div>
-                <span className="text-xs font-bold text-muted-foreground uppercase">إجمالي الفواتير الصادرة</span>
+                <span className="text-xs font-bold text-muted-foreground uppercase">{t('إجمالي الفواتير الصادرة', 'Total Facturé')}</span>
                 <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
-                  {totalAmountMAD.toLocaleString()} <span className="text-xs text-muted-foreground font-normal">د.م.</span>
+                  {totalAmountMAD.toLocaleString()} <span className="text-xs text-muted-foreground font-normal">{locale === 'fr' ? 'MAD' : 'د.م.'}</span>
                 </div>
                 <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
-                  {invoices.length} فاتورة مسجلة
+                  {invoices.length} {t('فاتورة مسجلة', 'factures enregistrées')}
                 </span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
@@ -458,11 +449,11 @@ function InvoicesPageContent() {
 
             <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
               <div>
-                <span className="text-xs font-bold text-muted-foreground uppercase">الفواتير المحصلة</span>
+                <span className="text-xs font-bold text-muted-foreground uppercase">{t('الفواتير المحصلة', 'Factures Encaissées')}</span>
                 <div className="text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
                   {paidCount} <span className="text-xs text-muted-foreground font-normal">/ {invoices.length}</span>
                 </div>
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">تم السداد بالكامل</span>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">{t('تم السداد بالكامل', 'Entièrement payées')}</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <CheckCircle2 className="w-5 h-5" />
@@ -471,11 +462,11 @@ function InvoicesPageContent() {
 
             <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
               <div>
-                <span className="text-xs font-bold text-muted-foreground uppercase">بانتظار التحصيل / متأخر</span>
+                <span className="text-xs font-bold text-muted-foreground uppercase">{t('بانتظار التحصيل / متأخر', 'En attente / Retard')}</span>
                 <div className="text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-1">
-                  {unpaidCount} <span className="text-xs text-muted-foreground font-normal">مطالبة</span>
+                  {unpaidCount} <span className="text-xs text-muted-foreground font-normal">{t('مطالبة', 'créances')}</span>
                 </div>
-                <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">مستحقة للمتابعة</span>
+                <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{t('مستحقة للمتابعة', 'À relancer')}</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                 <Clock className="w-5 h-5" />
@@ -487,11 +478,11 @@ function InvoicesPageContent() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 p-2 rounded-2xl border border-border/60">
             <div className="flex flex-wrap gap-1.5 bg-card p-1 rounded-xl border border-border/60 shadow-2xs">
               {[
-                { id: 'all', label: 'الكل' },
-                { id: 'paid', label: 'مدفوعة' },
-                { id: 'partially_paid', label: 'جزئية' },
-                { id: 'unpaid', label: 'غير مدفوعة' },
-                { id: 'overdue', label: 'متأخرة' },
+                { id: 'all', label: t('الكل', 'Tout') },
+                { id: 'paid', label: t('مدفوعة', 'Payées') },
+                { id: 'partially_paid', label: t('جزئية', 'Partielles') },
+                { id: 'unpaid', label: t('غير مدفوعة', 'Impayées') },
+                { id: 'overdue', label: t('متأخرة', 'En retard') },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -511,12 +502,12 @@ function InvoicesPageContent() {
               <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
 
               <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
                 <Input
-                  placeholder="بحث برقم الفاتورة أو المرجع أو العميل..."
+                  placeholder={t('بحث برقم الفاتورة أو المرجع أو العميل...', 'Recherche n° facture, réf ou client...')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-9 text-xs rounded-xl bg-card border-border/80"
+                  className={`${dir === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'} h-9 text-xs rounded-xl bg-card border-border/80`}
                 />
               </div>
             </div>
@@ -526,7 +517,7 @@ function InvoicesPageContent() {
           {loading ? (
             <div className="text-center py-16 bg-card rounded-2xl border border-border">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-              <p className="text-xs text-muted-foreground">جاري تحميل الفواتير...</p>
+              <p className="text-xs text-muted-foreground">{t('جاري تحميل الفواتير...', 'Chargement des factures...')}</p>
             </div>
           ) : cardLayout === 'grid' ? (
             /* Grid View */
@@ -547,10 +538,10 @@ function InvoicesPageContent() {
                             </div>
                             <div>
                               <CardTitle className="text-base font-bold font-mono text-foreground">
-                                {invoice.invoice_number || `فاتورة #${invoice.id}`}
+                                {invoice.invoice_number || `${t('فاتورة', 'Facture')} #${invoice.id}`}
                               </CardTitle>
                               <span className="text-[11px] text-muted-foreground font-semibold">
-                                {client?.name || `عميل #${invoice.client_id}`}
+                                {client?.name || `${t('عميل', 'Client')} #${invoice.client_id}`}
                               </span>
                             </div>
                           </div>
@@ -562,45 +553,45 @@ function InvoicesPageContent() {
                         {invoice.payment_request_ref && (
                           <div className="mt-2 pt-2 border-t border-border/30 flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 font-mono">
                             <Receipt className="w-3.5 h-3.5 text-amber-600" />
-                            <span>طلب دفع: {invoice.payment_request_ref}</span>
+                            <span>{t('طلب دفع:', 'Demande :')} {invoice.payment_request_ref}</span>
                           </div>
                         )}
                       </CardHeader>
 
                       <CardContent className="p-4 space-y-2.5 text-xs">
                         <div className="flex justify-between py-1 border-b border-border/30">
-                          <span className="text-muted-foreground">المبلغ الإجمالي:</span>
+                          <span className="text-muted-foreground">{t('المبلغ الإجمالي:', 'Montant Total :')}</span>
                           <span className="font-mono font-extrabold text-foreground text-sm">
-                            {parseFloat(String(invoice.total_amount || 0)).toLocaleString()} {invoice.currency || 'د.م.'}
+                            {new Decimal(invoice.total_amount || 0).toNumber().toLocaleString()} {invoice.currency || (locale === 'fr' ? 'MAD' : 'د.م.')}
                           </span>
                         </div>
-                        {invoice.paid_amount && parseFloat(String(invoice.paid_amount)) > 0 && (
+                        {invoice.paid_amount && new Decimal(invoice.paid_amount).greaterThan(0) && (
                           <div className="flex justify-between py-1 border-b border-border/30 text-emerald-600 dark:text-emerald-400">
-                            <span>المدفوع:</span>
+                            <span>{t('المدفوع:', 'Payé :')}</span>
                             <span className="font-mono font-bold">
-                              {parseFloat(String(invoice.paid_amount)).toLocaleString()} {invoice.currency || 'د.م.'}
+                              {new Decimal(invoice.paid_amount).toNumber().toLocaleString()} {invoice.currency || (locale === 'fr' ? 'MAD' : 'د.م.')}
                             </span>
                           </div>
                         )}
                         {invoice.issue_date && (
                           <div className="flex justify-between py-1 border-b border-border/30">
-                            <span className="text-muted-foreground">تاريخ الإصدار:</span>
+                            <span className="text-muted-foreground">{t('تاريخ الإصدار:', "Date d'émission :")}</span>
                             <span className="font-mono text-foreground">
-                              {new Date(invoice.issue_date).toLocaleDateString('ar-MA')}
+                              {new Date(invoice.issue_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
                             </span>
                           </div>
                         )}
                         {invoice.due_date && (
                           <div className="flex justify-between py-1 border-b border-border/30">
-                            <span className="text-muted-foreground">تاريخ الاستحقاق:</span>
+                            <span className="text-muted-foreground">{t('تاريخ الاستحقاق:', "Date d'échéance :")}</span>
                             <span className="font-mono text-destructive font-medium">
-                              {new Date(invoice.due_date).toLocaleDateString('ar-MA')}
+                              {new Date(invoice.due_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
                             </span>
                           </div>
                         )}
                         {invoice.route && (
                           <div className="flex justify-between py-1 text-[11px]">
-                            <span className="text-muted-foreground">المسار:</span>
+                            <span className="text-muted-foreground">{t('المسار:', 'Trajet :')}</span>
                             <span className="font-medium text-foreground truncate max-w-[170px]">{invoice.route}</span>
                           </div>
                         )}
@@ -614,10 +605,10 @@ function InvoicesPageContent() {
                           onChange={(e) => handleUpdateStatus(invoice.id, e.target.value)}
                           className="text-xs px-2.5 py-1 border border-border rounded-lg bg-card text-foreground flex-1 font-medium shadow-2xs"
                         >
-                          <option value="unpaid">غير مدفوعة</option>
-                          <option value="partially_paid">مدفوعة جزئياً</option>
-                          <option value="paid">مدفوعة بالكامل</option>
-                          <option value="overdue">متأخرة</option>
+                          <option value="unpaid">{t('غير مدفوعة', 'Non payée')}</option>
+                          <option value="partially_paid">{t('مدفوعة جزئياً', 'Partiellement payée')}</option>
+                          <option value="paid">{t('مدفوعة بالكامل', 'Payée')}</option>
+                          <option value="overdue">{t('متأخرة', 'En retard')}</option>
                         </select>
 
                         {/* Payment Request Trigger */}
@@ -625,7 +616,7 @@ function InvoicesPageContent() {
                           variant="outline"
                           size="icon"
                           className="h-7 w-7 rounded-lg text-amber-600 hover:bg-amber-500/10"
-                          title="إنشاء / تصدير طلب الدفع"
+                          title={t('إنشاء / تصدير طلب الدفع', 'Demande de paiement')}
                           onClick={() => {
                             setPaymentRequestInvoice(invoice);
                             setIsPaymentRequestOpen(true);
@@ -638,7 +629,7 @@ function InvoicesPageContent() {
                           variant="outline"
                           size="icon"
                           className="h-7 w-7 rounded-lg"
-                          title="تعديل الفاتورة"
+                          title={t('تعديل الفاتورة', 'Modifier la facture')}
                           onClick={() => {
                             setEditingInvoice(invoice);
                             setIsFormModalOpen(true);
@@ -651,7 +642,7 @@ function InvoicesPageContent() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-lg"
-                          title="حذف الفاتورة"
+                          title={t('حذف الفاتورة', 'Supprimer la facture')}
                           onClick={() => handleDeleteInvoice(invoice.id)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -666,7 +657,7 @@ function InvoicesPageContent() {
                           onClick={() => setActiveInvoice(invoice)}
                         >
                           <Printer className="w-3.5 h-3.5 text-primary" />
-                          طباعة الفاتورة
+                          {t('طباعة الفاتورة', 'Imprimer')}
                         </Button>
 
                         <Button
@@ -679,7 +670,7 @@ function InvoicesPageContent() {
                           }}
                         >
                           <Receipt className="w-3.5 h-3.5" />
-                          طلب الدفع
+                          {t('طلب الدفع', 'Demande')}
                         </Button>
                       </div>
                     </div>
@@ -689,7 +680,7 @@ function InvoicesPageContent() {
 
               {filteredInvoices.length === 0 && (
                 <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
-                  <p className="text-xs text-muted-foreground">لا توجد فواتير مطابقة لخيارات البحث</p>
+                  <p className="text-xs text-muted-foreground">{t('لا توجد فواتير مطابقة لخيارات البحث', 'Aucune facture correspondant aux critères')}</p>
                 </div>
               )}
             </div>
@@ -698,6 +689,7 @@ function InvoicesPageContent() {
             <div className="flex flex-col gap-3">
               {filteredInvoices.map((invoice) => {
                 const client = clients.find((c) => c.id === Number(invoice.client_id));
+                const balanceDue = new Decimal(invoice.total_amount || 0).minus(new Decimal(invoice.paid_amount || 0)).toFixed(2);
                 return (
                   <Card
                     key={invoice.id}
@@ -711,14 +703,14 @@ function InvoicesPageContent() {
                         </div>
                         <div>
                           <CardTitle className="text-base font-bold font-mono text-foreground">
-                            {invoice.invoice_number || `فاتورة #${invoice.id}`}
+                            {invoice.invoice_number || `${t('فاتورة', 'Facture')} #${invoice.id}`}
                           </CardTitle>
                           <span className="text-[11px] text-muted-foreground font-semibold">
-                            {client?.name || `عميل #${invoice.client_id}`}
+                            {client?.name || `${t('عميل', 'Client')} #${invoice.client_id}`}
                           </span>
                           {invoice.payment_request_ref && (
                             <span className="block text-[10px] text-amber-600 font-mono mt-0.5">
-                              طلب دفع: {invoice.payment_request_ref}
+                              {t('طلب دفع:', 'Demande :')} {invoice.payment_request_ref}
                             </span>
                           )}
                         </div>
@@ -727,24 +719,21 @@ function InvoicesPageContent() {
                       {/* Middle: Amount, Payments, Dates */}
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                          <span className="text-muted-foreground text-[11px]">المبلغ الإجمالي:</span>
+                          <span className="text-muted-foreground text-[11px]">{t('المبلغ الإجمالي:', 'Montant Total :')}</span>
                           <span className="font-mono font-extrabold text-foreground text-sm">
-                            {parseFloat(String(invoice.total_amount || 0)).toLocaleString()} {invoice.currency || 'د.م.'}
+                            {new Decimal(invoice.total_amount || 0).toNumber().toLocaleString()} {invoice.currency || (locale === 'fr' ? 'MAD' : 'د.م.')}
                           </span>
                         </div>
 
                         <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-2">
-                          <span className="text-muted-foreground text-[11px]">المدفوع:</span>
+                          <span className="text-muted-foreground text-[11px]">{t('المدفوع:', 'Payé :')}</span>
                           <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                            {parseFloat(String(invoice.paid_amount || 0)).toLocaleString()}
+                            {new Decimal(invoice.paid_amount || 0).toNumber().toLocaleString()}
                           </span>
                           <span className="text-muted-foreground text-[10px]">|</span>
-                          <span className="text-muted-foreground text-[11px]">المتبقي:</span>
+                          <span className="text-muted-foreground text-[11px]">{t('المتبقي:', 'Reste :')}</span>
                           <span className="font-mono font-bold text-destructive">
-                            {(
-                              parseFloat(String(invoice.total_amount || 0)) -
-                              parseFloat(String(invoice.paid_amount || 0))
-                            ).toLocaleString()}
+                            {new Decimal(balanceDue).toNumber().toLocaleString()}
                           </span>
                         </div>
 
@@ -752,7 +741,7 @@ function InvoicesPageContent() {
                           <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                             <span className="font-mono text-foreground text-[11px]">
-                              {new Date(invoice.issue_date).toLocaleDateString('ar-MA')}
+                              {new Date(invoice.issue_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
                             </span>
                           </div>
                         )}
@@ -773,10 +762,10 @@ function InvoicesPageContent() {
                               setPaymentRequestInvoice(invoice);
                               setIsPaymentRequestOpen(true);
                             }}
-                            title="إنشاء طلب دفع"
+                            title={t('إنشاء طلب دفع', 'Demande de paiement')}
                           >
-                            <Receipt className="w-3.5 h-3.5 ml-1" />
-                            طلب دفع
+                            <Receipt className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                            {t('طلب دفع', 'Demande')}
                           </Button>
 
                           <Button
@@ -784,10 +773,10 @@ function InvoicesPageContent() {
                             size="sm"
                             className="text-xs rounded-xl h-8 px-2.5"
                             onClick={() => setActiveInvoice(invoice)}
-                            title="معاينة وطباعة الفاتورة"
+                            title={t('معاينة وطباعة الفاتورة', 'Imprimer la facture')}
                           >
-                            <Printer className="w-3.5 h-3.5 text-primary ml-1" />
-                            طباعة
+                            <Printer className={`w-3.5 h-3.5 text-primary ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                            {t('طباعة', 'Imprimer')}
                           </Button>
 
                           <Button
@@ -798,10 +787,10 @@ function InvoicesPageContent() {
                               setEditingInvoice(invoice);
                               setIsFormModalOpen(true);
                             }}
-                            title="تعديل الفاتورة"
+                            title={t('تعديل الفاتورة', 'Modifier la facture')}
                           >
-                            <Edit2 className="w-3.5 h-3.5 ml-1" />
-                            تعديل
+                            <Edit2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                            {t('تعديل', 'Modifier')}
                           </Button>
 
                           <Button
@@ -809,7 +798,7 @@ function InvoicesPageContent() {
                             size="sm"
                             className="text-xs text-destructive hover:bg-destructive/10 rounded-xl h-8 px-2"
                             onClick={() => handleDeleteInvoice(invoice.id)}
-                            title="حذف الفاتورة"
+                            title={t('حذف الفاتورة', 'Supprimer la facture')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
@@ -822,7 +811,7 @@ function InvoicesPageContent() {
 
               {filteredInvoices.length === 0 && (
                 <div className="text-center py-16 bg-card rounded-2xl border border-border">
-                  <p className="text-xs text-muted-foreground">لا توجد فواتير مطابقة لخيارات البحث</p>
+                  <p className="text-xs text-muted-foreground">{t('لا توجد فواتير مطابقة لخيارات البحث', 'Aucune facture correspondant aux critères')}</p>
                 </div>
               )}
             </div>
@@ -836,10 +825,13 @@ function InvoicesPageContent() {
               <div>
                 <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                   <MessageCircle className="w-5 h-5 text-emerald-600" />
-                  إشعارات ومطالبات سداد الفواتير المتأخرة
+                  {t('إشعارات ومطالبات سداد الفواتير المتأخرة', 'Notifications & Rappels de Paiement')}
                 </h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  إرسال تذكيرات رسمية بطلبات الدفع للعملاء عبر تطبيق واتساب لتقليص دورة التحصيل النقدي.
+                  {t(
+                    'إرسال تذكيرات رسمية بطلبات الدفع للعملاء عبر تطبيق واتساب لتقليص دورة التحصيل النقدي.',
+                    'Envoyer des relances officielles par WhatsApp pour accélérer les encaissements.'
+                  )}
                 </p>
               </div>
 
@@ -852,7 +844,7 @@ function InvoicesPageContent() {
                   className="rounded-xl text-xs h-9 gap-1.5"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${remindersLoading ? 'animate-spin' : ''}`} />
-                  تحديث
+                  {t('تحديث', 'Actualiser')}
                 </Button>
 
                 <Button
@@ -862,7 +854,7 @@ function InvoicesPageContent() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs h-9 gap-1.5 font-semibold"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  {sendingAllReminders ? 'جاري الإرسال...' : 'إرسال تذكيرات جماعية'}
+                  {sendingAllReminders ? t('جاري الإرسال...', 'Envoi en cours...') : t('إرسال تذكيرات جماعية', 'Envoyer rappels groupés')}
                 </Button>
               </div>
             </div>
@@ -871,14 +863,14 @@ function InvoicesPageContent() {
               {remindersLoading ? (
                 <div className="text-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-                  <p className="text-xs text-muted-foreground">جاري استرجاع إشعارات طلبات الدفع...</p>
+                  <p className="text-xs text-muted-foreground">{t('جاري استرجاع إشعارات طلبات الدفع...', 'Récupération des rappels...')}</p>
                 </div>
               ) : reminders.length === 0 ? (
                 <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border">
                   <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-foreground">لا توجد فواتير متأخرة حالياً!</p>
+                  <p className="text-sm font-semibold text-foreground">{t('لا توجد فواتير متأخرة حالياً!', 'Aucune facture en retard actuellement !')}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    جميع الفواتير والمطالبات سارية ضمن آجال الاستحقاق المحددة.
+                    {t('جميع الفواتير والمطالبات سارية ضمن آجال الاستحقاق المحددة.', 'Toutes les créances sont dans les délais de paiement accordés.')}
                   </p>
                 </div>
               ) : (
@@ -892,15 +884,15 @@ function InvoicesPageContent() {
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-sm text-foreground">{client.name}</span>
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 font-bold border border-rose-500/20">
-                            متأخرة بـ {daysOverdue} يوم
+                            {t('متأخرة بـ', 'En retard de')} {daysOverdue} {t('يوم', 'j')}
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">
                             #{invoice.invoice_number}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          المبلغ المستحق: <span className="font-mono font-bold text-foreground">{invoice.total_amount} {invoice.currency}</span>
-                          {client.phone && <span className="mr-3">هاتف: {client.phone}</span>}
+                          {t('المبلغ المستحق:', 'Montant dû :')} <span className="font-mono font-bold text-foreground">{invoice.total_amount} {invoice.currency}</span>
+                          {client.phone && <span className={`${dir === 'rtl' ? 'mr-3' : 'ml-3'}`}>{t('هاتف:', 'Tél :')} {client.phone}</span>}
                         </p>
                       </div>
 
@@ -914,8 +906,8 @@ function InvoicesPageContent() {
                           }}
                           className="h-8 text-xs rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
                         >
-                          <Receipt className="w-3.5 h-3.5 ml-1" />
-                          طلب دفع
+                          <Receipt className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                          {t('طلب دفع', 'Demande')}
                         </Button>
 
                         <Button
@@ -927,8 +919,8 @@ function InvoicesPageContent() {
                           }}
                           className="h-8 text-xs rounded-xl text-emerald-600 border-emerald-500/30"
                         >
-                          <ArrowRightLeft className="w-3.5 h-3.5 ml-1" />
-                          تسجيل سداد
+                          <ArrowRightLeft className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                          {t('تسجيل سداد', 'Encaisser')}
                         </Button>
 
                         <a
@@ -938,7 +930,7 @@ function InvoicesPageContent() {
                           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
-                          إرسال واتساب
+                          {t('إرسال واتساب', 'WhatsApp')}
                         </a>
                       </div>
                     </div>
@@ -959,7 +951,7 @@ function InvoicesPageContent() {
         invoices={invoices}
         bankAccounts={bankAccounts}
         initialInvoice={paymentRequestInvoice}
-        onSaved={() => fetchInvoices()}
+        onSaved={() => refreshInvoices()}
         onOpenFIFOPayment={(client) => {
           if (client) setFifoClientId(client.id);
           setIsFIFOPaymentOpen(true);
@@ -985,7 +977,7 @@ function InvoicesPageContent() {
         cashBoxes={cashBoxes}
         initialClientId={fifoClientId}
         onPaymentProcessed={() => {
-          fetchInvoices();
+          refreshInvoices();
           loadReminders();
         }}
       />

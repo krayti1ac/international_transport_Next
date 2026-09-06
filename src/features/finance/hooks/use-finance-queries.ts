@@ -4,10 +4,10 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getDynamicTreasuryBalance, recordBulkClientPayment } from '../services/finance.actions';
 
 export const CASH_BOXES = [
-  { code: 'owner_cash', label: 'Owner Cash', labelAr: 'نقدية المالك', currency: 'MAD' as const },
-  { code: 'bank_morocco', label: 'Bank Morocco (MAD)', labelAr: 'بنك المغرب', currency: 'MAD' as const },
-  { code: 'bank_europe', label: 'Bank Europe (EUR)', labelAr: 'بنك أوروبا', currency: 'EUR' as const },
-  { code: 'secretary_cash', label: 'Secretary Cash', labelAr: 'نقدية المكتب', currency: 'MAD' as const },
+  { code: 'owner_cash', label: 'Owner Cash', labelAr: 'نقدية المالك', labelFr: 'Caisse Propriétaire', currency: 'MAD' as const },
+  { code: 'bank_morocco', label: 'Bank Morocco (MAD)', labelAr: 'بنك المغرب', labelFr: 'Banque Maroc (MAD)', currency: 'MAD' as const },
+  { code: 'bank_europe', label: 'Bank Europe (EUR)', labelAr: 'بنك أوروبا', labelFr: 'Banque Europe (EUR)', currency: 'EUR' as const },
+  { code: 'secretary_cash', label: 'Secretary Cash', labelAr: 'نقدية المكتب', labelFr: 'Caisse Secrétaire', currency: 'MAD' as const },
 ] as const;
 
 export function useTreasuryBalance(cashBoxCode: string) {

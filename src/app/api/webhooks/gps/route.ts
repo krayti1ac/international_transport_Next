@@ -38,7 +38,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'البيانات المرسلة فارغة' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const isServiceRole = serviceRoleKey && !serviceRoleKey.includes('your-service-role') && serviceRoleKey.length > 50;
+    
+    const supabase = isServiceRole
+      ? (await import('@supabase/supabase-js')).createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : await createClient();
 
     for (const item of data) {
       let truckId = item.truck_id;
@@ -63,7 +70,8 @@ export async function POST(req: NextRequest) {
         truck_id: truckId,
         latitude: item.latitude,
         longitude: item.longitude,
-        timestamp: recordTime,
+        recorded_at: recordTime,
+        ...(item.speed !== undefined ? { speed: item.speed } : {}),
       });
 
       if (item.address || (item.latitude && item.longitude)) {

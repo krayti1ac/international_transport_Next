@@ -24,15 +24,24 @@ import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggl
 import { VehicleDetailsModal } from '@/features/fleet/components/VehicleDetailsModal';
 import { DEFAULT_TRUCKS, DEFAULT_DRIVERS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
+import { useFleetDataQuery } from '@/lib/query/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { useLanguage } from '@/components/language-provider';
+
 type TabType = 'trucks' | 'trailers';
 type EntityType = 'truck' | 'trailer';
 
 export default function FleetPage() {
+  const { locale, dir, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('trucks');
-  const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [trailers, setTrailers] = useState<Trailer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: fleetData, isLoading } = useFleetDataQuery();
+  const queryClient = useQueryClient();
+
+  const trucks = fleetData?.trucks || [];
+  const drivers = fleetData?.drivers || [];
+  const trailers = fleetData?.trailers || [];
+  const loading = isLoading;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [cardLayout, setCardLayout] = useCardViewMode('fleet', 'grid');
 
@@ -43,44 +52,22 @@ export default function FleetPage() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [trucksRes, driversRes, trailersRes] = await Promise.all([
-        supabase.from('trucks').select('*').order('plate_number'),
-        supabase.from('drivers').select('*').order('name'),
-        supabase.from('trailers').select('*').order('plate_number'),
-      ]);
-
-      if (trucksRes.error) throw trucksRes.error;
-      if (driversRes.error) throw driversRes.error;
-      if (trailersRes.error) throw trailersRes.error;
-
-      setTrucks(fallbackArray(trucksRes.data, DEFAULT_TRUCKS));
-      setDrivers(fallbackArray(driversRes.data, DEFAULT_DRIVERS));
-      setTrailers(fallbackArray(trailersRes.data, DEFAULT_TRAILERS));
-    } catch {
-      setTrucks((prev) => fallbackArray(prev, DEFAULT_TRUCKS));
-      setDrivers((prev) => fallbackArray(prev, DEFAULT_DRIVERS));
-      setTrailers((prev) => fallbackArray(prev, DEFAULT_TRAILERS));
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
+  const refreshData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['fleet-data'] });
+  }, [queryClient]);
 
   useEffect(() => {
-    fetchData();
-
     const channel = supabase
       .channel('fleet-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trucks' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trailers' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trucks' }, () => refreshData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => refreshData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trailers' }, () => refreshData())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchData, supabase]);
+  }, [refreshData, supabase]);
 
   const handleSaveItem = async (type: EntityType, data: any) => {
     const tableName = type === 'truck' ? 'trucks' : 'trailers';
@@ -98,13 +85,17 @@ export default function FleetPage() {
             console.warn('Releasing previous driver assignment:', e);
           }
 
-          setTrucks((prev) =>
-            prev.map((t) =>
-              t.id !== data.id && t.default_driver_id === data.default_driver_id
-                ? { ...t, default_driver_id: undefined }
-                : t
-            )
-          );
+          queryClient.setQueryData(['fleet-data'], (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              trucks: (old.trucks || []).map((t: any) =>
+                t.id !== data.id && t.default_driver_id === data.default_driver_id
+                  ? { ...t, default_driver_id: undefined }
+                  : t
+              ),
+            };
+          });
         }
 
         if (data.default_trailer_id) {
@@ -118,13 +109,17 @@ export default function FleetPage() {
             console.warn('Releasing previous trailer assignment:', e);
           }
 
-          setTrucks((prev) =>
-            prev.map((t) =>
-              t.id !== data.id && t.default_trailer_id === data.default_trailer_id
-                ? { ...t, default_trailer_id: undefined }
-                : t
-            )
-          );
+          queryClient.setQueryData(['fleet-data'], (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              trucks: (old.trucks || []).map((t: any) =>
+                t.id !== data.id && t.default_trailer_id === data.default_trailer_id
+                  ? { ...t, default_trailer_id: undefined }
+                  : t
+              ),
+            };
+          });
         }
       }
 
@@ -153,11 +148,11 @@ export default function FleetPage() {
       }
 
       if (error) throw error;
-      toast({ title: data.id ? 'تم تحديث البيانات بنجاح' : 'تمت الإضافة بنجاح' });
-      fetchData();
+      toast({ title: data.id ? t('تم تحديث البيانات بنجاح', 'Données mises à jour avec succès') : t('تمت الإضافة بنجاح', 'Ajout effectué avec succès') });
+      refreshData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحفظ',
+        title: t('خطأ أثناء الحفظ', 'Erreur lors de l\'enregistrement'),
         description: error.message,
         variant: 'destructive',
       });
@@ -165,17 +160,17 @@ export default function FleetPage() {
   };
 
   const handleDeleteItem = async (type: TabType, id: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا العنصر؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذا العنصر؟', 'Êtes-vous sûr de vouloir supprimer cet élément ?'))) return;
     const tableName = type === 'trucks' ? 'trucks' : 'trailers';
 
     try {
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم الحذف بنجاح' });
-      fetchData();
+      toast({ title: t('تم الحذف بنجاح', 'Suppression réussie') });
+      refreshData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحذف',
+        title: t('خطأ أثناء الحذف', 'Erreur lors de la suppression'),
         description: error.message,
         variant: 'destructive',
       });
@@ -203,18 +198,18 @@ export default function FleetPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'active':
-        return 'نشط ومتاح';
+        return t('نشط ومتاح', 'Actif & disponible');
       case 'in_maintenance':
       case 'maintenance':
-        return 'في الصيانة';
+        return t('في الصيانة', 'En maintenance');
       case 'in_trip':
-        return 'في رحلة';
+        return t('في رحلة', 'En voyage');
       case 'vacation':
-        return 'في إجازة';
+        return t('في إجازة', 'En congé');
       case 'inactive':
-        return 'متوقف';
+        return t('متوقف', 'Inactif');
       default:
-        return status || 'غير محدد';
+        return status || t('غير محدد', 'Non défini');
     }
   };
 
@@ -223,19 +218,22 @@ export default function FleetPage() {
   const currentEntityType: EntityType = activeTab === 'trucks' ? 'truck' : 'trailer';
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span>إدارة الأسطول واللوجستيات</span>
+            <span>{t('إدارة الأسطول واللوجستيات', 'Gestion de flotte & logistique')}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
-            المركبات والمقطورات
+            {t('المركبات والمقطورات', 'Véhicules & Remorques')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            متابعة دقيقة لحالة الأسطول، الشاحنات والمقطورات، تراخيص التأمين والفحص الدوري.
+            {t(
+              'متابعة دقيقة لحالة الأسطول، الشاحنات والمقطورات، تراخيص التأمين والفحص الدوري.',
+              'Suivi précis de la flotte, camions et remorques, assurances et contrôles techniques.'
+            )}
           </p>
         </div>
 
@@ -246,8 +244,10 @@ export default function FleetPage() {
           }}
           className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
         >
-          <Plus className="w-4 h-4 ml-2" />
-          {activeTab === 'trucks' ? 'إضافة شاحنة جديدة' : 'إضافة مقطورة جديدة'}
+          <Plus className="w-4 h-4 me-2" />
+          {activeTab === 'trucks'
+            ? t('إضافة شاحنة جديدة', 'Ajouter un camion')
+            : t('إضافة مقطورة جديدة', 'Ajouter une remorque')}
         </Button>
       </div>
 
@@ -255,11 +255,13 @@ export default function FleetPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">الشاحنات المتاحة</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('الشاحنات المتاحة', 'Camions disponibles')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
               {activeTrucksCount} <span className="text-xs text-muted-foreground font-normal">/ {trucks.length}</span>
             </div>
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">جاهزية تشغيلية عالية</span>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+              {t('جاهزية تشغيلية عالية', 'Haute disponibilité opérationnelle')}
+            </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
             <TruckIcon className="w-5 h-5" />
@@ -268,11 +270,13 @@ export default function FleetPage() {
 
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">شاحنات في رحلات نشطة</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('شاحنات في رحلات نشطة', 'Camions en mission')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
               {inTripTrucksCount} <span className="text-xs text-muted-foreground font-normal">/ {trucks.length}</span>
             </div>
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">عمليات شحن دولية ومحلية</span>
+            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+              {t('عمليات شحن دولية ومحلية', 'Opérations internationales & locales')}
+            </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <Activity className="w-5 h-5" />
@@ -281,11 +285,13 @@ export default function FleetPage() {
 
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">المقطورات المسجلة</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('المقطورات المسجلة', 'Remorques enregistrées')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
-              {trailers.length} <span className="text-xs text-muted-foreground font-normal">مقطورة</span>
+              {trailers.length} <span className="text-xs text-muted-foreground font-normal">{t('مقطورة', 'remorques')}</span>
             </div>
-            <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">نقل دولي مبرد وجاف</span>
+            <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
+              {t('نقل دولي مبرد وجاف', 'Transport frigorifique & sec')}
+            </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
             <Warehouse className="w-5 h-5" />
@@ -305,7 +311,7 @@ export default function FleetPage() {
             }`}
           >
             <TruckIcon className="w-3.5 h-3.5" />
-            <span>الشاحنات ({trucks.length})</span>
+            <span>{t('الشاحنات', 'Camions')} ({trucks.length})</span>
           </button>
 
           <button
@@ -317,7 +323,7 @@ export default function FleetPage() {
             }`}
           >
             <Warehouse className="w-3.5 h-3.5" />
-            <span>المقطورات ({trailers.length})</span>
+            <span>{t('المقطورات', 'Remorques')} ({trailers.length})</span>
           </button>
         </div>
 
@@ -326,12 +332,12 @@ export default function FleetPage() {
           <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
 
           <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Search className="absolute start-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
-              placeholder="بحث بالرقم، اللوحة، أو الموديل..."
+              placeholder={t('بحث بالرقم، اللوحة، أو الموديل...', 'Rechercher par immatriculation, modèle...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-9 h-9 text-xs rounded-xl bg-card border-border/80"
+              className="ps-9 h-9 text-xs rounded-xl bg-card border-border/80"
             />
           </div>
         </div>
@@ -340,7 +346,7 @@ export default function FleetPage() {
       {/* Main Content (Grid Cards vs List View Cards) */}
       {loading ? (
         <div className="text-center py-16 bg-card rounded-2xl border border-border">
-          <p className="text-xs text-muted-foreground">جاري تحميل بيانات الأسطول...</p>
+          <p className="text-xs text-muted-foreground">{t('جاري تحميل بيانات الأسطول...', 'Chargement des données de flotte...')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -370,7 +376,7 @@ export default function FleetPage() {
                                 <MatriculeBadge plate={truck.plate_number} variant="badge" size="sm" />
                               </Link>
                             </div>
-                            <span className="text-[11px] text-muted-foreground">{truck.model || 'شاحنة نقل دولي'}</span>
+                            <span className="text-[11px] text-muted-foreground">{truck.model || t('شاحنة نقل دولي', 'Camion de transport international')}</span>
                           </div>
                         </div>
                         <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${getStatusColor(truck.status)}`}>
@@ -380,30 +386,30 @@ export default function FleetPage() {
                     </CardHeader>
                     <CardContent className="p-4 space-y-2.5 text-xs">
                       <div className="flex justify-between py-1 border-b border-border/30">
-                        <span className="text-muted-foreground">السائق المسند:</span>
+                        <span className="text-muted-foreground">{t('السائق المسند:', 'Chauffeur assigné :')}</span>
                         <span className="font-semibold text-foreground">
-                          {drivers.find((d) => d.id === truck.default_driver_id)?.name || truck.default_driver_name || 'غير مسند'}
+                          {drivers.find((d) => d.id === truck.default_driver_id)?.name || truck.default_driver_name || t('غير مسند', 'Non assigné')}
                         </span>
                       </div>
                       <div className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
-                        <span className="text-muted-foreground shrink-0">المقطورة المجرورة:</span>
-                        <span className="font-semibold text-foreground text-left">
+                        <span className="text-muted-foreground shrink-0">{t('المقطورة المجرورة:', 'Remorque attelée :')}</span>
+                        <span className="font-semibold text-foreground text-start">
                           {(() => {
                             const trl = trailers.find((t) => t.id === truck.default_trailer_id);
-                            if (!trl) return <span className="text-muted-foreground">غير مسندة</span>;
+                            if (!trl) return <span className="text-muted-foreground">{t('غير مسندة', 'Non assignée')}</span>;
                             return <MatriculeBadge plate={trl.plate_number} variant="badge" size="xs" />;
                           })()}
                         </span>
                       </div>
                       {truck.weight_capacity && (
                         <div className="flex justify-between py-1 border-b border-border/30">
-                          <span className="text-muted-foreground">سعة الحمولة:</span>
-                          <span className="font-mono font-bold text-foreground">{truck.weight_capacity} طن</span>
+                          <span className="text-muted-foreground">{t('سعة الحمولة:', 'Capacité de charge :')}</span>
+                          <span className="font-mono font-bold text-foreground">{truck.weight_capacity} {t('طن', 't')}</span>
                         </div>
                       )}
                       <div className="flex justify-between py-1">
-                        <span className="text-muted-foreground">الموقع الحالي:</span>
-                        <span className="font-mono text-foreground text-[11px]">{truck.current_location || 'المقر الرئيسي'}</span>
+                        <span className="text-muted-foreground">{t('الموقع الحالي:', 'Position actuelle :')}</span>
+                        <span className="font-mono text-foreground text-[11px]">{truck.current_location || t('المقر الرئيسي', 'Siège principal')}</span>
                       </div>
                     </CardContent>
                   </div>
@@ -414,8 +420,8 @@ export default function FleetPage() {
                       className="flex-1 text-xs rounded-xl h-8 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400 font-medium"
                       onClick={() => setSelectedDetailsVehicle({ entity: truck, type: 'truck' })}
                     >
-                      <FileText className="w-3.5 h-3.5 ml-1" />
-                      السجلات
+                      <FileText className="w-3.5 h-3.5 me-1" />
+                      {t('السجلات', 'Historique')}
                     </Button>
                     <Button
                       variant="outline"
@@ -425,8 +431,8 @@ export default function FleetPage() {
                         setIsModalOpen(true);
                       }}
                     >
-                      <Edit2 className="w-3.5 h-3.5 ml-1" />
-                      تعديل
+                      <Edit2 className="w-3.5 h-3.5 me-1" />
+                      {t('تعديل', 'Modifier')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -466,7 +472,7 @@ export default function FleetPage() {
                                 <MatriculeBadge plate={trailer.plate_number} variant="badge" size="sm" />
                               </Link>
                             </div>
-                            <span className="text-[11px] text-muted-foreground">{trailer.model || 'مقطورة شحن'}</span>
+                            <span className="text-[11px] text-muted-foreground">{trailer.model || t('مقطورة شحن', 'Remorque de transport')}</span>
                           </div>
                         </div>
                         <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${getStatusColor(trailer.status)}`}>
@@ -483,30 +489,30 @@ export default function FleetPage() {
                         return (
                           <>
                             <div className="flex justify-between py-1 border-b border-border/30">
-                              <span className="text-muted-foreground">الشاحنة المرتبطة:</span>
+                              <span className="text-muted-foreground">{t('الشاحنة المرتبطة:', 'Camion associé :')}</span>
                               <span className="font-semibold text-foreground">
                                 {assignedTruck ? (
                                   <MatriculeBadge plate={assignedTruck.plate_number} variant="badge" size="sm" />
                                 ) : (
-                                  <span className="text-muted-foreground">غير مسندة</span>
+                                  <span className="text-muted-foreground">{t('غير مسندة', 'Non assignée')}</span>
                                 )}
                               </span>
                             </div>
                             <div className="flex justify-between py-1 border-b border-border/30">
-                              <span className="text-muted-foreground">السائق المرتبط:</span>
+                              <span className="text-muted-foreground">{t('السائق المرتبط:', 'Chauffeur associé :')}</span>
                               <span className="font-semibold text-foreground">
-                                {assignedDriver?.name || 'غير مسند'}
+                                {assignedDriver?.name || t('غير مسند', 'Non assigné')}
                               </span>
                             </div>
                             <div className="flex justify-between py-1">
-                              <span className="text-muted-foreground">الموقع:</span>
+                              <span className="text-muted-foreground">{t('الموقع:', 'Position :')}</span>
                               <span className="font-mono text-foreground text-[11px]">
-                                {assignedTruck?.current_location || 'المقر الرئيسي'}
+                                {assignedTruck?.current_location || t('المقر الرئيسي', 'Siège principal')}
                               </span>
                             </div>
                             <div className="flex justify-between py-1">
-                              <span className="text-muted-foreground">الفحص الفني:</span>
-                              <span className="font-mono text-muted-foreground text-[11px]">ساري المفعول</span>
+                              <span className="text-muted-foreground">{t('الفحص الفني:', 'Contrôle technique :')}</span>
+                              <span className="font-mono text-muted-foreground text-[11px]">{t('ساري المفعول', 'Valide')}</span>
                             </div>
                           </>
                         );
@@ -520,8 +526,8 @@ export default function FleetPage() {
                       className="flex-1 text-xs rounded-xl h-8 bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 dark:text-purple-400 font-medium"
                       onClick={() => setSelectedDetailsVehicle({ entity: trailer, type: 'trailer' })}
                     >
-                      <FileText className="w-3.5 h-3.5 ml-1" />
-                      السجلات
+                      <FileText className="w-3.5 h-3.5 me-1" />
+                      {t('السجلات', 'Historique')}
                     </Button>
                     <Button
                       variant="outline"
@@ -531,8 +537,8 @@ export default function FleetPage() {
                         setIsModalOpen(true);
                       }}
                     >
-                      <Edit2 className="w-3.5 h-3.5 ml-1" />
-                      تعديل
+                      <Edit2 className="w-3.5 h-3.5 me-1" />
+                      {t('تعديل', 'Modifier')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -574,38 +580,38 @@ export default function FleetPage() {
                             <MatriculeBadge plate={truck.plate_number} variant="badge" size="sm" />
                           </Link>
                         </div>
-                        <span className="text-[11px] text-muted-foreground">{truck.model || 'شاحنة نقل دولي'}</span>
+                        <span className="text-[11px] text-muted-foreground">{truck.model || t('شاحنة نقل دولي', 'Camion de transport international')}</span>
                       </div>
                     </div>
 
                     {/* Middle: Driver, Trailer, Weight, Location */}
                     <div className="flex flex-wrap items-center gap-3 text-xs">
                       <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                        <span className="text-muted-foreground text-[11px]">السائق:</span>
+                        <span className="text-muted-foreground text-[11px]">{t('السائق:', 'Chauffeur :')}</span>
                         <span className="font-semibold text-foreground">
-                          {drivers.find((d) => d.id === truck.default_driver_id)?.name || truck.default_driver_name || 'غير مسند'}
+                          {drivers.find((d) => d.id === truck.default_driver_id)?.name || truck.default_driver_name || t('غير مسند', 'Non assigné')}
                         </span>
                       </div>
 
                       <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                        <span className="text-muted-foreground text-[11px]">المقطورة:</span>
+                        <span className="text-muted-foreground text-[11px]">{t('المقطورة:', 'Remorque :')}</span>
                         {(() => {
                           const trl = trailers.find((t) => t.id === truck.default_trailer_id);
-                          if (!trl) return <span className="text-muted-foreground text-[11px]">غير مسندة</span>;
+                          if (!trl) return <span className="text-muted-foreground text-[11px]">{t('غير مسندة', 'Non assignée')}</span>;
                           return <MatriculeBadge plate={trl.plate_number} variant="badge" size="xs" />;
                         })()}
                       </div>
 
                       {truck.weight_capacity && (
                         <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                          <span className="text-muted-foreground text-[11px]">الحمولة:</span>
-                          <span className="font-mono font-bold text-foreground">{truck.weight_capacity} طن</span>
+                          <span className="text-muted-foreground text-[11px]">{t('الحمولة:', 'Capacité :')}</span>
+                          <span className="font-mono font-bold text-foreground">{truck.weight_capacity} {t('طن', 't')}</span>
                         </div>
                       )}
 
                       <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                        <span className="text-muted-foreground text-[11px]">الموقع:</span>
-                        <span className="font-mono text-foreground text-[11px]">{truck.current_location || 'المقر الرئيسي'}</span>
+                        <span className="text-muted-foreground text-[11px]">{t('الموقع:', 'Position :')}</span>
+                        <span className="font-mono text-foreground text-[11px]">{truck.current_location || t('المقر الرئيسي', 'Siège principal')}</span>
                       </div>
                     </div>
 
@@ -621,8 +627,8 @@ export default function FleetPage() {
                           className="text-xs rounded-xl h-8 px-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400 font-medium"
                           onClick={() => setSelectedDetailsVehicle({ entity: truck, type: 'truck' })}
                         >
-                          <FileText className="w-3.5 h-3.5 ml-1" />
-                          السجلات
+                          <FileText className="w-3.5 h-3.5 me-1" />
+                          {t('السجلات', 'Historique')}
                         </Button>
                         <Button
                           variant="outline"
@@ -633,8 +639,8 @@ export default function FleetPage() {
                             setIsModalOpen(true);
                           }}
                         >
-                          <Edit2 className="w-3.5 h-3.5 ml-1" />
-                          تعديل
+                          <Edit2 className="w-3.5 h-3.5 me-1" />
+                          {t('تعديل', 'Modifier')}
                         </Button>
                         <Button
                           variant="ghost"
@@ -675,7 +681,7 @@ export default function FleetPage() {
                             <MatriculeBadge plate={trailer.plate_number} variant="badge" size="sm" />
                           </Link>
                         </div>
-                        <span className="text-[11px] text-muted-foreground">{trailer.model || 'مقطورة شحن'}</span>
+                        <span className="text-[11px] text-muted-foreground">{trailer.model || t('مقطورة شحن', 'Remorque de transport')}</span>
                       </div>
                     </div>
 
@@ -689,23 +695,23 @@ export default function FleetPage() {
                         return (
                           <>
                             <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                              <span className="text-muted-foreground text-[11px]">الشاحنة:</span>
+                              <span className="text-muted-foreground text-[11px]">{t('الشاحنة:', 'Camion :')}</span>
                               {assignedTruck ? (
                                 <MatriculeBadge plate={assignedTruck.plate_number} variant="badge" size="xs" />
                               ) : (
-                                <span className="text-muted-foreground text-[11px]">غير مسندة</span>
+                                <span className="text-muted-foreground text-[11px]">{t('غير مسندة', 'Non assignée')}</span>
                               )}
                             </div>
                             <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                              <span className="text-muted-foreground text-[11px]">السائق:</span>
+                              <span className="text-muted-foreground text-[11px]">{t('السائق:', 'Chauffeur :')}</span>
                               <span className="font-semibold text-foreground">
-                                {assignedDriver?.name || 'غير مسند'}
+                                {assignedDriver?.name || t('غير مسند', 'Non assigné')}
                               </span>
                             </div>
                             <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                              <span className="text-muted-foreground text-[11px]">الموقع:</span>
+                              <span className="text-muted-foreground text-[11px]">{t('الموقع:', 'Position :')}</span>
                               <span className="font-mono text-foreground text-[11px]">
-                                {assignedTruck?.current_location || 'المقر الرئيسي'}
+                                {assignedTruck?.current_location || t('المقر الرئيسي', 'Siège principal')}
                               </span>
                             </div>
                           </>
@@ -725,8 +731,8 @@ export default function FleetPage() {
                           className="text-xs rounded-xl h-8 px-3 bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 dark:text-purple-400 font-medium"
                           onClick={() => setSelectedDetailsVehicle({ entity: trailer, type: 'trailer' })}
                         >
-                          <FileText className="w-3.5 h-3.5 ml-1" />
-                          السجلات
+                          <FileText className="w-3.5 h-3.5 me-1" />
+                          {t('السجلات', 'Historique')}
                         </Button>
                         <Button
                           variant="outline"
@@ -737,8 +743,8 @@ export default function FleetPage() {
                             setIsModalOpen(true);
                           }}
                         >
-                          <Edit2 className="w-3.5 h-3.5 ml-1" />
-                          تعديل
+                          <Edit2 className="w-3.5 h-3.5 me-1" />
+                          {t('تعديل', 'Modifier')}
                         </Button>
                         <Button
                           variant="ghost"
@@ -786,7 +792,7 @@ export default function FleetPage() {
             setSelectedDetailsVehicle(null);
             await handleDeleteItem(type === 'truck' ? 'trucks' : 'trailers', id);
           }}
-          onRefresh={fetchData}
+          onRefresh={refreshData}
         />
       )}
     </div>

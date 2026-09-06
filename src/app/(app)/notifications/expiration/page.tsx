@@ -1,8 +1,6 @@
 import { Suspense } from 'react';
 import { ExpirationAlertsView } from '@/features/notifications/components/ExpirationAlertsView';
 
-export const instant = false;
-
 export const metadata = {
   title: 'تنبيهات الانتهاء | نظام النقل الدولي',
   description: 'تأشيرات السائقين ووثائق الأسطول القريبة من الانتهاء',

@@ -14,6 +14,7 @@ import {
   Layers,
   Sparkles,
   ShieldCheck,
+  FolderCog,
 } from 'lucide-react';
 import type { FleetDocument, Truck as TruckType, Trailer as TrailerType } from '@/types/database';
 import {
@@ -26,9 +27,12 @@ import { FleetDocumentsList } from '@/features/fleet/components/FleetDocumentsLi
 import { QuickRenewDialog } from '@/features/fleet/components/QuickRenewDialog';
 import { RenewalHistoryModal } from '@/features/fleet/components/RenewalHistoryModal';
 import { DocumentUploadModal } from '@/features/fleet/components/DocumentUploadModal';
+import { DocumentCategoriesModal } from '@/features/fleet/components/DocumentCategoriesModal';
 import { createClient } from '@/lib/supabase/client';
+import { useLanguage } from '@/components/language-provider';
 
 export function FleetDocumentsDashboard() {
+  const { dir, t } = useLanguage();
   const [viewMode, setViewMode] = useState<'matrix' | 'list'>('matrix');
   const [matrixRows, setMatrixRows] = useState<FleetMatrixRow[]>([]);
   const [allDocuments, setAllDocuments] = useState<FleetDocument[]>([]);
@@ -47,6 +51,7 @@ export function FleetDocumentsDashboard() {
     plate: string;
   } | null>(null);
   const [uploadInitialDocType, setUploadInitialDocType] = useState<string | null>(null);
+  const [categoriesModalOpen, setCategoriesModalOpen] = useState(false);
 
   const { toast } = useToast();
   const supabase = createClient();
@@ -73,13 +78,13 @@ export function FleetDocumentsDashboard() {
         setTrailers(trailersRes.data);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل في تحميل بيانات الأسطول';
-      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
+      const msg = err instanceof Error ? err.message : t('فشل في تحميل بيانات الأسطول', 'Échec du chargement des données de flotte');
+      toast({ title: t('خطأ', 'Erreur'), description: msg, variant: 'destructive' });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   useEffect(() => {
     loadData();
@@ -108,21 +113,21 @@ export function FleetDocumentsDashboard() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>رادار وثائق الأسطول والتجديد المالي</span>
+            <span>{t('رادار وثائق الأسطول والتجديد المالي', 'Radar des documents & renouvellement financier')}</span>
             <span className="text-border">|</span>
             <span className="text-primary font-bold">Trans Bodanon Enterprise</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
-            مصفوفة وثائق الأسطول والتجديد
+            {t('مصفوفة وثائق الأسطول والتجديد', 'Matrice des documents de flotte et renouvellement')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
-            متابعة شاملة لتأمين، فحص، وتراخيص الشاحنات والمقطورات مع الربط التلقائي بالخزينة.
+            {t('متابعة شاملة لتأمين، فحص، وتراخيص الشاحنات والمقطورات مع الربط التلقائي بالخزينة.', "Suivi complet des assurances, contrôles techniques et autorisations avec liaison automatique à la trésorerie.")}
           </p>
         </div>
 
@@ -139,7 +144,7 @@ export function FleetDocumentsDashboard() {
               }`}
             >
               <TableIcon className="w-3.5 h-3.5" />
-              <span>عرض المصفوفة (Matrix)</span>
+              <span>{t('عرض المصفوفة', 'Vue matrice')}</span>
             </button>
             <button
               onClick={() => setViewMode('list')}
@@ -150,7 +155,7 @@ export function FleetDocumentsDashboard() {
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>عرض البطاقات (Cards)</span>
+              <span>{t('عرض البطاقات', 'Vue cartes')}</span>
             </button>
           </div>
 
@@ -158,8 +163,18 @@ export function FleetDocumentsDashboard() {
             onClick={() => handleOpenAddNew()}
             className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
           >
-            <PlusCircle className="w-4 h-4 ml-1.5" />
-            إضافة وثيقة جديدة
+            <PlusCircle className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+            {t('إضافة وثيقة جديدة', 'Ajouter un document')}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setCategoriesModalOpen(true)}
+            className="rounded-xl h-10 px-3.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted/50"
+            title={t('إدارة أنواع وثائق الأسطول (إضافة، تعديل، حذف مشروط)', 'Gérer les types de documents de flotte')}
+          >
+            <FolderCog className="w-4 h-4 text-blue-600" />
+            <span>{t('إدارة أنواع الوثائق', 'Types de documents')}</span>
           </Button>
 
           <Button
@@ -167,7 +182,7 @@ export function FleetDocumentsDashboard() {
             size="icon"
             onClick={handleRefresh}
             disabled={refreshing}
-            title="تحديث البيانات"
+            title={t('تحديث البيانات', 'Actualiser les données')}
             className="rounded-xl h-10 w-10 border border-border text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -228,6 +243,13 @@ export function FleetDocumentsDashboard() {
           initialDocType={uploadInitialDocType}
         />
       )}
+
+      {/* Document Categories Management Modal */}
+      <DocumentCategoriesModal
+        isOpen={categoriesModalOpen}
+        onClose={() => setCategoriesModalOpen(false)}
+        onCategoriesUpdated={loadData}
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { MapPin, Truck as TruckIcon, Navigation, Calendar, CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
 
 const TrackingMap = dynamic(
-  () => import('@/app/(app)/truck-tracking/tracking-map').then((mod) => ({ default: mod.TrackingMap })),
+  () => import('@/features/tracking/components/TrackingMap').then((mod) => ({ default: mod.TrackingMap })),
   {
     ssr: false,
     loading: () => (
@@ -57,7 +57,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
             ? supabase.from('clients').select('*').eq('id', tripData.client_id).single()
             : Promise.resolve({ data: null }),
           tripData.truck_id
-            ? supabase.from('truck_locations').select('*').eq('truck_id', tripData.truck_id).order('timestamp', { ascending: false }).limit(20)
+            ? supabase.from('truck_locations').select('*').eq('truck_id', tripData.truck_id).order('recorded_at', { ascending: false }).limit(20)
             : Promise.resolve({ data: [] }),
         ]);
 
@@ -66,7 +66,12 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
         if (tripData.truck_id && locsRes.data) {
           const locMap = new Map<number, TruckLocation[]>();
-          locMap.set(tripData.truck_id, locsRes.data);
+          const normalized = locsRes.data.map((l) => ({
+            ...l,
+            timestamp: l.timestamp || l.recorded_at,
+            recorded_at: l.recorded_at || l.timestamp,
+          }));
+          locMap.set(tripData.truck_id, normalized);
           setLocations(locMap);
         }
       } catch (err) {
@@ -95,7 +100,12 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           filter: `truck_id=eq.${trip.truck_id}`,
         },
         (payload) => {
-          const newLoc = payload.new as TruckLocation;
+          const rawLoc = payload.new as TruckLocation;
+          const newLoc: TruckLocation = {
+            ...rawLoc,
+            timestamp: rawLoc.timestamp || rawLoc.recorded_at,
+            recorded_at: rawLoc.recorded_at || rawLoc.timestamp,
+          };
           setLocations((prev) => {
             const updated = new Map(prev);
             const current = updated.get(trip.truck_id!) || [];
@@ -194,7 +204,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
                   <p className="text-xs text-muted-foreground">آخر تحديث للموقع</p>
                   <p className="font-bold text-sm text-foreground mt-0.5">
                     {latestLoc
-                      ? new Date(latestLoc.timestamp).toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })
+                      ? new Date(latestLoc.recorded_at || latestLoc.timestamp || '').toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })
                       : 'الآن'}
                   </p>
                 </div>

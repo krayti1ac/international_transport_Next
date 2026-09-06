@@ -212,7 +212,9 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
     for (const tm of truckMaintenance) {
       if (tm.truck_id && truckStats[tm.truck_id]) {
         const amt = new Decimal(tm.amount || 0);
-        if (tm.type === 'fuel') {
+        const expType = (tm.expense_type || tm.type || '').toLowerCase();
+        const isFuel = expType === 'fuel' || expType === 'carburant' || expType === 'gasoil';
+        if (isFuel) {
           truckStats[tm.truck_id].fuel = truckStats[tm.truck_id].fuel.plus(amt);
         } else {
           truckStats[tm.truck_id].maint = truckStats[tm.truck_id].maint.plus(amt);

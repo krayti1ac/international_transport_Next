@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 import { Shield, User as UserIcon, FileText, Trash2, Edit, Copy } from 'lucide-react';
 
 interface AuditLog {
@@ -17,6 +18,7 @@ interface AuditLog {
 }
 
 export default function AuditLogsPage() {
+  const { t, dir, locale } = useLanguage();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -39,7 +41,7 @@ export default function AuditLogsPage() {
       setLogs((data as AuditLog[]) || []);
     } catch (error: any) {
       toast({
-        title: 'خطأ في جلب سجلات التدقيق',
+        title: t('خطأ في جلب سجلات التدقيق', 'Erreur de chargement du journal d’audit'),
         description: error.message,
         variant: 'destructive',
       });
@@ -79,22 +81,22 @@ export default function AuditLogsPage() {
 
   const getActionText = (action: string) => {
     switch (action) {
-      case 'soft_delete': return 'حذف';
-      case 'update': return 'تعديل';
-      case 'duplicate': return 'نسخ';
+      case 'soft_delete': return t('حذف', 'Suppression');
+      case 'update': return t('تعديل', 'Modification');
+      case 'duplicate': return t('نسخ', 'Duplication');
       default: return action;
     }
   };
 
   const getEntityText = (entity: string) => {
     switch (entity) {
-      case 'trip_orders': return 'رحلات';
-      case 'invoices': return 'فواتير';
-      case 'advances': return 'سلف';
-      case 'clients': return 'عملاء';
-      case 'drivers': return 'سائقين';
-      case 'trucks': return 'شاحنات';
-      case 'payments': return 'مدفوعات';
+      case 'trip_orders': return t('رحلات', 'Voyages');
+      case 'invoices': return t('فواتير', 'Factures');
+      case 'advances': return t('سلفيات', 'Avances');
+      case 'clients': return t('عملاء', 'Clients');
+      case 'drivers': return t('سائقين', 'Conducteurs');
+      case 'trucks': return t('شاحنات', 'Véhicules');
+      case 'payments': return t('مدفوعات', 'Règlements');
       default: return entity;
     }
   };
@@ -102,21 +104,28 @@ export default function AuditLogsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">جاري تحميل السجلات...</p>
+        <p className="text-muted-foreground">{t('جاري تحميل السجلات...', 'Chargement du journal...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">سجلات التدقيق والحركات الأمنية</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">تتبع التغييرات والتعديلات وعمليات الحذف في النظام</p>
+        <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
+          <Shield className="w-6 h-6 text-primary" />
+          {t('سجلات التدقيق والحركات الأمنية', 'Journal d’Audit & Sécurité')}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {t('تتبع التغييرات والتعديلات وعمليات الحذف في النظام', 'Traçabilité complète des modifications, suppressions et actions critiques')}
+        </p>
       </div>
 
       <Card>
         <CardHeader className="border-b border-border pb-3">
-          <CardTitle className="font-amiri text-foreground">سجل العمليات الأخير</CardTitle>
+          <CardTitle className="font-amiri text-foreground">
+            {t('سجل العمليات الأخير', 'Dernières opérations enregistrées')}
+          </CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
           <div className="space-y-3">
@@ -129,31 +138,31 @@ export default function AuditLogsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-bold text-foreground">{getActionText(log.action_type)}</span>
-                      <span className="text-muted-foreground mx-2">في</span>
+                      <span className="text-muted-foreground mx-2">{t('في', 'sur')}</span>
                       <span className="font-medium text-foreground bg-primary/10 text-primary px-2 py-0.5 rounded text-xs">
                         {getEntityText(log.entity_type)}
                       </span>
                     </div>
                     <span className="text-xs text-muted-foreground font-mono">
-                      {new Date(log.created_at).toLocaleString('ar-MA')}
+                      {new Date(log.created_at).toLocaleString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
                     </span>
                   </div>
                   {log.reason && (
                     <p className="text-sm text-muted-foreground mt-1 bg-background p-2 rounded-md border border-border">
-                      <span className="font-semibold text-foreground">السبب: </span>
+                      <span className="font-semibold text-foreground">{t('السبب: ', 'Motif : ')}</span>
                       {log.reason}
                     </p>
                   )}
                   <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
                     <UserIcon className="w-3.5 h-3.5" />
-                    <span>الموظف: <span className="font-mono text-foreground">{log.employee_id}</span></span>
+                    <span>{t('الموظف: ', 'Utilisateur : ')}<span className="font-mono text-foreground">{log.employee_id}</span></span>
                   </div>
                 </div>
               </div>
             ))}
             {logs.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">لا توجد سجلات تدقيق حتى الآن</p>
+                <p className="text-muted-foreground">{t('لا توجد سجلات تدقيق حتى الآن', 'Aucune entrée d’audit enregistrée')}</p>
               </div>
             )}
           </div>

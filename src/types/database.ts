@@ -8,7 +8,7 @@ export interface User {
   created_at: string;
   theme_mode?: 'light' | 'dark' | 'system';
   mfa_enabled?: boolean;
-  preferred_language?: 'ar' | 'fr';
+  preferred_language?: 'ar' | 'fr' | 'en';
 }
 
 export interface Client {
@@ -274,24 +274,6 @@ export interface CashBoxOperation {
   created_by?: string;
 }
 
-export interface ForexRate {
-  id: number;
-  from_currency: string;
-  to_currency: string;
-  rate: number;
-  date: string;
-  created_at: string;
-}
-
-export interface ForexGainLossEntry {
-  id: number;
-  invoice_id?: number;
-  amount: number;
-  currency: string;
-  type: string;
-  description: string;
-  created_at: string;
-}
 
 export interface TruckDocument {
   id: number;
@@ -374,13 +356,18 @@ export interface DriverSalary {
 export interface TruckMaintenance {
   id: number;
   truck_id: number;
-  type: string;
+  type?: string;
+  expense_type?: string;
   amount: number;
-  currency: string;
-  date: string;
+  currency?: string;
+  date?: string;
+  maintenance_date?: string;
   notes?: string;
+  description?: string;
+  provider_name?: string;
   payment_method?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface TrailerMaintenance {
@@ -537,7 +524,12 @@ export interface SystemSettings {
 export interface DocumentCategory {
   id: number;
   name: string;
+  name_fr?: string | null;
+  applicable_to: 'both' | 'truck' | 'trailer';
+  is_active: boolean;
   created_at: string;
+  updated_at?: string;
+  usage_count?: number;
 }
 
 export interface ExpenseCategory {
@@ -551,7 +543,12 @@ export interface TruckLocation {
   truck_id: number;
   latitude: number;
   longitude: number;
-  timestamp: string;
+  recorded_at?: string;
+  timestamp?: string;
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
+  trip_id?: number;
 }
 
 export interface DeliverySignature {
@@ -606,7 +603,10 @@ export interface TruckLocationHistory {
   truck_id: number;
   latitude: number;
   longitude: number;
-  timestamp: string;
+  recorded_at?: string;
+  timestamp?: string;
+  speed?: number;
+  heading?: number;
 }
 
 export interface GeofenceZone {

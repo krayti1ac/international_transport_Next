@@ -10,10 +10,18 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Search, Phone, MapPin, Edit2, Trash2, Mail, Building, PlaneTakeoff, PlaneLanding } from 'lucide-react';
 import { ClientFormModal } from '@/components/client-form-modal';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
+
+import { useClientsDataQuery } from '@/lib/query/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { locale, dir, t } = useLanguage();
+  const { data: clientsData, isLoading } = useClientsDataQuery();
+  const queryClient = useQueryClient();
+
+  const clients = clientsData || [];
+  const loading = isLoading;
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'export' | 'import'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,38 +31,20 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchClients = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setClients(data || []);
-    } catch (error: any) {
-      toast({
-        title: 'خطأ',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase, toast]);
+  const refreshClients = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['clients-data'] });
+  }, [queryClient]);
 
   useEffect(() => {
-    fetchClients();
-
     const channel = supabase
       .channel('clients-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchClients())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => refreshClients())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchClients, supabase]);
+  }, [refreshClients, supabase]);
 
   const handleSaveClient = async (clientData: Partial<Client>) => {
     try {
@@ -64,16 +54,16 @@ export default function ClientsPage() {
           .update(clientData)
           .eq('id', editingClient.id);
         if (error) throw error;
-        toast({ title: 'تم تحديث بيانات العميل بنجاح' });
+        toast({ title: t('تم تحديث بيانات العميل بنجاح', 'Données client mises à jour avec succès') });
       } else {
         const { error } = await supabase.from('clients').insert(clientData);
         if (error) throw error;
-        toast({ title: 'تم إضافة العميل بنجاح' });
+        toast({ title: t('تم إضافة العميل بنجاح', 'Client ajouté avec succès') });
       }
-      fetchClients();
+      refreshClients();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحفظ',
+        title: t('خطأ أثناء الحفظ', 'Erreur d\'enregistrement'),
         description: error.message,
         variant: 'destructive',
       });
@@ -81,16 +71,16 @@ export default function ClientsPage() {
   };
 
   const handleDeleteClient = async (id: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا العميل؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذا العميل؟', 'Êtes-vous sûr de vouloir supprimer ce client ?'))) return;
 
     try {
       const { error } = await supabase.from('clients').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم حذف العميل بنجاح' });
-      fetchClients();
+      toast({ title: t('تم حذف العميل بنجاح', 'Client supprimé avec succès') });
+      refreshClients();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء الحذف',
+        title: t('خطأ أثناء الحذف', 'Erreur lors de la suppression'),
         description: error.message,
         variant: 'destructive',
       });
@@ -120,11 +110,11 @@ export default function ClientsPage() {
   });
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">إدارة العملاء</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">قاعدة بيانات العملاء، تصنيف الرحلات، أرقام ICE ومعلومات الفوترة</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">{t('إدارة العملاء', 'Gestion des Clients')}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t('قاعدة بيانات العملاء، تصنيف الرحلات، أرقام ICE ومعلومات الفوترة', 'Base de données clients, type de transport, numéros ICE et facturation')}</p>
         </div>
         <Button
           onClick={() => {
@@ -132,8 +122,8 @@ export default function ClientsPage() {
             setIsModalOpen(true);
           }}
         >
-          <Plus className="w-4 h-4 ml-2" />
-          عميل جديد
+          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('عميل جديد', 'Nouveau client')}
         </Button>
       </div>
 
@@ -147,7 +137,7 @@ export default function ClientsPage() {
               : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
-          <span>جميع العملاء</span>
+          <span>{t('جميع العملاء', 'Tous les clients')}</span>
           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono ${
             typeFilter === 'all' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted-foreground/20 text-muted-foreground'
           }`}>
@@ -164,7 +154,7 @@ export default function ClientsPage() {
           }`}
         >
           <PlaneTakeoff className="w-3.5 h-3.5" />
-          <span>عملاء رحلات الذهاب (تصدير)</span>
+          <span>{t('عملاء رحلات الذهاب (تصدير)', 'Clients Export (Aller)')}</span>
           <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono bg-emerald-500/25">
             {exportCount}
           </span>
@@ -179,7 +169,7 @@ export default function ClientsPage() {
           }`}
         >
           <PlaneLanding className="w-3.5 h-3.5" />
-          <span>عملاء رحلات العودة (استيراد)</span>
+          <span>{t('عملاء رحلات العودة (استيراد)', 'Clients Import (Retour)')}</span>
           <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono bg-blue-500/25">
             {importCount}
           </span>
@@ -188,12 +178,12 @@ export default function ClientsPage() {
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
         <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
           <Input
-            placeholder="بحث بالاسم، الهاتف، المدينة أو ICE..."
+            placeholder={t('بحث بالاسم، الهاتف، المدينة أو ICE...', 'Rechercher par nom, tél, ville ou ICE...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 h-9 text-xs rounded-xl"
+            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
           />
         </div>
         <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
@@ -201,7 +191,7 @@ export default function ClientsPage() {
 
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">جاري تحميل العملاء...</p>
+          <p className="text-muted-foreground">{t('جاري تحميل العملاء...', 'Chargement des clients...')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -219,7 +209,7 @@ export default function ClientsPage() {
                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                         : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
                     }`}>
-                      {client.is_active ? 'نشط' : 'غير نشط'}
+                      {client.is_active ? t('نشط', 'Actif') : t('غير نشط', 'Inactif')}
                     </span>
                   </div>
                 </CardHeader>
@@ -247,29 +237,29 @@ export default function ClientsPage() {
                     </div>
                   )}
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">العملة:</span>
+                    <span className="text-muted-foreground">{t('العملة:', 'Devise :')}</span>
                     <span className="font-bold text-primary font-mono">{client.currency}</span>
                   </div>
                   {client.invoice_with_tva !== false && (
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">الضريبة TVA:</span>
+                      <span className="text-muted-foreground">{t('الضريبة TVA:', 'TVA :')}</span>
                       <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                        خاضع للضريبة
+                        {t('خاضع للضريبة', 'Assujetti TVA')}
                       </span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-center border-t border-border pt-2">
-                    <span className="text-muted-foreground text-xs font-medium">نوع الرحلة:</span>
+                    <span className="text-muted-foreground text-xs font-medium">{t('نوع الرحلة:', 'Type trajet :')}</span>
                     {client.client_type === 'import' ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
                         <PlaneLanding className="w-3 h-3 text-blue-600" />
-                        رحلات العودة (استيراد)
+                        {t('رحلات العودة (استيراد)', 'Trajets Retour (Import)')}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
                         <PlaneTakeoff className="w-3 h-3 text-emerald-600" />
-                        رحلات الذهاب (تصدير)
+                        {t('رحلات الذهاب (تصدير)', 'Trajets Aller (Export)')}
                       </span>
                     )}
                   </div>
@@ -286,8 +276,8 @@ export default function ClientsPage() {
                     setIsModalOpen(true);
                   }}
                 >
-                  <Edit2 className="w-3.5 h-3.5 ml-1" />
-                  تعديل
+                  <Edit2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                  {t('تعديل', 'Modifier')}
                 </Button>
                 <Button
                   variant="destructive"
@@ -302,7 +292,7 @@ export default function ClientsPage() {
           ))}
           {filteredClients.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">لا يوجد عملاء مطابقين للبحث</p>
+              <p className="text-muted-foreground">{t('لا يوجد عملاء مطابقين للبحث', 'Aucun client ne correspond à votre recherche')}</p>
             </div>
           )}
         </div>
@@ -352,19 +342,19 @@ export default function ClientsPage() {
 
                   {client.invoice_with_tva !== false && (
                     <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                      خاضع للضريبة TVA
+                      {t('خاضع للضريبة TVA', 'Assujetti TVA')}
                     </span>
                   )}
 
                   {client.client_type === 'import' ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
                       <PlaneLanding className="w-3 h-3 text-blue-600" />
-                      رحلات العودة (استيراد)
+                      {t('رحلات العودة (استيراد)', 'Trajets Retour (Import)')}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
                       <PlaneTakeoff className="w-3 h-3 text-emerald-600" />
-                      رحلات الذهاب (تصدير)
+                      {t('رحلات الذهاب (تصدير)', 'Trajets Aller (Export)')}
                     </span>
                   )}
                 </div>
@@ -376,7 +366,7 @@ export default function ClientsPage() {
                       ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                       : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
                   }`}>
-                    {client.is_active ? 'نشط' : 'غير نشط'}
+                    {client.is_active ? t('نشط', 'Actif') : t('غير نشط', 'Inactif')}
                   </span>
 
                   <div className="flex items-center gap-1.5">
@@ -389,8 +379,8 @@ export default function ClientsPage() {
                         setIsModalOpen(true);
                       }}
                     >
-                      <Edit2 className="w-3.5 h-3.5 ml-1" />
-                      تعديل
+                      <Edit2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                      {t('تعديل', 'Modifier')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -407,7 +397,7 @@ export default function ClientsPage() {
           ))}
           {filteredClients.length === 0 && (
             <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-              <p className="text-muted-foreground">لا يوجد عملاء مطابقين للبحث</p>
+              <p className="text-muted-foreground">{t('لا يوجد عملاء مطابقين للبحث', 'Aucun client ne correspond à votre recherche')}</p>
             </div>
           )}
         </div>

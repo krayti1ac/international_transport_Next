@@ -8,6 +8,8 @@ import { TruckIcon } from '@/components/icons/vehicle-icons';
 import type { Truck, TruckMaintenance } from '@/types/database';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 
+import { useLanguage } from '@/components/language-provider';
+
 interface Props {
   trucks: Truck[];
   maintenance: TruckMaintenance[];
@@ -21,12 +23,16 @@ function daysBetween(a: string | Date, b: string | Date): number {
 }
 
 export function MaintenanceAlertsPanel({ trucks, maintenance }: Props) {
+  const { t, dir } = useLanguage();
+
   const alerts = useMemo(() => {
     const lastByTruck = new Map<number, string>();
     for (const m of maintenance) {
+      const mDate = m.date || m.maintenance_date;
+      if (!mDate) continue;
       const prev = lastByTruck.get(m.truck_id);
-      if (!prev || new Date(m.date) > new Date(prev)) {
-        lastByTruck.set(m.truck_id, m.date);
+      if (!prev || new Date(mDate) > new Date(prev)) {
+        lastByTruck.set(m.truck_id, mDate);
       }
     }
 
@@ -55,24 +61,30 @@ export function MaintenanceAlertsPanel({ trucks, maintenance }: Props) {
   if (trucks.length === 0) return null;
 
   return (
-    <Card className="border-amber-500/20">
+    <Card className="border-amber-500/20" dir={dir}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base text-foreground">
           <ShieldCheck className="w-5 h-5 text-amber-500" />
-          تنبيهات الصيانة الوقائية
-          <Badge variant="outline" className="mr-1 border-amber-500/30 text-amber-700 dark:text-amber-400">
-            {totalAlerts} تنبيه
+          {t('تنبيهات الصيانة الوقائية', 'Alertes de Maintenance Préventive')}
+          <Badge variant="outline" className={`${dir === 'rtl' ? 'mr-1' : 'ml-1'} border-amber-500/30 text-amber-700 dark:text-amber-400`}>
+            {totalAlerts} {t('تنبيه', 'alerte(s)')}
           </Badge>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          شاحنات تجاوزت {STALE_DAYS} يوماً بدون صيانة مسجلة ({'>'} {CRITICAL_DAYS} يوم = حرج)
+          {t(
+            `شاحنات تجاوزت ${STALE_DAYS} يوماً بدون صيانة مسجلة (> ${CRITICAL_DAYS} يوم = حرج)`,
+            `Véhicules sans maintenance enregistrée depuis plus de ${STALE_DAYS} jours (> ${CRITICAL_DAYS} j = critique)`
+          )}
         </p>
       </CardHeader>
       <CardContent>
         {totalAlerts === 0 ? (
           <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
             <ShieldCheck className="w-4 h-4" />
-            جميع الشاحنات ({alerts.fresh.length}) خضعت لصيانة خلال آخر {STALE_DAYS} يوماً.
+            {t(
+              `جميع الشاحنات (${alerts.fresh.length}) خضعت لصيانة خلال آخر ${STALE_DAYS} يوماً.`,
+              `Tous les camions (${alerts.fresh.length}) ont été entretenus au cours des ${STALE_DAYS} derniers jours.`
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -99,20 +111,24 @@ function AlertRow({
   severity: 'critical' | 'aging' | 'unknown';
   data: { truck: Truck; lastDate?: string; ageDays: number | null };
 }) {
+  const { t, dir } = useLanguage();
+
   const styles = {
     critical: 'bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400',
     aging: 'bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400',
     unknown: 'bg-slate-500/5 border-slate-500/20 text-slate-700 dark:text-slate-400',
   } as const;
+
   const labels = {
-    critical: 'حرج • فحص فوري',
-    aging: 'تحذير • جدولة صيانة',
-    unknown: 'لا توجد سجلات',
+    critical: t('حرج • فحص فوري', 'Critique • Inspection immédiate'),
+    aging: t('تحذير • جدولة صيانة', 'Avertissement • Planifier entretien'),
+    unknown: t('لا توجد سجلات', 'Aucun historique'),
   } as const;
+
   const Icon = severity === 'critical' ? AlertTriangle : Wrench;
 
   return (
-    <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${styles[severity]}`}>
+    <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${styles[severity]}`} dir={dir}>
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-9 h-9 rounded-xl bg-card border border-border/40 flex items-center justify-center shrink-0">
           <TruckIcon className="w-4 h-4 text-muted-foreground" />
@@ -124,13 +140,13 @@ function AlertRow({
           </div>
           <p className="text-xs mt-1">
             {data.ageDays === null
-              ? 'لم تُسجَّل أي صيانة لهذه الشاحنة'
-              : `آخر صيانة قبل ${data.ageDays} يوم${data.lastDate ? ` (${data.lastDate})` : ''}`}
+              ? t('لم تُسجَّل أي صيانة لهذه الشاحنة', 'Aucun entretien enregistré pour ce camion')
+              : t(`آخر صيانة قبل ${data.ageDays} يوم${data.lastDate ? ` (${data.lastDate})` : ''}`, `Dernier entretien il y a ${data.ageDays} jours${data.lastDate ? ` (${data.lastDate})` : ''}`)}
           </p>
         </div>
       </div>
       <Badge variant="outline" className="text-[10px] shrink-0">
-        <Icon className="w-3 h-3 ml-1" />
+        <Icon className={`w-3 h-3 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
         {labels[severity]}
       </Badge>
     </div>

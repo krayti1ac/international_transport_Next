@@ -1,17 +1,39 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Sun, Moon, Laptop, Palette, Building2, ImagePlus, Trash2, Loader2, Languages } from 'lucide-react';
+import {
+  Save,
+  Sun,
+  Moon,
+  Laptop,
+  Palette,
+  Building2,
+  ImagePlus,
+  Trash2,
+  Loader2,
+  Languages,
+  Users,
+  FolderCog,
+} from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/language-provider';
 import { useAuth } from '@/components/auth-provider';
+import { UserManagementView } from '@/features/users/components/UserManagementView';
+import { DocumentCategoriesView } from '@/features/fleet/components/DocumentCategoriesModal';
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: 'company' | 'users' | 'doc_types' =
+    tabParam === 'users' ? 'users' : tabParam === 'doc_types' ? 'doc_types' : 'company';
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -198,6 +220,7 @@ export default function SettingsPage() {
     if (!settings.logo_url) return;
     const previous = settings.logo_url;
     setSettings((prev) => ({ ...prev, logo_url: null }));
+
     try {
       const path = previous.split('/storage/v1/object/public/settings/')[1];
       if (path) await supabase.storage.from('settings').remove([path]);
@@ -227,327 +250,408 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTabChange = (tab: 'company' | 'users' | 'doc_types') => {
+    if (tab === 'users') {
+      router.push('/settings?tab=users');
+    } else if (tab === 'doc_types') {
+      router.push('/settings?tab=doc_types');
+    } else {
+      router.push('/settings');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">جاري تحميل الإعدادات...</p>
+        <Loader2 className="w-6 h-6 animate-spin text-primary ms-2" />
+        <p className="text-muted-foreground">{t('جاري تحميل الإعدادات...', 'Chargement des paramètres...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6" dir={dir}>
+    <div className={`mx-auto space-y-6 ${activeTab === 'users' || activeTab === 'doc_types' ? 'max-w-5xl' : 'max-w-2xl'}`} dir={dir}>
+      {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold font-amiri text-foreground">
           {t('إعدادات النظام', 'Paramètres du système')}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           {t(
-            'تخصيص لغة ومظهر النظام، بيانات الشركة، والنسب المالية',
-            "Personnalisation de la langue, du thème, des données de l'entreprise et des paramètres financiers"
+            'تخصيص لغة ومظهر النظام، بيانات الشركة، وإدارة المستخدمين والصلاحيات وأنواع الوثائق',
+            "Personnalisation de la langue, du thème, de l'entreprise, des utilisateurs et des types de documents"
           )}
         </p>
       </div>
 
-      {/* لغة النظام (Bascule Ar/Fr) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-amiri flex items-center gap-2">
-            <Languages className="w-5 h-5 text-primary" />
-            {t('لغة النظام (Langue du système)', 'Langue du système (System Language)')}
-          </CardTitle>
-          <CardDescription>
-            {t(
-              'اختر اللغة المفضلة لواجهة النظام، يتم تذكر وحفظ هذا التفضيل لحسابك بشكل مستقل',
-              "Choisissez la langue de l'interface, cette préférence est mémorisée pour votre compte"
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* خيار العربية */}
-            <button
-              type="button"
-              onClick={async () => {
-                await setLocale('ar', user?.id || user?.email);
-                toast({ title: '🇸🇦 تم تفعيل اللغة العربية وحفظ التفضيل' });
-              }}
-              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
-                locale === 'ar'
-                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
-                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-500 font-bold text-sm">
-                AR
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">العربية</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('واجهة باللغة العربية (من اليمين إلى اليسار)', 'Interface en arabe (RTL)')}
-                </p>
-              </div>
-              {locale === 'ar' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
-                  {t('مفعّل', 'Activé')}
-                </span>
-              )}
-            </button>
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-muted/60 border border-border/80 rounded-2xl w-full sm:w-fit flex-wrap">
+        <button
+          type="button"
+          onClick={() => handleTabChange('company')}
+          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex-1 sm:flex-initial ${
+            activeTab === 'company'
+              ? 'bg-card text-foreground shadow-xs border border-border/80'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-primary" />
+          <span>{t('إعدادات الشركة والمظهر', "Entreprise & Apparence")}</span>
+        </button>
 
-            {/* خيار الفرنسية */}
-            <button
-              type="button"
-              onClick={async () => {
-                await setLocale('fr', user?.id || user?.email);
-                toast({ title: '🇫🇷 Langue française activée et préférence enregistrée' });
-              }}
-              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
-                locale === 'fr'
-                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
-                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-500 font-bold text-sm">
-                FR
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">Français</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('واجهة باللغة الفرنسية (من اليسار إلى اليمين)', 'Interface en français (LTR)')}
-                </p>
-              </div>
-              {locale === 'fr' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
-                  {t('مفعّل', 'Activé')}
-                </span>
-              )}
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+        <button
+          type="button"
+          onClick={() => handleTabChange('users')}
+          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex-1 sm:flex-initial ${
+            activeTab === 'users'
+              ? 'bg-card text-foreground shadow-xs border border-border/80'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+        >
+          <Users className="w-4 h-4 text-primary" />
+          <span>{t('المستخدمين والصلاحيات', 'Utilisateurs & Rôles')}</span>
+        </button>
 
-      {/* مظهر النظام والألوان */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-amiri flex items-center gap-2">
-            <Palette className="w-5 h-5 text-primary" />
-            {t('مظهر النظام والألوان (Theme Mode)', "Mode d'affichage et thèmes (Theme Mode)")}
-          </CardTitle>
-          <CardDescription>
-            {t('اختر الوضع المناسب لراحة عينيك أثناء العمل على النظام', 'Choisissez le mode adapté au confort de vos yeux')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setTheme('light');
-                toast({ title: t('☀️ تم تفعيل الوضع الفاتح', '☀️ Mode clair activé') });
-              }}
-              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
-                theme === 'light'
-                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
-                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500">
-                <Sun className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">{t('الوضع الفاتح', 'Mode clair')}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('مظهر نهاري مشرق وعالي الوضوح', 'Apparence claire et lumineuse')}
-                </p>
-              </div>
-              {theme === 'light' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
-                  {t('مفعّل', 'Activé')}
-                </span>
-              )}
-            </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange('doc_types')}
+          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex-1 sm:flex-initial ${
+            activeTab === 'doc_types'
+              ? 'bg-card text-foreground shadow-xs border border-border/80'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+        >
+          <FolderCog className="w-4 h-4 text-primary" />
+          <span>{t('أنواع وثائق الأسطول', 'Types de documents')}</span>
+        </button>
+      </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setTheme('dark');
-                toast({ title: t('🌙 تم تفعيل الوضع الداكن', '🌙 Mode sombre activé') });
-              }}
-              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
-                theme === 'dark'
-                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
-                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400">
-                <Moon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">{t('الوضع الداكن', 'Mode sombre')}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('مريح للعينين في الإضاءة الخافتة', 'Confortable pour les yeux')}
-                </p>
-              </div>
-              {theme === 'dark' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
-                  {t('مفعّل', 'Activé')}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setTheme('system');
-                toast({ title: t('🖥️ تم تفعيل المزامنة مع النظام', '🖥️ Synchronisation avec le système activée') });
-              }}
-              className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
-                theme === 'system'
-                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
-                  : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-slate-500/15 flex items-center justify-center text-slate-400">
-                <Laptop className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">{t('تلقائي (حسب جهازك)', 'Automatique (système)')}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('يتغير تلقائياً مع إعدادات جهازك', "S'adapte automatiquement")}
-                </p>
-              </div>
-              {theme === 'system' && (
-                <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
-                  {t('مفعّل', 'Activé')}
-                </span>
-              )}
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* بيانات الشركة */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-amiri flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-primary" />
-            {t('الإعدادات العامة للشركة', "Paramètres généraux de l'entreprise")}
-          </CardTitle>
-          <CardDescription>
-            {t('البيانات الأساسية التي تظهر في الفواتير ومطبوعات CMR', 'Informations de base pour les factures et documents CMR')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">{t('اسم الشركة', "Nom de l'entreprise")}</label>
-            <Input
-              value={settings.company_name}
-              onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
-              placeholder={t('مثال: شركة النقل الدولي واللوجستيك', 'Ex: Société de Transport International')}
-            />
-          </div>
-
-          {/* شعار الشركة */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">{t('شعار الشركة', "Logo de l'entreprise")}</label>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'يظهر في أعلى القائمة الجانبية وفي جميع ملفات PDF الصادرة عن الشركة',
-                'Affiché en haut du menu latéral et sur les documents PDF émis'
-              )}
-            </p>
-            <div className="flex items-center gap-4">
-              <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                {settings.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={settings.logo_url}
-                    alt={t('شعار الشركة', "Logo de l'entreprise")}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <ImagePlus className="w-8 h-8 text-muted-foreground" />
+      {/* Tab Content */}
+      {activeTab === 'users' ? (
+        <UserManagementView />
+      ) : activeTab === 'doc_types' ? (
+        <Card className="p-6 rounded-2xl border border-border/80 shadow-xs">
+          <DocumentCategoriesView />
+        </Card>
+      ) : (
+        /* Tab 1: Company & Theme Settings */
+        <div className="space-y-6">
+          {/* لغة النظام (Bascule Ar/Fr) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-amiri flex items-center gap-2">
+                <Languages className="w-5 h-5 text-primary" />
+                {t('لغة النظام (Langue du système)', 'Langue du système (System Language)')}
+              </CardTitle>
+              <CardDescription>
+                {t(
+                  'اختر اللغة المفضلة لواجهة النظام، يتم تذكر وحفظ هذا التفضيل لحسابك بشكل مستقل',
+                  "Choisissez la langue de l'interface, cette préférence est mémorisée pour votre compte"
                 )}
-                {uploadingLogo && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 text-white animate-spin" />
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/svg,image/webp"
-                  className="hidden"
-                  onChange={handleLogoFile}
-                />
-                <Button
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* خيار العربية */}
+                <button
                   type="button"
-                  variant="outline"
-                  onClick={handleLogoPick}
-                  disabled={uploadingLogo}
-                  size="sm"
+                  onClick={async () => {
+                    await setLocale('ar', user?.id || user?.email);
+                    toast({ title: '🇸🇦 تم تفعيل اللغة العربية وحفظ التفضيل' });
+                  }}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                    locale === 'ar'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                      : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
                 >
-                  <ImagePlus className="w-4 h-4 ml-2" />
-                  {settings.logo_url ? t('تغيير الشعار', 'Changer le logo') : t('رفع شعار', 'Télécharger un logo')}
-                </Button>
-                {settings.logo_url && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleRemoveLogo}
-                    disabled={uploadingLogo}
-                    size="sm"
-                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                  >
-                    <Trash2 className="w-4 h-4 ml-2" />
-                    {t('حذف الشعار', 'Supprimer le logo')}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-500 font-bold text-sm">
+                    AR
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">العربية</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('واجهة باللغة العربية (من اليمين إلى اليسار)', 'Interface en arabe (RTL)')}
+                    </p>
+                  </div>
+                  {locale === 'ar' && (
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                      {t('مفعّل', 'Activé')}
+                    </span>
+                  )}
+                </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">{t('نسبة الضريبة الافتراضية TVA (%)', 'Taux de TVA par défaut (%)')}</label>
-              <Input
-                type="number"
-                value={settings.default_tva_rate}
-                onChange={(e) => setSettings({ ...settings, default_tva_rate: e.target.value })}
-                placeholder="20"
-                dir="ltr"
-              />
-              <p className="text-xs text-muted-foreground">{t('تُطبق هذه النسبة تلقائياً على جميع العملاء الخاضعين للضريبة', 'Ce taux est appliqué par défaut aux clients assujettis')}</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">{t('نسبة ربح المالك (%)', 'Part de profit du propriétaire (%)')}</label>
-              <Input
-                type="number"
-                value={settings.owner_profit_share}
-                onChange={(e) => setSettings({ ...settings, owner_profit_share: e.target.value })}
-                placeholder="0"
-                dir="ltr"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">{t('معرف الحساب البنكي الافتراضي', 'ID du compte bancaire par défaut')}</label>
-            <Input
-              type="number"
-              value={settings.default_bank_account_id}
-              onChange={(e) => setSettings({ ...settings, default_bank_account_id: e.target.value })}
-              placeholder={t('معرف الحساب البنكي', 'Identifiant compte bancaire')}
-              dir="ltr"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving} className="w-full">
-            <Save className="w-4 h-4 ml-2" />
-            {saving ? t('جاري الحفظ...', 'Enregistrement en cours...') : t('حفظ الإعدادات', 'Enregistrer les paramètres')}
-          </Button>
-        </CardContent>
-      </Card>
+                {/* خيار الفرنسية */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await setLocale('fr', user?.id || user?.email);
+                    toast({ title: '🇫🇷 Langue française activée et préférence enregistrée' });
+                  }}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                    locale === 'fr'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                      : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-500 font-bold text-sm">
+                    FR
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">Français</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('واجهة باللغة الفرنسية (من اليسار إلى اليمين)', 'Interface en français (LTR)')}
+                    </p>
+                  </div>
+                  {locale === 'fr' && (
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                      {t('مفعّل', 'Activé')}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* مظهر النظام والألوان */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-amiri flex items-center gap-2">
+                <Palette className="w-5 h-5 text-primary" />
+                {t('مظهر النظام والألوان (Theme Mode)', "Mode d'affichage et thèmes (Theme Mode)")}
+              </CardTitle>
+              <CardDescription>
+                {t('اختر الوضع المناسب لراحة عينيك أثناء العمل على النظام', 'Choisissez le mode adapté au confort de vos yeux')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme('light');
+                    toast({ title: t('☀️ تم تفعيل الوضع الفاتح', '☀️ Mode clair activé') });
+                  }}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                    theme === 'light'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                      : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500">
+                    <Sun className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">{t('الوضع الفاتح', 'Mode clair')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('مظهر نهاري مشرق وعالي الوضوح', 'Apparence claire et lumineuse')}
+                    </p>
+                  </div>
+                  {theme === 'light' && (
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                      {t('مفعّل', 'Activé')}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme('dark');
+                    toast({ title: t('🌙 تم تفعيل الوضع الداكن', '🌙 Mode sombre activé') });
+                  }}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                    theme === 'dark'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                      : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400">
+                    <Moon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">{t('الوضع الداكن', 'Mode sombre')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('مريح للعينين في الإضاءة الخافتة', 'Confortable pour les yeux')}
+                    </p>
+                  </div>
+                  {theme === 'dark' && (
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                      {t('مفعّل', 'Activé')}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme('system');
+                    toast({ title: t('🖥️ تم تفعيل المزامنة مع النظام', '🖥️ Synchronisation avec le système activée') });
+                  }}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all cursor-pointer text-center relative ${
+                    theme === 'system'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-xs'
+                      : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-slate-500/15 flex items-center justify-center text-slate-400">
+                    <Laptop className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">{t('تلقائي (حسب جهازك)', 'Automatique (système)')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('يتغير تلقائياً مع إعدادات جهازك', "S'adapte automatiquement")}
+                    </p>
+                  </div>
+                  {theme === 'system' && (
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded-full">
+                      {t('مفعّل', 'Activé')}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* بيانات الشركة */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-amiri flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" />
+                {t('الإعدادات العامة للشركة', "Paramètres généraux de l'entreprise")}
+              </CardTitle>
+              <CardDescription>
+                {t('البيانات الأساسية التي تظهر في الفواتير ومطبوعات CMR', 'Informations de base pour les factures et documents CMR')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">{t('اسم الشركة', "Nom de l'entreprise")}</label>
+                <Input
+                  value={settings.company_name}
+                  onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
+                  placeholder={t('مثال: شركة النقل الدولي واللوجستيك', 'Ex: Société de Transport International')}
+                />
+              </div>
+
+              {/* شعار الشركة */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">{t('شعار الشركة', "Logo de l'entreprise")}</label>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'يظهر في أعلى القائمة الجانبية وفي جميع ملفات PDF الصادرة عن الشركة',
+                    'Affiché en haut du menu latéral et sur les documents PDF émis'
+                  )}
+                </p>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                    {settings.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={settings.logo_url}
+                        alt={t('شعار الشركة', "Logo de l'entreprise")}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <ImagePlus className="w-8 h-8 text-muted-foreground" />
+                    )}
+                    {uploadingLogo && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg,image/webp"
+                      className="hidden"
+                      onChange={handleLogoFile}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleLogoPick}
+                      disabled={uploadingLogo}
+                      size="sm"
+                    >
+                      <ImagePlus className="w-4 h-4 ml-2" />
+                      {settings.logo_url ? t('تغيير الشعار', 'Changer le logo') : t('رفع شعار', 'Télécharger un logo')}
+                    </Button>
+                    {settings.logo_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={handleRemoveLogo}
+                        disabled={uploadingLogo}
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4 ml-2" />
+                        {t('حذف الشعار', 'Supprimer le logo')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">{t('نسبة الضريبة الافتراضية TVA (%)', 'Taux de TVA par défaut (%)')}</label>
+                  <Input
+                    type="number"
+                    value={settings.default_tva_rate}
+                    onChange={(e) => setSettings({ ...settings, default_tva_rate: e.target.value })}
+                    placeholder="20"
+                    dir="ltr"
+                  />
+                  <p className="text-xs text-muted-foreground">{t('تُطبق هذه النسبة تلقائياً على جميع العملاء الخاضعين للضريبة', 'Ce taux est appliqué par défaut aux clients assujettis')}</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">{t('نسبة ربح المالك (%)', 'Part de profit du propriétaire (%)')}</label>
+                  <Input
+                    type="number"
+                    value={settings.owner_profit_share}
+                    onChange={(e) => setSettings({ ...settings, owner_profit_share: e.target.value })}
+                    placeholder="0"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">{t('معرف الحساب البنكي الافتراضي', 'ID du compte bancaire par défaut')}</label>
+                <Input
+                  type="number"
+                  value={settings.default_bank_account_id}
+                  onChange={(e) => setSettings({ ...settings, default_bank_account_id: e.target.value })}
+                  placeholder={t('معرف الحساب البنكي', 'Identifiant compte bancaire')}
+                  dir="ltr"
+                />
+              </div>
+              <Button onClick={handleSave} disabled={saving} className="w-full">
+                <Save className="w-4 h-4 ml-2" />
+                {saving ? t('جاري الحفظ...', 'Enregistrement en cours...') : t('حفظ الإعدادات', 'Enregistrer les paramètres')}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-6 h-6 animate-spin text-primary ms-2" />
+          <p className="text-muted-foreground">جاري التحميل...</p>
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
   );
 }

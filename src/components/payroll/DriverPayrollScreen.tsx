@@ -25,7 +25,10 @@ import { calculateDriverPayroll } from '@/features/hr/services/payroll.actions';
 import { PaySalaryDialog } from '@/components/payroll/PaySalaryDialog';
 import { PayslipPrintModal } from '@/components/payroll/PayslipPrintModal';
 
+import { useLanguage } from '@/components/language-provider';
+
 export default function DriverPayrollScreen() {
+  const { t, dir, locale } = useLanguage();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -44,6 +47,22 @@ export default function DriverPayrollScreen() {
 
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
+
+  // Deduplicate drivers by name to prevent repeated entries in the dropdown,
+  // prioritizing currently selected driver if active.
+  const uniqueDrivers = useMemo(() => {
+    const map = new Map<string, Driver>();
+    for (const driver of drivers) {
+      const nameKey = driver.name?.trim().toLowerCase();
+      if (!nameKey) continue;
+      if (!map.has(nameKey) || driver.id === selectedDriverId) {
+        map.set(nameKey, driver);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', locale === 'fr' ? 'fr' : 'ar', { sensitivity: 'base' })
+    );
+  }, [drivers, selectedDriverId, locale]);
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -90,8 +109,8 @@ export default function DriverPayrollScreen() {
 
       if (!result.success || !result.data) {
         toast({
-          title: 'خطأ',
-          description: result.error || 'حدث خطأ أثناء احتساب الراتب',
+          title: t('خطأ', 'Erreur'),
+          description: result.error || t('حدث خطأ أثناء احتساب الراتب', 'Erreur lors du calcul de la paie'),
           variant: 'destructive',
         });
         setCalculating(false);
@@ -115,16 +134,16 @@ export default function DriverPayrollScreen() {
 
       setAlreadyPaid(!!salaryCheck);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
+      const message = error instanceof Error ? error.message : t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue');
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: message,
         variant: 'destructive',
       });
     } finally {
       setCalculating(false);
     }
-  }, [selectedDriverId, selectedMonth, selectedYear, supabase, toast]);
+  }, [selectedDriverId, selectedMonth, selectedYear, supabase, toast, t]);
 
   useEffect(() => {
     if (selectedDriverId && initializedRef.current) {
@@ -141,26 +160,30 @@ export default function DriverPayrollScreen() {
       handleCalculate();
     }
     toast({
-      title: 'تم صرف الراتب بنجاح',
-      description: 'تم تسجيل العملية في الخزينة وتحديث السجلات',
+      title: t('تم صرف الراتب بنجاح', 'Salaire payé avec succès'),
+      description: t('تم تسجيل العملية في الخزينة وتحديث السجلات', 'Opération enregistrée en trésorerie et fiches mises à jour'),
     });
-  }, [selectedDriverId, handleCalculate, toast]);
+  }, [selectedDriverId, handleCalculate, toast, t]);
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+      <div className="text-center py-12" dir={dir}>
+        <p className="text-muted-foreground">{t('جاري تحميل البيانات...', 'Chargement des données...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">الرواتب الشهرية للسائقين</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">احتساب الرواتب، عمولات الرحلات، اقتطاع السلف والغرامات</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('الرواتب الشهرية للسائقين', 'Paie Mensuelle des Conducteurs')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('احتساب الرواتب، عمولات الرحلات، اقتطاع السلف والغرامات', 'Calcul des salaires, commissions sur trajets, retenues d\'avances et amendes')}
+          </p>
         </div>
       </div>
 
@@ -171,17 +194,17 @@ export default function DriverPayrollScreen() {
             <div className="flex-1 min-w-[200px] space-y-2">
               <label className="text-sm font-medium text-foreground flex items-center gap-2">
                 <User className="w-4 h-4" />
-                السائق
+                {t('السائق', 'Conducteur')}
               </label>
               <select
                 value={selectedDriverId || ''}
                 onChange={(e) => setSelectedDriverId(Number(e.target.value))}
                 className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="">-- اختر السائق --</option>
-                {drivers.map((d) => (
+                <option value="">{t('-- اختر السائق --', '-- Sélectionner le conducteur --')}</option>
+                {uniqueDrivers.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.phone})
+                    {d.name}
                   </option>
                 ))}
               </select>
@@ -190,7 +213,7 @@ export default function DriverPayrollScreen() {
             <div className="w-[160px] space-y-2">
               <label className="text-sm font-medium text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                الشهر
+                {t('الشهر', 'Mois')}
               </label>
               <select
                 value={selectedMonth}
@@ -199,14 +222,14 @@ export default function DriverPayrollScreen() {
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                   <option key={m} value={m}>
-                    {new Date(2000, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })}
+                    {new Date(2000, m - 1, 1).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA', { month: 'long' })}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="w-[120px] space-y-2">
-              <label className="text-sm font-medium text-foreground">السنة</label>
+              <label className="text-sm font-medium text-foreground">{t('السنة', 'Année')}</label>
               <Input
                 type="number"
                 value={selectedYear}
@@ -227,7 +250,7 @@ export default function DriverPayrollScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  الراتب الأساسي وعدد الرحلات
+                  {t('الراتب الأساسي وعدد الرحلات', 'Salaire de base & Trajets')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -235,7 +258,7 @@ export default function DriverPayrollScreen() {
                   {formatCurrency(payrollData.baseSalary, 'MAD')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {payrollData.trips.length} رحلة مكتملة في هذه الفترة
+                  {payrollData.trips.length} {t('رحلة مكتملة في هذه الفترة', 'trajets terminés dans cette période')}
                 </p>
               </CardContent>
             </Card>
@@ -244,7 +267,7 @@ export default function DriverPayrollScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  عمولات الرحلات ({payrollData.bonusPercentage}%)
+                  {t('عمولات الرحلات', 'Commissions trajets')} ({payrollData.bonusPercentage}%)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -252,7 +275,7 @@ export default function DriverPayrollScreen() {
                   +{formatCurrency(payrollData.totalBonus, 'MAD')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  إجمالي إيرادات الرحلات: {formatCurrency(payrollData.totalTripsRevenue, 'MAD')}
+                  {t('إجمالي إيرادات الرحلات:', 'Total revenus trajets :')} {formatCurrency(payrollData.totalTripsRevenue, 'MAD')}
                 </p>
               </CardContent>
             </Card>
@@ -261,7 +284,7 @@ export default function DriverPayrollScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <DollarSign className="w-4 h-4" />
-                  صافي المستحق للصرف
+                  {t('صافي المستحق للصرف', 'Net à payer')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -269,7 +292,7 @@ export default function DriverPayrollScreen() {
                   {formatCurrency(payrollData.netPay, 'MAD')}
                 </div>
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                  after advances ({formatCurrency(payrollData.totalAdvances, 'MAD')}) and fines ({formatCurrency(payrollData.totalFines, 'MAD')})
+                  {t('بعد اقتطاع السلف', 'après avances')} ({formatCurrency(payrollData.totalAdvances, 'MAD')}) {t('والغرامات', 'et pénalités')} ({formatCurrency(payrollData.totalFines, 'MAD')})
                 </p>
               </CardContent>
             </Card>
@@ -283,7 +306,7 @@ export default function DriverPayrollScreen() {
               className="flex items-center gap-2"
             >
               <Printer className="w-4 h-4" />
-              تصدير Payslip (PDF)
+              {t('تصدير قسيمة الراتب (PDF)', 'Exporter fiche de paie (PDF)')}
             </Button>
             <Button
               onClick={() => setShowPayDialog(true)}
@@ -291,7 +314,7 @@ export default function DriverPayrollScreen() {
               className="flex items-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              {alreadyPaid ? 'تم الصرف بالفعل' : 'صرف وصرف الراتب'}
+              {alreadyPaid ? t('تم الصرف بالفعل', 'Déjà versé') : t('صرف وتسديد الراتب', 'Payer et décaisser')}
             </Button>
           </div>
 
@@ -300,24 +323,24 @@ export default function DriverPayrollScreen() {
             <CardHeader>
               <CardTitle className="font-amiri text-foreground flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
-                الرحلات المساهمة في العمولة ({payrollData.trips.length})
+                {t('الرحلات المساهمة في العمولة', 'Trajets contribuant à la prime')} ({payrollData.trips.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {payrollData.trips.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">لا توجد رحلات مكتملة في هذه الفترة</p>
+                  <p className="text-muted-foreground">{t('لا توجد رحلات مكتملة في هذه الفترة', 'Aucun trajet terminé pour cette période')}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-muted-foreground">
-                        <th className="text-right py-3 px-4 font-medium">#</th>
-                        <th className="text-right py-3 px-4 font-medium">المسار</th>
-                        <th className="text-right py-3 px-4 font-medium">تاريخ الانطلاق</th>
-                        <th className="text-right py-3 px-4 font-medium">الحالة</th>
-                        <th className="text-right py-3 px-4 font-medium">السعر</th>
+                        <th className={`${dir === 'rtl' ? 'text-right' : 'text-left'} py-3 px-4 font-medium`}>#</th>
+                        <th className={`${dir === 'rtl' ? 'text-right' : 'text-left'} py-3 px-4 font-medium`}>{t('المسار', 'Itinéraire')}</th>
+                        <th className={`${dir === 'rtl' ? 'text-right' : 'text-left'} py-3 px-4 font-medium`}>{t('تاريخ الانطلاق', 'Date départ')}</th>
+                        <th className={`${dir === 'rtl' ? 'text-right' : 'text-left'} py-3 px-4 font-medium`}>{t('الحالة', 'Statut')}</th>
+                        <th className={`${dir === 'rtl' ? 'text-right' : 'text-left'} py-3 px-4 font-medium`}>{t('السعر', 'Prix')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -332,7 +355,7 @@ export default function DriverPayrollScreen() {
                                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                                 : 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25'
                             }`}>
-                              {trip.status === 'completed' ? 'مكتملة' : 'مسددة'}
+                              {trip.status === 'completed' ? t('مكتملة', 'Terminé') : t('مسددة', 'Soldé')}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-mono font-bold text-foreground">
@@ -343,8 +366,8 @@ export default function DriverPayrollScreen() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-border font-bold">
-                        <td colSpan={4} className="py-3 px-4 text-left text-muted-foreground">
-                          Total Trips Revenue
+                        <td colSpan={4} className={`py-3 px-4 ${dir === 'rtl' ? 'text-left' : 'text-right'} text-muted-foreground`}>
+                          {t('إجمالي إيرادات الرحلات', 'Total revenus trajets')}
                         </td>
                         <td className="py-3 px-4 font-mono text-primary">
                           {formatCurrency(payrollData.totalTripsRevenue, 'MAD')}
@@ -365,7 +388,7 @@ export default function DriverPayrollScreen() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
                       <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      السلف المعتمدة ({payrollData.advances.length})
+                      {t('السلف المعتمدة', 'Avances accordées')} ({payrollData.advances.length})
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -373,7 +396,7 @@ export default function DriverPayrollScreen() {
                       {payrollData.advances.map((adv) => (
                         <div key={adv.id} className="flex justify-between p-2.5 bg-muted/40 rounded-lg border border-border">
                           <div>
-                            <span className="font-bold text-foreground">#{adv.id}</span> - {adv.reason || 'سلفة عادية'}
+                            <span className="font-bold text-foreground">#{adv.id}</span> - {adv.reason || t('سلفة عادية', 'Avance ordinaire')}
                             <span className="text-muted-foreground block">{adv.date}</span>
                           </div>
                           <span className="font-bold font-mono text-amber-700 dark:text-amber-300">
@@ -391,7 +414,7 @@ export default function DriverPayrollScreen() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
                       <AlertOctagon className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                      المخالفات والغرامات ({payrollData.fines.length})
+                      {t('المخالفات والغرامات', 'Infractions & Amendes')} ({payrollData.fines.length})
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -399,8 +422,8 @@ export default function DriverPayrollScreen() {
                       {payrollData.fines.map((fine) => (
                         <div key={fine.id} className="flex justify-between p-2.5 bg-muted/40 rounded-lg border border-border">
                           <div>
-                            <span className="font-bold text-foreground">{fine.fine_type || fine.description || 'مخالفة'}</span>
-                            <span className="text-muted-foreground block">{new Date(fine.created_at).toLocaleDateString('ar-MA')}</span>
+                            <span className="font-bold text-foreground">{fine.fine_type || fine.description || t('مخالفة', 'Infraction')}</span>
+                            <span className="text-muted-foreground block">{new Date(fine.created_at).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}</span>
                           </div>
                           <span className="font-bold font-mono text-rose-700 dark:text-rose-300">
                             -{formatCurrency(fine.amount, fine.currency)}
@@ -418,13 +441,13 @@ export default function DriverPayrollScreen() {
 
       {!payrollData && !calculating && (
         <Card className="h-64 flex items-center justify-center">
-          <p className="text-muted-foreground">يرجى اختيار سائق لعرض تفاصيل الراتب</p>
+          <p className="text-muted-foreground">{t('يرجى اختيار سائق لعرض تفاصيل الراتب', 'Veuillez sélectionner un conducteur pour afficher le détail')}</p>
         </Card>
       )}
 
       {calculating && (
         <div className="text-center py-8">
-          <p className="text-muted-foreground">جاري احتساب الراتب...</p>
+          <p className="text-muted-foreground">{t('جاري احتساب الراتب...', 'Calcul du salaire en cours...')}</p>
         </div>
       )}
 

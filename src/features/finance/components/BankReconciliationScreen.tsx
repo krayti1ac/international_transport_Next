@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import Decimal from 'decimal.js';
 import { createClient } from '@/lib/supabase/client';
+import { useLanguage } from '@/components/language-provider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 import {
   Upload,
   ArrowLeftRight,
@@ -57,6 +61,7 @@ function detectCurrency(text: string): string {
 }
 
 export default function BankReconciliationScreen() {
+  const { t, dir, locale } = useLanguage();
   const [parsedRows, setParsedRows] = useState<BankStatementRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -108,21 +113,26 @@ export default function BankReconciliationScreen() {
       }
 
       const cleanAmt = amtStr.replace(/[^0-9.,\-]/g, '').replace(/,/g, '.');
-      const amount = parseFloat(cleanAmt);
-      if (Number.isNaN(amount)) continue;
+      let amountNum: number;
+      try {
+        amountNum = new Decimal(cleanAmt).toNumber();
+      } catch {
+        continue;
+      }
+      if (Number.isNaN(amountNum)) continue;
 
       const currency = detectCurrency((desc || '') + ' ' + (lines[i] || ''));
 
       rows.push({
         date: parsedDate,
-        amount: parseFloat(amount.toFixed(2)),
-        description: desc || 'No description',
+        amount: amountNum,
+        description: desc || t('بدون بيان', 'Sans description'),
         reference: ref,
         currency,
       });
     }
     return rows;
-  }, []);
+  }, [t]);
 
   const fetchBankAccounts = useCallback(async () => {
     try {
@@ -186,14 +196,14 @@ export default function BankReconciliationScreen() {
       try {
         const rows = parseCsvToRows(text);
         setParsedRows(rows);
-        setErrors(rows.length === 0 ? ['الملف فارغ أو لا يحتوي على بيانات صالحة'] : []);
+        setErrors(rows.length === 0 ? [t('الملف فارغ أو لا يحتوي على بيانات صالحة', 'Le fichier est vide ou ne contient pas de données valides')] : []);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'خطأ في قراءة الملف';
+        const message = err instanceof Error ? err.message : t('خطأ في قراءة الملف', 'Erreur de lecture du fichier');
         setErrors([message]);
       }
     };
     reader.readAsText(file);
-  }, [parseCsvToRows]);
+  }, [parseCsvToRows, t]);
 
   const handleReconcile = useCallback(async () => {
     if (!selectedBankAccountId || parsedRows.length === 0) return;
@@ -207,14 +217,19 @@ export default function BankReconciliationScreen() {
         unmatchedBank: res.unmatchedBankRows || [],
         unmatchedSystem: res.unmatchedSystemTransactions || [],
       });
-      toast({ title: `تمت المطابقة: ${res.matched?.length || 0} معاملة` });
+      toast({
+        title: t(
+          `تمت المطابقة: ${res.matched?.length || 0} معاملة`,
+          `Rapprochement terminé : ${res.matched?.length || 0} transaction(s)`
+        )
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'خطأ في المطابقة';
+      const message = error instanceof Error ? error.message : t('خطأ في المطابقة', 'Erreur lors du rapprochement');
       toast({ title: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [parsedRows, selectedBankAccountId, toast]);
+  }, [parsedRows, selectedBankAccountId, toast, t]);
 
   const handleConfirmMatch = useCallback(
     async (txId: number) => {
@@ -234,21 +249,21 @@ export default function BankReconciliationScreen() {
                 }
               : prev
           );
-          toast({ title: 'تم تأكيد المطابقة' });
+          toast({ title: t('تم تأكيد المطابقة', 'Rapprochement confirmé') });
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'خطأ';
+        const message = error instanceof Error ? error.message : t('خطأ', 'Erreur');
         toast({ title: message, variant: 'destructive' });
       } finally {
         setReconciling(false);
       }
     },
-    [result, toast]
+    [result, toast, t]
   );
 
   const formatDate = (dateStr: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('fr-FR');
+      return new Date(dateStr).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR');
     } catch {
       return dateStr;
     }
@@ -257,7 +272,7 @@ export default function BankReconciliationScreen() {
   const accountHealth = useMemo(() => {
     const now = Date.now();
     const buckets = { fresh: 0, aging: 0, stale: 0, critical: 0 };
-    const sumByCurrency: Record<string, number> = {};
+    const sumByCurrency: Record<string, InstanceType<typeof Decimal>> = {};
     const staleItems: TreasuryTransaction[] = [];
 
     for (const tx of allPendingTx) {
@@ -268,43 +283,50 @@ export default function BankReconciliationScreen() {
       else buckets.fresh++;
 
       const cur = tx.currency || 'MAD';
-      const txAmt = Number(tx.amount) || 0;
-      sumByCurrency[cur] = (sumByCurrency[cur] ?? 0) + (tx.type === 'income' ? txAmt : -txAmt);
+      const txAmt = new Decimal(tx.amount || 0);
+      if (!sumByCurrency[cur]) sumByCurrency[cur] = new Decimal(0);
+      sumByCurrency[cur] = tx.type === 'income'
+        ? sumByCurrency[cur].plus(txAmt)
+        : sumByCurrency[cur].minus(txAmt);
 
       if (ageDays > 60) staleItems.push(tx);
     }
 
+    const sumByCurrencyNumber: Record<string, number> = {};
+    for (const [cur, dec] of Object.entries(sumByCurrency)) {
+      sumByCurrencyNumber[cur] = dec.toNumber();
+    }
+
     const selected = bankAccounts.find((a) => a.id === selectedBankAccountId);
-    return { buckets, sumByCurrency, staleItems, selected };
+    return { buckets, sumByCurrency: sumByCurrencyNumber, staleItems, selected };
   }, [allPendingTx, bankAccounts, selectedBankAccountId]);
 
   const formatCurrency = (amount?: number | string | null, currency?: string | null) => {
-    const num = typeof amount === 'number' ? amount : parseFloat(String(amount ?? 0));
-    const safeNum = Number.isFinite(num) ? num : 0;
-    return `${safeNum.toFixed(2)} ${currency || 'MAD'}`;
+    const d = new Decimal(amount ?? 0);
+    return `${d.toFixed(2)} ${currency || 'MAD'}`;
   };
 
   const getMatchStrength = (confidence: 'high' | 'medium' | 'low') => {
     switch (confidence) {
       case 'high':
-        return { label: 'ثقة عالية', color: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/25' };
+        return { label: t('ثقة عالية', 'Confiance élevée'), color: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/25' };
       case 'medium':
-        return { label: 'ثقة متوسطة', color: 'bg-blue-500/15 text-blue-700 border-blue-500/25' };
+        return { label: t('ثقة متوسطة', 'Confiance moyenne'), color: 'bg-blue-500/15 text-blue-700 border-blue-500/25' };
       default:
-        return { label: 'ثقة ضعيفة', color: 'bg-amber-500/15 text-amber-700 border-amber-500/25' };
+        return { label: t('ثقة ضعيفة', 'Confiance faible'), color: 'bg-amber-500/15 text-amber-700 border-amber-500/25' };
     }
   };
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <ArrowLeftRight className="w-6 h-6 text-primary" />
-            التسوية البنكية التلقائية
+            {t('التسوية البنكية التلقائية', 'Rapprochement Bancaire Automatique')}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            مطابقة كشوف الحساب مع المعاملات المسجلة
+            {t('مطابقة كشوف الحساب مع المعاملات المسجلة', 'Rapprochement des relevés bancaires avec les transactions du système')}
           </p>
         </div>
         <Button
@@ -313,19 +335,23 @@ export default function BankReconciliationScreen() {
           className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-semibold h-9 px-3 gap-1.5 shadow-xs"
         >
           <Plus className="w-4 h-4" />
-          إضافة حساب بنكي جديد
+          {t('إضافة حساب بنكي جديد', 'Ajouter un nouveau compte')}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-foreground">1. تحميل كشف الحساب البنكي</CardTitle>
+          <CardTitle className="text-foreground">
+            {t('1. تحميل كشف الحساب البنكي', '1. Importer le relevé de compte bancaire')}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">الحساب البنكي</label>
+                <label className="text-sm font-medium text-foreground">
+                  {t('الحساب البنكي', 'Compte bancaire')}
+                </label>
                 <Button
                   type="button"
                   variant="ghost"
@@ -334,7 +360,7 @@ export default function BankReconciliationScreen() {
                   className="h-6 text-xs text-primary hover:text-primary/80 gap-1 px-1.5 font-medium"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  إضافة حساب
+                  {t('إضافة حساب', 'Ajouter un compte')}
                 </Button>
               </div>
               <select
@@ -342,17 +368,22 @@ export default function BankReconciliationScreen() {
                 onChange={(e) => setSelectedBankAccountId(e.target.value ? Number(e.target.value) : null)}
                 className="w-full h-10 px-3 border border-input rounded-lg bg-card text-foreground text-sm focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="">-- اختر الحساب البنكي --</option>
+                <option value="">{t('-- اختر الحساب البنكي --', '-- Sélectionner le compte bancaire --')}</option>
                 {bankAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name || a.bank_name || `حساب #${a.id}`} ({a.currency || 'MAD'})
+                    {a.name || a.bank_name || `${t('حساب #', 'Compte #')}${a.id}`} ({a.currency || 'MAD'})
                   </option>
                 ))}
               </select>
 
               {bankAccounts.length === 0 && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 mt-2">
-                  <span>لا توجد حسابات بنكية مسجلة حالياً. يُرجى إضافة حسابك البنكي.</span>
+                  <span>
+                    {t(
+                      'لا توجد حسابات بنكية مسجلة حالياً. يُرجى إضافة حسابك البنكي.',
+                      'Aucun compte bancaire enregistré. Veuillez ajouter un compte bancaire.'
+                    )}
+                  </span>
                   <Button
                     type="button"
                     size="sm"
@@ -360,13 +391,15 @@ export default function BankReconciliationScreen() {
                     onClick={() => setIsAddAccountOpen(true)}
                     className="h-7 text-xs border-amber-500/30 text-amber-800 dark:text-amber-300 font-medium"
                   >
-                    + إضافة حساب بنكي الآن
+                    {t('+ إضافة حساب بنكي الآن', '+ Ajouter un compte')}
                   </Button>
                 </div>
               )}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">ملف كشف الحساب (CSV)</label>
+              <label className="text-sm font-medium text-foreground">
+                {t('ملف كشف الحساب (CSV)', 'Fichier de relevé (CSV)')}
+              </label>
               <div className="relative">
                 <input
                   type="file"
@@ -381,7 +414,7 @@ export default function BankReconciliationScreen() {
                 >
                   <Upload className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground truncate">
-                    {fileName || 'اختر ملف CSV أو اسحبه هنا...'}
+                    {fileName || t('اختر ملف CSV أو اسحبه هنا...', 'Choisir un fichier CSV ou le glisser ici...')}
                   </span>
                 </label>
               </div>
@@ -394,7 +427,9 @@ export default function BankReconciliationScreen() {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-5 h-5 text-rose-500 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-rose-600 text-sm">أخطاء في قراءة الملف:</p>
+                    <p className="font-semibold text-rose-600 text-sm">
+                      {t('أخطاء في قراءة الملف:', 'Erreurs de lecture du fichier :')}
+                    </p>
                     <ul className="text-xs text-rose-600/80 mt-1 space-y-0.5">
                       {errors.map((err, i) => (
                         <li key={i}>{err}</li>
@@ -413,13 +448,13 @@ export default function BankReconciliationScreen() {
           >
             {loading || reconciling ? (
               <>
-                <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
-                جاري المطابقة التلقائية...
+                <RefreshCw className="w-4 h-4 ms-2 animate-spin" />
+                {t('جاري المطابقة التلقائية...', 'Rapprochement automatique en cours...')}
               </>
             ) : (
               <>
-                <ArrowLeftRight className="w-4 h-4 ml-2" />
-                مطابقة تلقائية ({parsedRows.length} صف)
+                <ArrowLeftRight className="w-4 h-4 ms-2" />
+                {t(`مطابقة تلقائية (${parsedRows.length} صف)`, `Rapprochement automatique (${parsedRows.length} lignes)`)}
               </>
             )}
           </Button>
@@ -431,23 +466,23 @@ export default function BankReconciliationScreen() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base text-foreground">
               <Activity className="w-5 h-5 text-primary" />
-              صحة الحساب البنكي
+              {t('صحة الحساب البنكي', 'Santé du compte bancaire')}
               {loadingHealth && <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               {accountHealth.selected
-                ? `${accountHealth.selected.name || accountHealth.selected.bank_name || 'حساب بنكي'} • رصيد مُسجَّل: ${formatCurrency(
+                ? `${accountHealth.selected.name || accountHealth.selected.bank_name || t('حساب بنكي', 'Compte bancaire')} • ${t('رصيد مُسجَّل:', 'Solde enregistré :')} ${formatCurrency(
                     accountHealth.selected.current_balance ?? (accountHealth.selected as unknown as Record<string, unknown>).balance as number ?? 0,
                     accountHealth.selected.currency || 'MAD'
                   )}`
-                : 'لم يتم اختيار حساب'}
+                : t('لم يتم اختيار حساب', 'Aucun compte sélectionné')}
             </p>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
                 <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
-                  <Clock className="w-3.5 h-3.5" /> ≤ 30 يوم
+                  <Clock className="w-3.5 h-3.5" /> {t('≤ 30 يوم', '≤ 30 jours')}
                 </div>
                 <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
                   {accountHealth.buckets.fresh}
@@ -455,7 +490,7 @@ export default function BankReconciliationScreen() {
               </div>
               <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
                 <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-                  <Clock className="w-3.5 h-3.5" /> 31-60 يوم
+                  <Clock className="w-3.5 h-3.5" /> {t('31-60 يوم', '31-60 jours')}
                 </div>
                 <p className="text-xl font-bold font-mono text-amber-700 dark:text-amber-400 mt-1">
                   {accountHealth.buckets.aging}
@@ -463,7 +498,7 @@ export default function BankReconciliationScreen() {
               </div>
               <div className="p-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
                 <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400">
-                  <Clock className="w-3.5 h-3.5" /> 61-90 يوم
+                  <Clock className="w-3.5 h-3.5" /> {t('61-90 يوم', '61-90 jours')}
                 </div>
                 <p className="text-xl font-bold font-mono text-orange-700 dark:text-orange-400 mt-1">
                   {accountHealth.buckets.stale}
@@ -471,7 +506,7 @@ export default function BankReconciliationScreen() {
               </div>
               <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
                 <div className="flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400">
-                  <Clock className="w-3.5 h-3.5" /> {">"} 90 يوم (حرج)
+                  <Clock className="w-3.5 h-3.5" /> {t('> 90 يوم (حرج)', '> 90 jours (Critique)')}
                 </div>
                 <p className="text-xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
                   {accountHealth.buckets.critical}
@@ -491,7 +526,7 @@ export default function BankReconciliationScreen() {
                 >
                   {net >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                   <span className="font-mono font-semibold">{formatCurrency(net, cur)}</span>
-                  <span className="text-muted-foreground">صافي معلَّق</span>
+                  <span className="text-muted-foreground">{t('صافي معلَّق', 'Net en attente')}</span>
                 </div>
               ))}
             </div>
@@ -500,7 +535,7 @@ export default function BankReconciliationScreen() {
               <div className="mt-4 p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
                 <p className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4" />
-                  معاملات معلَّقة منذ أكثر من 60 يوم ({accountHealth.staleItems.length})
+                  {t('معاملات معلَّقة منذ أكثر من 60 يوم', 'Transactions en attente depuis plus de 60 jours')} ({accountHealth.staleItems.length})
                 </p>
                 <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                   {accountHealth.staleItems.slice(0, 5).map((tx) => (
@@ -521,19 +556,25 @@ export default function BankReconciliationScreen() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">إجمالي صفوف CSV</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                  {t('إجمالي صفوف CSV', 'Total lignes CSV')}
+                </p>
                 <p className="text-2xl font-bold font-mono text-foreground">{parsedRows.length}</p>
               </CardContent>
             </Card>
             <Card className="border-emerald-500/20">
               <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-emerald-600 uppercase tracking-wider">مطابقات تلقائية</p>
+                <p className="text-xs text-emerald-600 uppercase tracking-wider">
+                  {t('مطابقات تلقائية', 'Rapprochements automatiques')}
+                </p>
                 <p className="text-2xl font-bold font-mono text-emerald-600">{result.matched.length}</p>
               </CardContent>
             </Card>
             <Card className="border-amber-500/20">
               <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-amber-600 uppercase tracking-wider">غير مطابق</p>
+                <p className="text-xs text-amber-600 uppercase tracking-wider">
+                  {t('غير مطابق', 'Non rapprochés')}
+                </p>
                 <p className="text-2xl font-bold font-mono text-amber-600">
                   {result.unmatchedBank.length + result.unmatchedSystem.length}
                 </p>
@@ -546,9 +587,11 @@ export default function BankReconciliationScreen() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-emerald-700 text-base">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  المطابقات التلقائية ({result.matched.length})
+                  {t('المطابقات التلقائية', 'Correspondances automatiques')} ({result.matched.length})
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">اضغط &quot;تأكيد&quot; لترسيم كل مطابقة</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('اضغط "تأكيد" لترسيم كل مطابقة', 'Cliquez sur "Confirmer" pour valider chaque rapprochement')}
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -565,7 +608,9 @@ export default function BankReconciliationScreen() {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                             <div>
-                              <p className="text-xs text-muted-foreground">صف #{idx + 1}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {t('صف #', 'Ligne #')}{idx + 1}
+                              </p>
                               <p className="font-mono font-medium text-foreground">
                                 {formatCurrency(match.bankRow.amount, match.bankRow.currency)}
                               </p>
@@ -577,7 +622,9 @@ export default function BankReconciliationScreen() {
                               <ArrowLeftRight className="w-5 h-5 text-emerald-500" />
                             </div>
                             <div>
-                              <p className="text-xs text-muted-foreground">معاملة #{match.treasuryTransaction.id}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {t('معاملة #', 'Transaction #')}{match.treasuryTransaction.id}
+                              </p>
                               <p className="font-mono font-medium text-foreground">
                                 {formatCurrency(match.treasuryTransaction.amount, match.treasuryTransaction.currency)}
                               </p>
@@ -599,8 +646,8 @@ export default function BankReconciliationScreen() {
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                           ) : (
                             <>
-                              <CheckCircle2 className="w-3.5 h-3.5 ml-1" />
-                              تأكيد
+                              <CheckCircle2 className="w-3.5 h-3.5 ms-1" />
+                              {t('تأكيد', 'Confirmer')}
                             </>
                           )}
                         </Button>
@@ -617,12 +664,14 @@ export default function BankReconciliationScreen() {
               <CardHeader>
                 <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                   <XCircle className="w-4 h-4" />
-                  صفوف كشف الحساب غير المطابقة ({result.unmatchedBank.length})
+                  {t('صفوف كشف الحساب غير المطابقة', 'Lignes de relevé non rapprochées')} ({result.unmatchedBank.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {result.unmatchedBank.length === 0 ? (
-                  <p className="text-center text-xs text-muted-foreground py-6">لا توجد صفوف غير مطابقة</p>
+                  <p className="text-center text-xs text-muted-foreground py-6">
+                    {t('لا توجد صفوف غير مطابقة', 'Aucune ligne non rapprochée')}
+                  </p>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {result.unmatchedBank.map((row, idx) => (
@@ -646,12 +695,14 @@ export default function BankReconciliationScreen() {
               <CardHeader>
                 <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                   <Landmark className="w-4 h-4" />
-                  المعاملات النظامية غير المسوية ({result.unmatchedSystem.length})
+                  {t('المعاملات النظامية غير المسوية', 'Transactions système non rapprochées')} ({result.unmatchedSystem.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {result.unmatchedSystem.length === 0 ? (
-                  <p className="text-center text-xs text-muted-foreground py-6">لا توجد معاملات غير مسوية</p>
+                  <p className="text-center text-xs text-muted-foreground py-6">
+                    {t('لا توجد معاملات غير مسوية', 'Aucune transaction non rapprochée')}
+                  </p>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {result.unmatchedSystem.map((tx) => (
@@ -665,7 +716,7 @@ export default function BankReconciliationScreen() {
                         <p className="text-muted-foreground mt-1">{tx.description?.substring(0, 60)}</p>
                         {tx.reference && <p className="text-muted-foreground">Ref: {tx.reference}</p>}
                         <p className="text-muted-foreground">
-                          {new Date(tx.created_at).toLocaleDateString('fr-FR')}
+                          {new Date(tx.created_at).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
                         </p>
                       </div>
                     ))}

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Search, Wrench, ArrowRight } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
 
 interface Provider {
   id: number;
@@ -21,6 +22,7 @@ interface Provider {
 }
 
 export default function ProvidersPage() {
+  const { t, dir } = useLanguage();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,16 +37,16 @@ export default function ProvidersPage() {
       if (error) throw error;
       setProviders(data || []);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير متوقع';
+      const message = error instanceof Error ? error.message : t('خطأ غير متوقع', 'Erreur inattendue');
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: message,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -60,29 +62,33 @@ export default function ProvidersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">جاري تحميل المزودين...</p>
+      <div className="flex items-center justify-center h-96" dir={dir}>
+        <p className="text-muted-foreground">{t('جاري تحميل المزودين...', 'Chargement des prestataires...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">المزودين والورش</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">إدارة مزودي الصيانة والوقود</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('المزودين والورش', 'Fournisseurs & Ateliers')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('إدارة مزودي الصيانة والوقود والخدمات', 'Gestion des prestataires de maintenance, carburant et services')}
+          </p>
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
         <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
           <Input
-            placeholder="بحث بالمزود أو النوع..."
+            placeholder={t('بحث بالمزود أو النوع...', 'Rechercher par nom ou type de prestataire...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 h-9 text-xs rounded-xl"
+            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
           />
         </div>
         <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
@@ -101,19 +107,19 @@ export default function ProvidersPage() {
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between items-center text-foreground">
-                    <span className="text-muted-foreground">النوع:</span>
+                    <span className="text-muted-foreground">{t('النوع:', 'Type :')}</span>
                     <span className="font-medium capitalize">{provider.type}</span>
                   </div>
                   {provider.phone && (
                     <div className="flex justify-between text-foreground">
-                      <span className="text-muted-foreground">الهاتف:</span>
-                      <span className="font-medium">{provider.phone}</span>
+                      <span className="text-muted-foreground">{t('الهاتف:', 'Tél :')}</span>
+                      <span className="font-medium" dir="ltr">{provider.phone}</span>
                     </div>
                   )}
                   {provider.email && (
                     <div className="flex justify-between text-foreground">
-                      <span className="text-muted-foreground">البريد:</span>
-                      <span className="font-medium">{provider.email}</span>
+                      <span className="text-muted-foreground">{t('البريد:', 'E-mail :')}</span>
+                      <span className="font-medium" dir="ltr">{provider.email}</span>
                     </div>
                   )}
                 </CardContent>
@@ -121,8 +127,8 @@ export default function ProvidersPage() {
               <div className="p-4 pt-0 border-t border-border mt-3 flex justify-end">
                 <Button asChild variant="outline" size="sm">
                   <a href={`/providers/${provider.id}`}>
-                    دفتر الأستاذ
-                    <ArrowRight className="w-3.5 h-3.5 mr-1" />
+                    {t('دفتر الأستاذ', 'Grand livre')}
+                    <ArrowRight className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'mr-1 rotate-180' : 'ml-1'}`} />
                   </a>
                 </Button>
               </div>
@@ -130,7 +136,7 @@ export default function ProvidersPage() {
           ))}
           {filteredProviders.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">لا يوجد مزودين مطابقين</p>
+              <p className="text-muted-foreground">{t('لا يوجد مزودين مطابقين', 'Aucun prestataire trouvé')}</p>
             </div>
           )}
         </div>
@@ -150,7 +156,7 @@ export default function ProvidersPage() {
                       {provider.name}
                     </CardTitle>
                     <span className="text-[11px] text-muted-foreground capitalize">
-                      النوع: {provider.type}
+                      {t('النوع:', 'Type :')} {provider.type}
                     </span>
                   </div>
                 </div>
@@ -159,14 +165,14 @@ export default function ProvidersPage() {
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   {provider.phone && (
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5 text-foreground">
-                      <span className="text-muted-foreground">الهاتف:</span>
+                      <span className="text-muted-foreground">{t('الهاتف:', 'Tél :')}</span>
                       <span className="font-mono font-medium" dir="ltr">{provider.phone}</span>
                     </div>
                   )}
 
                   {provider.email && (
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5 text-foreground">
-                      <span className="text-muted-foreground">البريد:</span>
+                      <span className="text-muted-foreground">{t('البريد:', 'E-mail :')}</span>
                       <span className="font-mono" dir="ltr">{provider.email}</span>
                     </div>
                   )}
@@ -176,8 +182,8 @@ export default function ProvidersPage() {
                 <div className="flex items-center justify-end border-t lg:border-t-0 pt-2.5 lg:pt-0 border-border/40">
                   <Button asChild variant="outline" size="sm" className="rounded-xl h-8 text-xs">
                     <a href={`/providers/${provider.id}`}>
-                      دفتر الأستاذ
-                      <ArrowRight className="w-3.5 h-3.5 mr-1" />
+                      {t('دفتر الأستاذ', 'Grand livre')}
+                      <ArrowRight className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'mr-1 rotate-180' : 'ml-1'}`} />
                     </a>
                   </Button>
                 </div>
@@ -186,7 +192,7 @@ export default function ProvidersPage() {
           ))}
           {filteredProviders.length === 0 && (
             <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-              <p className="text-muted-foreground">لا يوجد مزودين مطابقين</p>
+              <p className="text-muted-foreground">{t('لا يوجد مزودين مطابقين', 'Aucun prestataire trouvé')}</p>
             </div>
           )}
         </div>

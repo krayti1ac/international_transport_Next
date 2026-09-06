@@ -12,8 +12,11 @@ import { Plus, Search, Wrench, Trash2, Calendar, DollarSign } from 'lucide-react
 import { formatCurrency } from '@/lib/forex';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { DEFAULT_TRUCKS, DEFAULT_TRAILERS, DEFAULT_PROVIDERS, fallbackArray } from '@/lib/default-data';
+import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 
 export default function MaintenancePage() {
+  const { t, dir, locale } = useLanguage();
   const [invoices, setInvoices] = useState<RepairInvoice[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [trailers, setTrailers] = useState<Trailer[]>([]);
@@ -86,10 +89,11 @@ export default function MaintenancePage() {
     setIsSubmitting(true);
 
     try {
+      const parsedAmount = new Decimal(formData.amount || '0').toNumber();
       const { error } = await supabase.from('repair_invoices').insert({
         workshop_name: formData.workshop_name,
         workshop_id: formData.workshop_id ? parseInt(formData.workshop_id) : undefined,
-        amount: parseFloat(formData.amount),
+        amount: parsedAmount,
         currency: formData.currency,
         date: formData.date,
         repair_path: formData.repair_path,
@@ -98,7 +102,7 @@ export default function MaintenancePage() {
       });
 
       if (error) throw error;
-      toast({ title: 'تم تسجيل فاتورة الصيانة بنجاح' });
+      toast({ title: t('تم تسجيل فاتورة الصيانة بنجاح', 'Facture de maintenance enregistrée avec succès') });
       setShowModal(false);
       setFormData({
         workshop_name: '',
@@ -113,7 +117,7 @@ export default function MaintenancePage() {
       fetchData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء التسجيل',
+        title: t('خطأ أثناء التسجيل', 'Erreur lors de l\'enregistrement'),
         description: error.message,
         variant: 'destructive',
       });
@@ -123,15 +127,15 @@ export default function MaintenancePage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) return;
+    if (!confirm(t('هل أنت متأكد من حذف هذا السجل؟', 'Êtes-vous sûr de vouloir supprimer cet enregistrement ?'))) return;
     try {
       const { error } = await supabase.from('repair_invoices').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم الحذف بنجاح' });
+      toast({ title: t('تم الحذف بنجاح', 'Supprimé avec succès') });
       fetchData();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -140,11 +144,13 @@ export default function MaintenancePage() {
 
   const totalMaintenanceMAD = invoices
     .filter((inv) => inv.currency === 'MAD')
-    .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    .reduce((sum, inv) => sum.plus(new Decimal(inv.amount || 0)), new Decimal(0))
+    .toNumber();
 
   const totalMaintenanceEUR = invoices
     .filter((inv) => inv.currency === 'EUR')
-    .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    .reduce((sum, inv) => sum.plus(new Decimal(inv.amount || 0)), new Decimal(0))
+    .toNumber();
 
   const filteredInvoices = invoices.filter(
     (inv) =>
@@ -153,15 +159,19 @@ export default function MaintenancePage() {
   );
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">الصيانة والورش وقطع الغيار</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">متابعة فواتير الإصلاحات المحلية والدولية ومصروفات الورش</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('الصيانة والورش وقطع الغيار', 'Maintenance, Ateliers et Pièces de Rechange')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('متابعة فواتير الإصلاحات المحلية والدولية ومصروفات الورش', 'Suivi des factures de réparations nationales & internationales et frais d\'ateliers')}
+          </p>
         </div>
         <Button onClick={() => setShowModal(true)}>
-          <Plus className="w-4 h-4 ml-2" />
-          تسجيل فاتورة صيانة
+          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('تسجيل فاتورة صيانة', 'Enregistrer facture de maintenance')}
         </Button>
       </div>
 
@@ -172,14 +182,16 @@ export default function MaintenancePage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-amber-500" />
-              إجمالي الصيانة المحلية
+              {t('إجمالي الصيانة المحلية', 'Total Maintenance Nationale')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">
               {formatCurrency(totalMaintenanceMAD, 'MAD')}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">مصاريف الصيانة داخل المغرب</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('مصاريف الصيانة داخل المغرب', 'Dépenses d\'entretien au Maroc')}
+            </p>
           </CardContent>
         </Card>
 
@@ -187,14 +199,16 @@ export default function MaintenancePage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              إجمالي الصيانة الدولية
+              {t('إجمالي الصيانة الدولية', 'Total Maintenance Internationale')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
               {formatCurrency(totalMaintenanceEUR, 'EUR')}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">إصلاحات وقطع غيار في أوروبا</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('إصلاحات وقطع غيار في أوروبا', 'Réparations et pièces détachées en Europe')}
+            </p>
           </CardContent>
         </Card>
 
@@ -202,24 +216,28 @@ export default function MaintenancePage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              عدد الفواتير المسجلة
+              {t('عدد الفواتير المسجلة', 'Nombre de Factures')}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">{invoices.length} فاتورة</div>
-            <p className="text-xs text-muted-foreground mt-1">من {providers.length} ورشة ومزود معتمد</p>
+            <div className="text-2xl font-bold text-foreground">
+              {invoices.length} {t('فاتورة', 'facture(s)')}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('من', 'auprès de')} {providers.length} {t('ورشة ومزود معتمد', 'ateliers & prestataires')}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
         <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
           <Input
-            placeholder="بحث بالورشة، البيان، أو الملاحظات..."
+            placeholder={t('بحث بالورشة، البيان، أو الملاحظات...', 'Rechercher par atelier, désignation, notes...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 h-9 text-xs rounded-xl"
+            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
           />
         </div>
         <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
@@ -227,7 +245,7 @@ export default function MaintenancePage() {
 
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">جاري تحميل سجلات الصيانة...</p>
+          <p className="text-muted-foreground">{t('جاري تحميل سجلات الصيانة...', 'Chargement des factures de maintenance...')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -238,7 +256,7 @@ export default function MaintenancePage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-amiri font-bold flex items-center gap-2 text-foreground">
                       <Wrench className="w-4 h-4 text-amber-500" />
-                      {invoice.workshop_name || `ورشة #${invoice.workshop_id}`}
+                      {invoice.workshop_name || `${t('ورشة', 'Atelier')} #${invoice.workshop_id}`}
                     </CardTitle>
                     <span className="font-mono font-bold text-sm text-primary">
                       {formatCurrency(invoice.amount, invoice.currency)}
@@ -249,13 +267,17 @@ export default function MaintenancePage() {
                   <div className="flex justify-between items-center text-foreground">
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <Calendar className="w-3.5 h-3.5" />
-                      التاريخ:
+                      {t('التاريخ:', 'Date :')}
                     </span>
                     <span className="font-medium">{invoice.date}</span>
                   </div>
                   <div className="flex justify-between text-foreground">
-                    <span className="text-muted-foreground">طريقة الأداء:</span>
-                    <span className="font-medium capitalize">{invoice.payment_method}</span>
+                    <span className="text-muted-foreground">{t('طريقة الأداء:', 'Mode de paiement :')}</span>
+                    <span className="font-medium capitalize">
+                      {invoice.payment_method === 'cash' ? t('نقداً', 'Espèces') :
+                       invoice.payment_method === 'bank_transfer' ? t('تحويل بنكي', 'Virement') :
+                       invoice.payment_method === 'check' ? t('شيك', 'Chèque') : invoice.payment_method}
+                    </span>
                   </div>
                   {invoice.notes && (
                     <div className="bg-muted/50 p-2.5 rounded-lg text-xs text-muted-foreground mt-2 border border-border">
@@ -271,15 +293,15 @@ export default function MaintenancePage() {
                   className="text-xs"
                   onClick={() => handleDelete(invoice.id)}
                 >
-                  <Trash2 className="w-3.5 h-3.5 ml-1" />
-                  حذف السجل
+                  <Trash2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                  {t('حذف السجل', 'Supprimer')}
                 </Button>
               </div>
             </Card>
           ))}
           {filteredInvoices.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">لا توجد فواتير صيانة مطابقة للبحث</p>
+              <p className="text-muted-foreground">{t('لا توجد فواتير صيانة مطابقة للبحث', 'Aucune facture ne correspond à la recherche')}</p>
             </div>
           )}
         </div>
@@ -296,7 +318,7 @@ export default function MaintenancePage() {
                   </div>
                   <div>
                     <CardTitle className="text-base font-amiri font-bold text-foreground">
-                      {invoice.workshop_name || `ورشة #${invoice.workshop_id}`}
+                      {invoice.workshop_name || `${t('ورشة', 'Atelier')} #${invoice.workshop_id}`}
                     </CardTitle>
                     <span className="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-muted-foreground" />
@@ -308,15 +330,19 @@ export default function MaintenancePage() {
                 {/* Middle: Amount, Payment Method, Notes */}
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                    <span className="text-muted-foreground">المبلغ:</span>
+                    <span className="text-muted-foreground">{t('المبلغ:', 'Montant :')}</span>
                     <span className="font-mono font-bold text-sm text-primary">
                       {formatCurrency(invoice.amount, invoice.currency)}
                     </span>
                   </div>
 
                   <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5 text-foreground">
-                    <span className="text-muted-foreground">طريقة الأداء:</span>
-                    <span className="font-medium capitalize">{invoice.payment_method}</span>
+                    <span className="text-muted-foreground">{t('طريقة الأداء:', 'Paiement :')}</span>
+                    <span className="font-medium capitalize">
+                      {invoice.payment_method === 'cash' ? t('نقداً', 'Espèces') :
+                       invoice.payment_method === 'bank_transfer' ? t('تحويل بنكي', 'Virement') :
+                       invoice.payment_method === 'check' ? t('شيك', 'Chèque') : invoice.payment_method}
+                    </span>
                   </div>
 
                   {invoice.notes && (
@@ -326,7 +352,7 @@ export default function MaintenancePage() {
                   )}
                 </div>
 
-                {/* Left: Actions */}
+                {/* Actions */}
                 <div className="flex items-center justify-end border-t lg:border-t-0 pt-2.5 lg:pt-0 border-border/40">
                   <Button
                     variant="destructive"
@@ -334,8 +360,8 @@ export default function MaintenancePage() {
                     className="text-xs rounded-xl h-8 px-3"
                     onClick={() => handleDelete(invoice.id)}
                   >
-                    <Trash2 className="w-3.5 h-3.5 ml-1" />
-                    حذف السجل
+                    <Trash2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                    {t('حذف السجل', 'Supprimer')}
                   </Button>
                 </div>
               </div>
@@ -343,33 +369,37 @@ export default function MaintenancePage() {
           ))}
           {filteredInvoices.length === 0 && (
             <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-              <p className="text-muted-foreground">لا توجد فواتير صيانة مطابقة للبحث</p>
+              <p className="text-muted-foreground">{t('لا توجد فواتير صيانة مطابقة للبحث', 'Aucune facture ne correspond à la recherche')}</p>
             </div>
           )}
         </div>
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4" dir={dir}>
           <Card className="w-full max-w-lg shadow-2xl border-border bg-card">
             <CardHeader>
-              <CardTitle className="font-amiri text-foreground">تسجيل فاتورة صيانة / ورشة</CardTitle>
+              <CardTitle className="font-amiri text-foreground">
+                {t('تسجيل فاتورة صيانة / ورشة', 'Enregistrer une facture de maintenance')}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCreateInvoice} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">اسم الورشة أو المزود *</label>
+                  <label className="text-sm font-medium text-foreground">
+                    {t('اسم الورشة أو المزود *', 'Nom de l\'atelier ou prestataire *')}
+                  </label>
                   <Input
                     value={formData.workshop_name}
                     onChange={(e) => setFormData({ ...formData, workshop_name: e.target.value })}
-                    placeholder="مثال: ورشة الأمل للإصلاح / Scania Service"
+                    placeholder={t('مثال: ورشة الأمل للإصلاح / Scania Service', 'Ex: Garage Al Amal / Scania Service')}
                     required
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">المبلغ *</label>
+                    <label className="text-sm font-medium text-foreground">{t('المبلغ *', 'Montant *')}</label>
                     <Input
                       type="number"
                       step="0.01"
@@ -382,21 +412,21 @@ export default function MaintenancePage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">العملة</label>
+                    <label className="text-sm font-medium text-foreground">{t('العملة', 'Devise')}</label>
                     <select
                       value={formData.currency}
                       onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
                       <option value="MAD">MAD (درهم)</option>
-                      <option value="EUR">EUR (يورو)</option>
+                      <option value="EUR">EUR (Euro)</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ الفاتورة</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ الفاتورة', 'Date de la facture')}</label>
                     <Input
                       type="date"
                       value={formData.date}
@@ -407,25 +437,25 @@ export default function MaintenancePage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">طريقة الدفع</label>
+                    <label className="text-sm font-medium text-foreground">{t('طريقة الدفع', 'Mode de paiement')}</label>
                     <select
                       value={formData.payment_method}
                       onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="cash">نقداً (Cash)</option>
-                      <option value="bank_transfer">تحويل بنكي</option>
-                      <option value="check">شيك</option>
+                      <option value="cash">{t('نقداً (Cash)', 'Espèces (Cash)')}</option>
+                      <option value="bank_transfer">{t('تحويل بنكي', 'Virement bancaire')}</option>
+                      <option value="check">{t('شيك', 'Chèque')}</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">بيان القطع والخدمات (Détails)</label>
+                  <label className="text-sm font-medium text-foreground">{t('بيان القطع والخدمات (Détails)', 'Détails des pièces et prestations')}</label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="مثال: تبديل الفرامل وتغيير الزيت والفلاتر..."
+                    placeholder={t('مثال: تبديل الفرامل وتغيير الزيت والفلاتر...', 'Ex: Remplacement plaquettes de frein, vidange et filtres...')}
                     rows={3}
                     className="w-full px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors"
                   />
@@ -433,10 +463,10 @@ export default function MaintenancePage() {
 
                 <div className="flex gap-2 pt-2 border-t border-border">
                   <Button type="submit" disabled={isSubmitting} className="flex-1">
-                    {isSubmitting ? 'جاري الحفظ...' : 'حفظ الفاتورة'}
+                    {isSubmitting ? t('جاري الحفظ...', 'Enregistrement...') : t('حفظ الفاتورة', 'Enregistrer')}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
-                    إلغاء
+                    {t('إلغاء', 'Annuler')}
                   </Button>
                 </div>
               </form>

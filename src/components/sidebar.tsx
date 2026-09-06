@@ -12,13 +12,14 @@ import {
   Settings,
   Users,
 } from "lucide-react";
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useTheme } from "@/components/theme-provider";
 import { useLanguage } from "@/components/language-provider";
 import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export interface SidebarItem {
   title: string;
+  titleFr?: string;
   href: string;
   icon?: React.ReactNode;
   roles?: string[];
@@ -30,6 +31,7 @@ export interface SidebarItem {
 export interface SidebarGroup {
   id?: string;
   label: string;
+  labelFr?: string;
   icon?: React.ReactNode;
   badge?: string | number;
   items: SidebarItem[];
@@ -52,13 +54,19 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
 
   const [activeGroupId, setActiveGroupId] = useState<string | null | undefined>(undefined);
   const [allExpanded, setAllExpanded] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => currentPath.startsWith('/settings'));
+
+  useEffect(() => {
+    if (currentPath.startsWith('/settings')) {
+      setSettingsOpen(true);
+    }
+  }, [currentPath]);
 
   const normalizedGroups: SidebarGroup[] = useMemo(() => {
     if (groups && groups.length > 0) return groups;
-    if (items && items.length > 0) return [{ id: 'default', label: 'الرئيسية', items }];
+    if (items && items.length > 0) return [{ id: 'default', label: t('الرئيسية', 'Accueil', 'Home'), items }];
     return [];
-  }, [groups, items]);
+  }, [groups, items, t]);
 
   const isItemAllowed = useCallback((item: SidebarItem): boolean => {
     if (!item.roles) return true;
@@ -143,9 +151,12 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
     return filteredGroups
       .map((group) => {
         const matchingItems = group.items.filter((item) => {
-          const titleMatches = item.title.toLowerCase().includes(query);
+          const titleMatches =
+            item.title.toLowerCase().includes(query) ||
+            (item.titleFr ? item.titleFr.toLowerCase().includes(query) : false);
           const childMatches = item.children?.some((child) =>
-            child.title.toLowerCase().includes(query)
+            child.title.toLowerCase().includes(query) ||
+            (child.titleFr ? child.titleFr.toLowerCase().includes(query) : false)
           );
           return titleMatches || childMatches;
         });
@@ -170,7 +181,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={logoUrl}
-              alt={`شعار ${companyName}`}
+              alt={`${t('شعار', 'Logo', 'Logo')} ${companyName}`}
               className="w-8 h-8 rounded-lg object-contain bg-[var(--sidebar-bg)] border border-[var(--sidebar-border)] shrink-0"
             />
           ) : (
@@ -198,7 +209,9 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             <h1 className="text-sm font-bold font-amiri tracking-wide text-[var(--sidebar-fg)] leading-tight truncate">
               {companyName}
             </h1>
-            <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">المنظومة اللوجستية الدولية</p>
+            <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">
+              {t('المنظومة اللوجستية الدولية', 'Plateforme Logistique Internationale', 'International Logistics Platform')}
+            </p>
           </div>
         </div>
         <span className="flex h-2 w-2 relative shrink-0">
@@ -210,18 +223,18 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       {/* Search and Quick Controls */}
       <div className="px-2.5 pt-2.5 pb-1.5 space-y-1.5 border-b border-[var(--sidebar-border)] bg-[var(--sidebar-header-bg)]/60 transition-colors duration-200">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--sidebar-fg-muted)]" />
+          <Search className={`w-3.5 h-3.5 absolute ${dir === 'rtl' ? 'right-2.5' : 'left-2.5'} top-1/2 -translate-y-1/2 text-[var(--sidebar-fg-muted)]`} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={locale === 'ar' ? 'بحث سريع في القوائم...' : 'Recherche rapide...'}
-            className="w-full bg-[var(--sidebar-input-bg)] border border-[var(--sidebar-border)] rounded-md pr-8 pl-3 py-1 text-xs text-[var(--sidebar-fg)] placeholder:text-[var(--sidebar-fg-muted)] focus:outline-hidden focus:border-[var(--sidebar-fg-muted)] focus:ring-1 focus:ring-[var(--sidebar-fg-muted)]/20 transition-all"
+            placeholder={t('بحث سريع في القوائم...', 'Recherche rapide...', 'Quick search...')}
+            className={`w-full bg-[var(--sidebar-input-bg)] border border-[var(--sidebar-border)] rounded-md ${dir === 'rtl' ? 'pr-8 pl-3' : 'pl-8 pr-3'} py-1 text-xs text-[var(--sidebar-fg)] placeholder:text-[var(--sidebar-fg-muted)] focus:outline-hidden focus:border-[var(--sidebar-fg-muted)] focus:ring-1 focus:ring-[var(--sidebar-fg-muted)]/20 transition-all`}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] bg-[var(--sidebar-border)] rounded-full w-3.5 h-3.5 flex items-center justify-center cursor-pointer"
+              className={`absolute ${dir === 'rtl' ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-[10px] text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] bg-[var(--sidebar-border)] rounded-full w-3.5 h-3.5 flex items-center justify-center cursor-pointer`}
             >
               ✕
             </button>
@@ -231,27 +244,27 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         {/* Expand / Collapse Controls */}
         <div className="flex items-center justify-between text-[10px] text-[var(--sidebar-fg-muted)] px-1">
           <span className="font-semibold text-[var(--sidebar-fg-muted)] uppercase tracking-wider">
-            الأقسام ({searchedGroups.length})
+            {t(`الأقسام (${searchedGroups.length})`, `Sections (${searchedGroups.length})`, `Sections (${searchedGroups.length})`)}
           </span>
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={expandAll}
-              title="توسيع الكل"
+              title={t('توسيع الكل', 'Tout déplier', 'Expand all')}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer"
             >
               <ChevronsUpDown className="w-2.5 h-2.5" />
-              <span>توسيع</span>
+              <span>{t('توسيع', 'Déplier', 'Expand')}</span>
             </button>
             <span className="text-[var(--sidebar-fg-muted)]">•</span>
             <button
               type="button"
               onClick={collapseAll}
-              title="طي الكل"
+              title={t('طي الكل', 'Tout replier', 'Collapse all')}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer"
             >
               <ChevronsDownUp className="w-2.5 h-2.5" />
-              <span>طي</span>
+              <span>{t('طي', 'Replier', 'Collapse')}</span>
             </button>
           </div>
         </div>
@@ -261,7 +274,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--sidebar-border)] scrollbar-track-transparent">
         {searchedGroups.length === 0 ? (
           <div className="text-center py-6 text-xs text-[var(--sidebar-fg-muted)]">
-            لا توجد عناصر مطابقة للبحث
+            {t('لا توجد عناصر مطابقة للبحث', 'Aucun résultat', 'No matching items')}
           </div>
         ) : (
           searchedGroups.map((group) => {
@@ -275,7 +288,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                   type="button"
                   onClick={() => handleToggleGroup(group.id!)}
                   className={cn(
-                    "w-full px-2.5 py-2 flex items-center justify-between text-right rounded-md transition-colors cursor-pointer group",
+                    "w-full px-2.5 py-2 flex items-center justify-between text-start rounded-md transition-colors cursor-pointer group",
                     isOpen
                       ? "text-[var(--sidebar-fg)] font-semibold"
                       : hasActiveChild
@@ -288,7 +301,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                       <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                     )}
                     <span className="text-[13px] tracking-wide truncate">
-                      {group.label}
+                      {locale === 'fr' ? (group.labelFr || group.label) : group.label}
                     </span>
                   </div>
 
@@ -296,7 +309,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                     {isOpen ? (
                       <ChevronDown className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
                     ) : (
-                      <ChevronLeft className="w-4 h-4 text-[var(--sidebar-fg-muted)] group-hover:text-[var(--sidebar-fg)]" />
+                      <ChevronLeft className={`w-4 h-4 text-[var(--sidebar-fg-muted)] group-hover:text-[var(--sidebar-fg)] ${dir === 'ltr' ? 'rotate-180' : ''}`} />
                     )}
                   </span>
                 </button>
@@ -316,16 +329,21 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                         const isExact = currentPath === item.href;
                         const isBaseMatch = itemBase !== '/dashboard' && (currentPath === itemBase || currentBase === itemBase);
                         const isCurrent = isExact || isBaseMatch;
+                        const itemTitle = locale === 'fr' ? (item.titleFr || item.title) : item.title;
 
                         return (
                           <Link
                             key={`${item.href}-${index}`}
                             href={item.href}
+                            prefetch={true}
                             onClick={onItemClick}
                             className={cn(
                               "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] transition-all group relative cursor-pointer",
                               isCurrent
-                                ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold shadow-2xs border-r-2 border-primary"
+                                ? cn(
+                                    "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold shadow-2xs",
+                                    dir === 'rtl' ? "border-r-2 border-primary" : "border-l-2 border-primary"
+                                  )
                                 : "text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)]"
                             )}
                           >
@@ -340,7 +358,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                               >
                                 {item.icon}
                               </span>
-                              <span className="truncate">{item.title}</span>
+                              <span className="truncate">{itemTitle}</span>
                             </div>
 
                             {item.badge !== undefined && (
@@ -366,13 +384,15 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] text-[var(--sidebar-fg)]">
           <div className="flex items-center gap-2">
             <Sun className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
-            <span className="text-[12px] font-medium">الوضع الداكن</span>
+            <span className="text-[12px] font-medium">
+              {theme === 'dark' ? (locale === 'ar' ? 'الوضع الداكن' : 'Mode sombre') : (locale === 'ar' ? 'الوضع الفاتح' : 'Mode clair')}
+            </span>
           </div>
           {/* Custom iOS/Modern style toggle switch */}
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label="تبديل الوضع الداكن"
+            aria-label={t('تبديل الوضع', 'Basculer le thème', 'Toggle theme')}
             className={cn(
               "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer outline-hidden",
               theme === 'dark' ? "bg-[var(--sidebar-fg-muted)]" : "bg-[var(--sidebar-border)]"
@@ -383,7 +403,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                 "w-5 h-5 rounded-full transition-transform duration-200 shadow-sm",
                 theme === 'dark'
                   ? "bg-[var(--sidebar-bg)] translate-x-0"
-                  : "bg-[var(--sidebar-fg-muted)] -translate-x-5"
+                  : (dir === 'rtl' ? "bg-[var(--sidebar-fg-muted)] -translate-x-5" : "bg-[var(--sidebar-fg-muted)] translate-x-5")
               )}
             />
           </button>
@@ -396,12 +416,12 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             onClick={() => setSettingsOpen(!settingsOpen)}
             className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover-bg)] rounded-md cursor-pointer transition-colors"
           >
-            <span className="text-[12.5px] tracking-wide">الإعدادات</span>
+            <span className="text-[12.5px] tracking-wide">{t('الإعدادات', 'Paramètres', 'Settings')}</span>
             <span className="text-[var(--sidebar-fg-muted)] transition-transform duration-200">
               {settingsOpen ? (
                 <ChevronDown className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
               ) : (
-                <ChevronLeft className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
+                <ChevronLeft className={`w-4 h-4 text-[var(--sidebar-fg-muted)] ${dir === 'ltr' ? 'rotate-180' : ''}`} />
               )}
             </span>
           </button>
@@ -410,6 +430,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
             <div className="space-y-0.5 pr-2 pl-1 py-1">
               <Link
                 href="/settings"
+                prefetch={true}
                 onClick={onItemClick}
                 className={cn(
                   "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
@@ -420,12 +441,13 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                   <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
                     <Settings className="w-4 h-4" />
                   </span>
-                  <span className="truncate">إعدادات الشركة</span>
+                  <span className="truncate">{t('إعدادات الشركة', 'Paramètres entreprise', 'Company Settings')}</span>
                 </div>
               </Link>
 
               <Link
                 href="/settings?tab=users"
+                prefetch={true}
                 onClick={onItemClick}
                 className={cn(
                   "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
@@ -436,7 +458,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                   <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
                     <Users className="w-4 h-4" />
                   </span>
-                  <span className="truncate">المستخدمين</span>
+                  <span className="truncate">{t('المستخدمين', 'Utilisateurs', 'Users')}</span>
                 </div>
               </Link>
             </div>
@@ -445,7 +467,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
 
         {/* System Version string */}
         <div className="text-[10px] text-center text-[var(--sidebar-fg-muted)] pt-1 pb-0.5 tracking-wider font-mono">
-          إصدار المنظومة v1.0.0+1
+          {t('إصدار المنظومة v1.0.0+1', 'Version système v1.0.0+1', 'System version v1.0.0+1')}
         </div>
       </div>
     </aside>

@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import type { TripOrder } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 import {
   Loader2,
   CheckCircle2,
@@ -23,37 +24,38 @@ import {
 import { DriverDeliveryScreen } from '@/features/trips/components/DriverDeliveryScreen';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, t: (ar: string, fr: string) => string) {
   switch (status) {
     case 'in_transit':
       return {
-        label: 'في الطريق',
+        label: t('في الطريق', 'En transit'),
         className: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25',
       };
     case 'completed':
       return {
-        label: 'مكتملة',
+        label: t('مكتملة', 'Terminé'),
         className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
       };
     case 'pending':
       return {
-        label: 'قيد الانتظار',
+        label: t('قيد الانتظار', 'En attente'),
         className: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25',
       };
     case 'cancelled':
       return {
-        label: 'ملغية',
+        label: t('ملغية', 'Annulé'),
         className: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25',
       };
     default:
       return {
-        label: status || 'غير محدد',
+        label: status || t('غير محدد', 'Non défini'),
         className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/25',
       };
   }
 }
 
 function DriverDeliveryContent() {
+  const { t, dir } = useLanguage();
   const searchParams = useSearchParams();
   const router = useRouter();
   const tripId = searchParams.get('tripId');
@@ -91,7 +93,7 @@ function DriverDeliveryContent() {
       try {
         const id = parseInt(tripId, 10);
         if (isNaN(id)) {
-          throw new Error('معرف الرحلة غير صالح');
+          throw new Error(t('معرف الرحلة غير صالح', 'Identifiant de voyage invalide'));
         }
 
         const { data, error } = await supabase
@@ -105,9 +107,9 @@ function DriverDeliveryContent() {
         setTrip(data);
       } catch (error) {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'لم يتم العثور على الرحلة';
+        const message = error instanceof Error ? error.message : t('لم يتم العثور على الرحلة', 'Voyage introuvable');
         setTripError(message);
-        toast({ title: 'خطأ', description: message, variant: 'destructive' });
+        toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
       } finally {
         if (!cancelled) setLoadingTrip(false);
       }
@@ -118,7 +120,7 @@ function DriverDeliveryContent() {
     return () => {
       cancelled = true;
     };
-  }, [tripId, supabase, toast]);
+  }, [tripId, supabase, toast, t]);
 
   // Load trips list if NO tripId is present
   useEffect(() => {
@@ -185,8 +187,8 @@ function DriverDeliveryContent() {
         }
       } catch (error) {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'حدث خطأ أثناء تحميل الرحلات';
-        toast({ title: 'خطأ', description: message, variant: 'destructive' });
+        const message = error instanceof Error ? error.message : t('حدث خطأ أثناء تحميل الرحلات', 'Erreur de chargement des voyages');
+        toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -197,7 +199,7 @@ function DriverDeliveryContent() {
     return () => {
       cancelled = true;
     };
-  }, [tripId, supabase, toast]);
+  }, [tripId, supabase, toast, t]);
 
   // Filtering trips
   const filteredTrips = useMemo(() => {
@@ -224,11 +226,11 @@ function DriverDeliveryContent() {
   // 1. Loading state when tripId is active
   if (loadingTrip) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6 py-12" dir="rtl">
+      <div className="max-w-2xl mx-auto space-y-6 py-12" dir={dir}>
         <Card className="p-8 text-center shadow-sm">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary mb-3" />
-          <p className="text-foreground font-medium">جاري تحميل بيانات الرحلة...</p>
-          <p className="text-xs text-muted-foreground mt-1">يرجى الانتظار قليلاً</p>
+          <p className="text-foreground font-medium">{t('جاري تحميل بيانات الرحلة...', 'Chargement des données du voyage...')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('يرجى الانتظار قليلاً', 'Veuillez patienter un instant')}</p>
         </Card>
       </div>
     );
@@ -237,21 +239,21 @@ function DriverDeliveryContent() {
   // 2. Error state when tripId is invalid
   if (tripId && (!trip || tripError)) {
     return (
-      <div className="max-w-xl mx-auto space-y-6 py-12" dir="rtl">
+      <div className="max-w-xl mx-auto space-y-6 py-12" dir={dir}>
         <Card className="p-8 text-center space-y-4 shadow-sm border-destructive/30">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
           <div>
-            <h2 className="text-lg font-bold text-foreground">تعذر العثور على الرحلة</h2>
+            <h2 className="text-lg font-bold text-foreground">{t('تعذر العثور على الرحلة', 'Voyage introuvable')}</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {tripError || 'معرف الرحلة غير صالح أو تم حذفه'}
+              {tripError || t('معرف الرحلة غير صالح أو تم حذفه', 'Identifiant de voyage invalide ou supprimé')}
             </p>
           </div>
           <Button
             onClick={() => router.replace('/driver-delivery')}
             className="w-full sm:w-auto"
           >
-            <ArrowRight className="w-4 h-4 ml-2" />
-            اختيار رحلة من القائمة
+            <ArrowRight className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+            {t('اختيار رحلة من القائمة', 'Choisir un voyage dans la liste')}
           </Button>
         </Card>
       </div>
@@ -261,7 +263,7 @@ function DriverDeliveryContent() {
   // 3. Render delivery screen if trip is selected
   if (trip) {
     return (
-      <div className="space-y-4" dir="rtl">
+      <div className="space-y-4" dir={dir}>
         <div className="flex items-center justify-between bg-card p-3 rounded-lg border shadow-sm">
           <Button
             variant="ghost"
@@ -269,11 +271,11 @@ function DriverDeliveryContent() {
             onClick={() => router.replace('/driver-delivery')}
             className="text-muted-foreground hover:text-foreground"
           >
-            <ArrowRight className="w-4 h-4 ml-1.5" />
-            العودة لاختيار رحلة أخرى
+            <ArrowRight className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+            {t('العودة لاختيار رحلة أخرى', 'Retour à la sélection des voyages')}
           </Button>
           <span className="text-xs text-muted-foreground font-mono">
-            رحلة #{trip.id} {trip.cmr_number ? `| CMR: ${trip.cmr_number}` : ''}
+            {t(`رحلة #${trip.id}`, `Voyage #${trip.id}`)} {trip.cmr_number ? `| CMR: ${trip.cmr_number}` : ''}
           </span>
         </div>
 
@@ -282,8 +284,8 @@ function DriverDeliveryContent() {
           onCancel={() => router.replace('/driver-delivery')}
           onSuccess={() => {
             toast({
-              title: 'تم تأكيد التسليم بنجاح',
-              description: 'تم تسجيل توقيع المستلم وتحديث حالة الرحلة.',
+              title: t('تم تأكيد التسليم بنجاح', 'Livraison confirmée avec succès'),
+              description: t('تم تسجيل توقيع المستلم وتحديث حالة الرحلة.', 'Signature du destinataire enregistrée et statut mis à jour.'),
             });
             router.replace('/driver-delivery');
           }}
@@ -294,16 +296,19 @@ function DriverDeliveryContent() {
 
   // 4. Trip Selection Screen (when no tripId)
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <CheckCircle2 className="w-6 h-6 text-primary" />
-            تأكيد وتوقيع التسليم (POD)
+            {t('تأكيد وتوقيع التسليم (POD)', 'Preuve de Livraison Électronique (POD)')}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            اختر الرحلة لتسجيل توقيع المستلم ورفع نسخة CMR وإثبات التسليم الجغرافي
+            {t(
+              'اختر الرحلة لتسجيل توقيع المستلم ورفع نسخة CMR وإثبات التسليم الجغرافي',
+              'Sélectionnez un voyage pour émarger le bon de livraison, téléverser le CMR et géolocaliser le déchargement'
+            )}
           </p>
         </div>
       </div>
@@ -311,12 +316,12 @@ function DriverDeliveryContent() {
       {/* Filters & Search & View Toggle */}
       <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Search className={`w-4 h-4 absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none`} />
           <Input
-            placeholder="بحث برقم الرحلة، CMR، المسار، السائق، أو الشاحنة..."
+            placeholder={t('بحث برقم الرحلة، CMR، المسار، السائق، أو الشاحنة...', 'Recherche par N° voyage, CMR, itinéraire, chauffeur, véhicule...')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pr-9"
+            className={dir === 'rtl' ? 'pr-9' : 'pl-9'}
           />
         </div>
 
@@ -329,7 +334,7 @@ function DriverDeliveryContent() {
               onClick={() => setStatusFilter('active')}
               className="text-xs h-8"
             >
-              الرحلات النشطة
+              {t('الرحلات النشطة', 'Voyages en cours')}
             </Button>
             <Button
               type="button"
@@ -338,7 +343,7 @@ function DriverDeliveryContent() {
               onClick={() => setStatusFilter('completed')}
               className="text-xs h-8"
             >
-              المكتملة
+              {t('المكتملة', 'Terminés')}
             </Button>
             <Button
               type="button"
@@ -347,7 +352,7 @@ function DriverDeliveryContent() {
               onClick={() => setStatusFilter('all')}
               className="text-xs h-8"
             >
-              الكل ({tripsList.length})
+              {t('الكل', 'Tous')} ({tripsList.length})
             </Button>
           </div>
 
@@ -359,19 +364,19 @@ function DriverDeliveryContent() {
       {loadingList ? (
         <Card className="p-12 text-center shadow-sm">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary mb-3" />
-          <p className="text-foreground font-medium">جاري تحميل الرحلات...</p>
-          <p className="text-xs text-muted-foreground mt-1">يرجى الانتظار</p>
+          <p className="text-foreground font-medium">{t('جاري تحميل الرحلات...', 'Chargement des voyages...')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('يرجى الانتظار', 'Veuillez patienter')}</p>
         </Card>
       ) : filteredTrips.length === 0 ? (
         <Card className="p-12 text-center shadow-sm">
           <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-          <h3 className="text-base font-semibold text-foreground">لا توجد رحلات مطابقة</h3>
+          <h3 className="text-base font-semibold text-foreground">{t('لا توجد رحلات مطابقة', 'Aucun voyage correspondant')}</h3>
           <p className="text-sm text-muted-foreground mt-1">
             {searchTerm
-              ? 'لم يتم العثور على أي رحلة تطابق معايير البحث'
+              ? t('لم يتم العثور على أي رحلة تطابق معايير البحث', 'Aucun voyage trouvé pour cette recherche')
               : statusFilter === 'active'
-              ? 'لا توجد رحلات نشطة في الوقت الحالي بحاجة لتأكيد التسليم'
-              : 'لا توجد رحلات مسجلة في هذا القسم'}
+              ? t('لا توجد رحلات نشطة في الوقت الحالي بحاجة لتأكيد التسليم', 'Aucun voyage actif en attente de livraison')
+              : t('لا توجد رحلات مسجلة في هذا القسم', 'Aucun voyage enregistré dans cette section')}
           </p>
           {searchTerm && (
             <Button
@@ -380,14 +385,14 @@ function DriverDeliveryContent() {
               onClick={() => setSearchTerm('')}
               className="mt-4"
             >
-              إلغاء البحث
+              {t('إلغاء البحث', 'Réinitialiser')}
             </Button>
           )}
         </Card>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredTrips.map((item) => {
-            const badge = getStatusBadge(item.status);
+            const badge = getStatusBadge(item.status, t);
             const driverName = item.driver_id ? driversMap[item.driver_id] : null;
             const truckPlate = item.truck_id ? trucksMap[item.truck_id] : null;
 
@@ -409,7 +414,7 @@ function DriverDeliveryContent() {
                   </div>
                   <CardTitle className="text-base font-amiri font-bold text-foreground mt-2 flex items-center gap-1.5">
                     <MapPin className="w-4 h-4 text-primary shrink-0" />
-                    <span>{item.route || 'مسار غير محدد'}</span>
+                    <span>{item.route || t('مسار غير محدد', 'Itinéraire non spécifié')}</span>
                   </CardTitle>
                 </CardHeader>
 
@@ -419,7 +424,7 @@ function DriverDeliveryContent() {
                       <div className="flex justify-between items-center">
                         <span className="flex items-center gap-1">
                           <FileText className="w-3.5 h-3.5" />
-                          رقم CMR:
+                          {t('رقم CMR:', 'N° CMR :')}
                         </span>
                         <span className="font-mono font-medium text-foreground" dir="ltr">
                           {item.cmr_number}
@@ -431,7 +436,7 @@ function DriverDeliveryContent() {
                       <div className="flex justify-between items-center">
                         <span className="flex items-center gap-1">
                           <User className="w-3.5 h-3.5" />
-                          السائق:
+                          {t('السائق:', 'Conducteur :')}
                         </span>
                         <span className="font-medium text-foreground">{driverName}</span>
                       </div>
@@ -441,7 +446,7 @@ function DriverDeliveryContent() {
                       <div className="flex justify-between items-center">
                         <span className="flex items-center gap-1">
                           <Truck className="w-3.5 h-3.5" />
-                          الشاحنة:
+                          {t('الشاحنة:', 'Véhicule :')}
                         </span>
                         <span className="font-mono font-medium text-foreground" dir="ltr">
                           {truckPlate}
@@ -453,7 +458,7 @@ function DriverDeliveryContent() {
                       <div className="flex justify-between items-center">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
-                          تاريخ الانطلاق:
+                          {t('تاريخ الانطلاق:', 'Date de départ :')}
                         </span>
                         <span className="font-medium text-foreground">{item.departure_date}</span>
                       </div>
@@ -465,8 +470,8 @@ function DriverDeliveryContent() {
                     size="sm"
                     onClick={() => router.push(`/driver-delivery?tripId=${item.id}`)}
                   >
-                    <CheckCircle2 className="w-4 h-4 ml-1.5" />
-                    تأكيد وتوقيع التسليم (POD)
+                    <CheckCircle2 className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                    {t('تأكيد وتوقيع التسليم (POD)', 'Signer & Valider la livraison')}
                   </Button>
                 </CardContent>
               </Card>
@@ -477,7 +482,7 @@ function DriverDeliveryContent() {
         /* List View Cards */
         <div className="flex flex-col gap-3">
           {filteredTrips.map((item) => {
-            const badge = getStatusBadge(item.status);
+            const badge = getStatusBadge(item.status, t);
             const driverName = item.driver_id ? driversMap[item.driver_id] : null;
             const truckPlate = item.truck_id ? trucksMap[item.truck_id] : null;
 
@@ -502,7 +507,7 @@ function DriverDeliveryContent() {
 
                     <div className="flex items-center gap-1.5 font-amiri font-bold text-base text-foreground">
                       <MapPin className="w-4 h-4 text-primary shrink-0" />
-                      <span>{item.route || 'مسار غير محدد'}</span>
+                      <span>{item.route || t('مسار غير محدد', 'Itinéraire non spécifié')}</span>
                     </div>
                   </div>
 
@@ -521,7 +526,7 @@ function DriverDeliveryContent() {
                     {driverName && (
                       <div className="bg-muted/40 px-2.5 py-1.5 rounded-md border flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">السائق:</span>
+                        <span className="text-muted-foreground">{t('السائق:', 'Conducteur :')}</span>
                         <span className="font-medium text-foreground">{driverName}</span>
                       </div>
                     )}
@@ -529,7 +534,7 @@ function DriverDeliveryContent() {
                     {truckPlate && (
                       <div className="bg-muted/40 px-2.5 py-1.5 rounded-md border flex items-center gap-1.5">
                         <Truck className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">الشاحنة:</span>
+                        <span className="text-muted-foreground">{t('الشاحنة:', 'Véhicule :')}</span>
                         <span className="font-mono font-medium text-foreground" dir="ltr">
                           {truckPlate}
                         </span>
@@ -546,10 +551,10 @@ function DriverDeliveryContent() {
                     <Button
                       size="sm"
                       onClick={() => router.push(`/driver-delivery?tripId=${item.id}`)}
-                      className="shrink-0 mr-auto lg:mr-0"
+                      className={`shrink-0 ${dir === 'rtl' ? 'mr-auto lg:mr-0' : 'ml-auto lg:ml-0'}`}
                     >
-                      <CheckCircle2 className="w-4 h-4 ml-1.5" />
-                      تأكيد وتوقيع التسليم (POD)
+                      <CheckCircle2 className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                      {t('تأكيد وتوقيع التسليم (POD)', 'Signer & Valider la livraison')}
                     </Button>
                   </div>
                 </div>
@@ -563,13 +568,14 @@ function DriverDeliveryContent() {
 }
 
 export default function DriverDeliveryPage() {
+  const { t, dir } = useLanguage();
   return (
     <Suspense
       fallback={
-        <div className="max-w-2xl mx-auto space-y-6 py-12" dir="rtl">
+        <div className="max-w-2xl mx-auto space-y-6 py-12" dir={dir}>
           <Card className="p-8 text-center flex flex-col items-center justify-center gap-3 shadow-sm">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-foreground font-medium">جاري تحميل الصفحة...</p>
+            <p className="text-foreground font-medium">{t('جاري تحميل الصفحة...', 'Chargement de la page...')}</p>
           </Card>
         </div>
       }

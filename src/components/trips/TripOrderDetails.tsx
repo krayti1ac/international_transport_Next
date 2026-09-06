@@ -9,6 +9,7 @@ import { TransitActions } from '@/components/trips/TransitActions';
 import { DriverSettlementDialog } from '@/components/trips/DriverSettlementDialog';
 import { PodReportView } from '@/features/trips/components/PodReportView';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
+import { useLanguage } from '@/components/language-provider';
 import type { TripOrder, Client, Driver, Truck as TruckType, Trailer, Advance } from '@/types/database';
 
 interface TripOrderDetailsProps {
@@ -34,6 +35,7 @@ function TripOrderDetails({
   onClose,
   onUpdate,
 }: TripOrderDetailsProps) {
+  const { dir, t } = useLanguage();
   const [settlementAdvance, setSettlementAdvance] = useState<Advance | null>(null);
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
 
@@ -59,7 +61,7 @@ function TripOrderDetails({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
-      dir="rtl"
+      dir={dir}
       onClick={onClose}
     >
       <div
@@ -70,7 +72,7 @@ function TripOrderDetails({
           <div>
             <h2 className="font-amiri text-xl font-bold text-foreground flex items-center gap-2">
               <Navigation className="w-5 h-5 text-primary" />
-              تفاصيل الرحلة #{trip.id}
+              {t('تفاصيل الرحلة #', 'Détails du voyage #')}{trip.id}
             </h2>
             <p className="text-xs text-muted-foreground mt-1">{trip.route}</p>
           </div>
@@ -85,24 +87,24 @@ function TripOrderDetails({
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <PlaneTakeoff className="w-4 h-4" />
-                  ذهاب (تصدير - Aller)
+                  {t('ذهاب (تصدير - Aller)', 'Aller (Exportation)')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-1">
                 <div className="flex items-center gap-2">
-                  <strong>العميل:</strong>
-                  <span>{assignedClient?.name || 'غير محدد'}</span>
+                  <strong>{t('العميل:', 'Client :')}</strong>
+                  <span>{assignedClient?.name || t('غير محدد', 'Non défini')}</span>
                   {assignedClient && (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                      عميل ذهاب
+                      {t('عميل ذهاب', 'Client Aller')}
                     </span>
                   )}
                 </div>
-                <p><strong>المسار:</strong> {trip.route_export || 'N/A'}</p>
+                <p><strong>{t('المسار:', 'Trajet :')}</strong> {trip.route_export || 'N/A'}</p>
                 <p><strong>CMR:</strong> {trip.cmr_export_number || 'N/A'}</p>
-                <p><strong>السعر:</strong> {(trip.price_export || 0).toLocaleString()} MAD</p>
-                <p><strong>الانطلاق:</strong> {trip.departure_date || 'N/A'}</p>
-                <p><strong>التفريغ:</strong> {trip.unloading_date_export || 'N/A'}</p>
+                <p><strong>{t('السعر:', 'Prix :')}</strong> {(trip.price_export || 0).toLocaleString()} MAD</p>
+                <p><strong>{t('الانطلاق:', 'Départ :')}</strong> {trip.departure_date || 'N/A'}</p>
+                <p><strong>{t('التفريغ:', 'Déchargement :')}</strong> {trip.unloading_date_export || 'N/A'}</p>
               </CardContent>
             </Card>
 
@@ -111,24 +113,24 @@ function TripOrderDetails({
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
                     <PlaneLanding className="w-4 h-4" />
-                    عودة (استيراد - Retour)
+                    {t('عودة (استيراد - Retour)', 'Retour (Importation)')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm space-y-1">
                   <div className="flex items-center gap-2">
-                    <strong>العميل:</strong>
-                    <span>{assignedClientImport?.name || 'غير محدد'}</span>
+                    <strong>{t('العميل:', 'Client :')}</strong>
+                    <span>{assignedClientImport?.name || t('غير محدد', 'Non défini')}</span>
                     {assignedClientImport && (
                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
-                        عميل عودة
+                        {t('عميل عودة', 'Client Retour')}
                       </span>
                     )}
                   </div>
-                  <p><strong>المسار:</strong> {trip.route_import || 'N/A'}</p>
+                  <p><strong>{t('المسار:', 'Trajet :')}</strong> {trip.route_import || 'N/A'}</p>
                   <p><strong>CMR:</strong> {trip.cmr_import_number || 'N/A'}</p>
-                  <p><strong>السعر:</strong> {(trip.price_import || 0).toLocaleString()} MAD</p>
-                  <p><strong>الشحن:</strong> {trip.loading_date_import || 'N/A'}</p>
-                  <p><strong>التفريغ:</strong> {trip.unloading_date_import || 'N/A'}</p>
+                  <p><strong>{t('السعر:', 'Prix :')}</strong> {(trip.price_import || 0).toLocaleString()} MAD</p>
+                  <p><strong>{t('الشحن:', 'Chargement :')}</strong> {trip.loading_date_import || 'N/A'}</p>
+                  <p><strong>{t('التفريغ:', 'Déchargement :')}</strong> {trip.unloading_date_import || 'N/A'}</p>
                 </CardContent>
               </Card>
             )}
@@ -138,30 +140,30 @@ function TripOrderDetails({
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
                 <TruckIcon className="w-4 h-4" />
-                الطاقم والأسطول
+                {t('الطاقم والأسطول', 'Équipage et Flotte')}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div>
-                <p className="text-muted-foreground">السائق</p>
-                <p className="font-medium text-foreground">{assignedDriver?.name || 'غير مسند'}</p>
+                <p className="text-muted-foreground">{t('السائق', 'Chauffeur')}</p>
+                <p className="font-medium text-foreground">{assignedDriver?.name || t('غير مسند', 'Non assigné')}</p>
               </div>
               <div>
                 <p className="text-muted-foreground mb-1 flex items-center gap-1">
                   <TruckIcon className="w-3.5 h-3.5 text-blue-500" />
-                  الشاحنة
+                  {t('الشاحنة', 'Camion')}
                 </p>
                 <MatriculeBadge plate={assignedTruck?.plate_number} variant="badge" size="sm" />
               </div>
               <div>
                 <p className="text-muted-foreground mb-1 flex items-center gap-1">
                   <TrailerIcon className="w-3.5 h-3.5 text-purple-500" />
-                  المقطورة
+                  {t('المقطورة', 'Remorque')}
                 </p>
                 <MatriculeBadge plate={assignedTrailer?.plate_number} variant="subtle" size="sm" />
               </div>
               <div>
-                <p className="text-muted-foreground">إجمالي الإيراد</p>
+                <p className="text-muted-foreground">{t('إجمالي الإيراد', 'Revenu Total')}</p>
                 <p className="font-bold text-primary font-mono">{(trip.price || 0).toLocaleString()} {trip.price_type || 'MAD'}</p>
               </div>
             </CardContent>
@@ -180,16 +182,16 @@ function TripOrderDetails({
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-primary" />
-                  تسوية السائق
+                  {t('تسوية السائق', 'Règlement du chauffeur')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-3">
-                  يوجد {driverAdvances.length} سلفة غير مسددة لهذا السائق
+                  {t(`يوجد ${driverAdvances.length} سلفة غير مسددة لهذا السائق`, `Il y a ${driverAdvances.length} avance(s) non soldée(s) pour ce chauffeur`)}
                 </p>
                 <Button onClick={handleSettle} className="w-full">
-                  <DollarSign className="w-4 h-4 ml-2" />
-                  تسوية السلفة
+                  <DollarSign className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+                  {t('تسوية السلفة', 'Régler l\'avance')}
                 </Button>
               </CardContent>
             </Card>

@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import type { TripOrder, Advance, Driver } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 import { MapPin, Fuel, FileText, CheckCircle } from 'lucide-react';
+import Decimal from 'decimal.js';
 
 export default function DriverTasksPage() {
+  const { t, dir } = useLanguage();
   const [trips, setTrips] = useState<TripOrder[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [driver, setDriver] = useState<Driver | null>(null);
@@ -32,8 +35,8 @@ export default function DriverTasksPage() {
 
         if (driverError || !driverData) {
           toast({
-            title: 'خطأ',
-            description: 'لم يتم العثور على ملف السائق المرتبط بهذا الحساب',
+            title: t('خطأ', 'Erreur'),
+            description: t('لم يتم العثور على ملف السائق المرتبط بهذا الحساب', 'Profil conducteur introuvable pour ce compte'),
             variant: 'destructive',
           });
           setLoading(false);
@@ -79,7 +82,7 @@ export default function DriverTasksPage() {
               if (payload.eventType === 'INSERT') {
                 const newTrip = payload.new as TripOrder;
                 setTrips((prev) => [newTrip, ...prev]);
-                toast({ title: 'تم إسناد رحلة جديدة لك!' });
+                toast({ title: t('تم إسناد رحلة جديدة لك!', 'Un nouveau voyage vous a été assigné !') });
               } else if (payload.eventType === 'UPDATE') {
                 const updated = payload.new as TripOrder;
                 setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -100,15 +103,15 @@ export default function DriverTasksPage() {
               } else if (payload.eventType === 'UPDATE') {
                 const updated = payload.new as Advance;
                 setAdvances((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-                toast({ title: 'تم تحديث حالة السلفة' });
+                toast({ title: t('تم تحديث حالة السلفة', 'Statut de l’avance mis à jour') });
               }
             }
           )
           .subscribe();
       } catch (error: any) {
-        const message = error?.message || (error instanceof Error ? error.message : 'حدث خطأ غير متوقع');
+        const message = error?.message || (error instanceof Error ? error.message : t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue'));
         toast({
-          title: 'خطأ',
+          title: t('خطأ', 'Erreur'),
           description: message,
           variant: 'destructive',
         });
@@ -122,39 +125,53 @@ export default function DriverTasksPage() {
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return 'قيد الانتظار';
-      case 'in_transit': return 'في الطريق';
-      case 'completed': return 'مكتمل';
-      case 'cancelled': return 'ملغي';
+      case 'pending': return t('قيد الانتظار', 'En attente');
+      case 'in_transit': return t('في الطريق', 'En route');
+      case 'completed': return t('مكتمل', 'Terminé');
+      case 'cancelled': return t('ملغي', 'Annulé');
+      default: return status;
+    }
+  };
+
+  const getAdvanceStatusText = (status: string) => {
+    switch (status) {
+      case 'approved': return t('معتمد', 'Approuvé');
+      case 'pending': return t('قيد الانتظار', 'En attente');
+      case 'settled': return t('مسوى', 'Régularisé');
+      case 'rejected': return t('مرفوض', 'Rejeté');
       default: return status;
     }
   };
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">مهامي وجدول الرحلات</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">متابعة مسار الرحلات النشطة، وثائق CMR وسجل السلف الشخصية</p>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">
+          {t('مهامي وجدول الرحلات', 'Mes Missions & Planning Chauffeur')}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {t('متابعة مسار الرحلات النشطة، وثائق CMR وسجل السلف الشخصية', 'Suivi de vos voyages actifs, documents CMR et historique des acomptes')}
+        </p>
       </div>
 
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+          <p className="text-muted-foreground">{t('جاري تحميل البيانات...', 'Chargement des données...')}</p>
         </div>
       ) : (
         <>
           <div className="space-y-4">
             <h2 className="text-lg font-bold font-amiri text-foreground flex items-center gap-2">
               <MapPin className="w-5 h-5 text-primary" />
-              الرحلات المخصصة
+              {t('الرحلات المخصصة', 'Voyages assignés')}
             </h2>
             {trips.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">لا توجد رحلات مخصصة لك حالياً</p>
+                <p className="text-muted-foreground">{t('لا توجد رحلات مخصصة لك حالياً', 'Aucun voyage assigné pour le moment')}</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -177,12 +194,12 @@ export default function DriverTasksPage() {
                     <CardContent>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">تاريخ الانطلاق:</span>
+                          <span className="text-muted-foreground">{t('تاريخ الانطلاق:', 'Date de départ :')}</span>
                           <span className="font-medium text-foreground">{trip.departure_date}</span>
                         </div>
                         {trip.cmr_number && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">رقم CMR:</span>
+                            <span className="text-muted-foreground">{t('رقم CMR:', 'N° CMR :')}</span>
                             <span className="font-medium font-mono text-foreground" dir="ltr">{trip.cmr_number}</span>
                           </div>
                         )}
@@ -195,8 +212,8 @@ export default function DriverTasksPage() {
                           asChild
                         >
                           <a href={`/driver-delivery?tripId=${trip.id}`}>
-                            <CheckCircle className="w-3.5 h-3.5 ml-1.5" />
-                            تأكيد التسليم
+                            <CheckCircle className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                            {t('تأكيد التسليم', 'Confirmer la livraison')}
                           </a>
                         </Button>
                       </div>
@@ -210,11 +227,11 @@ export default function DriverTasksPage() {
           <div className="space-y-4 pt-4">
             <h2 className="text-lg font-bold font-amiri text-foreground flex items-center gap-2">
               <Fuel className="w-5 h-5 text-primary" />
-              السلف الأخيرة
+              {t('السلف الأخيرة', 'Dernières avances perçues')}
             </h2>
             {advances.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">لا توجد سلف مسجلة</p>
+                <p className="text-muted-foreground">{t('لا توجد سلف مسجلة', 'Aucune avance enregistrée')}</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -224,7 +241,7 @@ export default function DriverTasksPage() {
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base font-amiri flex items-center gap-2 text-foreground">
                           <FileText className="w-4 h-4 text-primary" />
-                          سلفة #{advance.id}
+                          {t(`سلفة #${advance.id}`, `Avance #${advance.id}`)}
                         </CardTitle>
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           advance.status === 'approved'
@@ -233,23 +250,25 @@ export default function DriverTasksPage() {
                             ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
                             : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
                         }`}>
-                          {advance.status === 'approved' ? 'معتمد' : advance.status === 'pending' ? 'قيد الانتظار' : 'مرفوض'}
+                          {getAdvanceStatusText(advance.status)}
                         </span>
                       </div>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">المبلغ:</span>
-                          <span className="font-bold text-primary font-mono">{advance.amount} {advance.currency}</span>
+                          <span className="text-muted-foreground">{t('المبلغ:', 'Montant :')}</span>
+                          <span className="font-bold text-primary font-mono">
+                            {new Decimal(advance.amount || 0).toFixed(2)} {advance.currency}
+                          </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">التاريخ:</span>
+                          <span className="text-muted-foreground">{t('التاريخ:', 'Date :')}</span>
                           <span className="font-medium text-foreground">{advance.date}</span>
                         </div>
                         {advance.reason && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">السبب:</span>
+                            <span className="text-muted-foreground">{t('السبب:', 'Motif :')}</span>
                             <span className="font-medium text-foreground">{advance.reason}</span>
                           </div>
                         )}

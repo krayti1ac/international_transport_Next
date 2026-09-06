@@ -10,6 +10,8 @@ import { getProviderLedger, recordProviderPayment } from '@/features/providers/s
 import { Wrench, Truck, DollarSign, ArrowUpRight, Wallet, Calendar } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import { DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
+import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 
 interface LedgerEntry {
   id: number;
@@ -36,6 +38,7 @@ interface CashBox {
 }
 
 export default function ProviderLedgerScreen({ providerId }: { providerId: number }) {
+  const { t, dir, locale } = useLanguage();
   const [ledger, setLedger] = useState<ProviderLedgerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -54,13 +57,13 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
       setLedger(result.data as ProviderLedgerData);
     } else {
       toast({
-        title: 'خطأ',
-        description: result.error || 'فشل في جلب البيانات',
+        title: t('خطأ', 'Erreur'),
+        description: result.error || t('فشل في جلب البيانات', 'Échec du chargement des données'),
         variant: 'destructive',
       });
     }
     setLoading(false);
-  }, [providerId, toast]);
+  }, [providerId, toast, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -92,54 +95,63 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
     e.preventDefault();
     setIsSubmitting(true);
 
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'خطأ', description: 'المبلغ غير صحيح', variant: 'destructive' });
-      setIsSubmitting(false);
-      return;
-    }
+    try {
+      const decAmount = new Decimal(paymentAmount || '0');
+      if (decAmount.isZero() || decAmount.isNegative()) {
+        toast({ title: t('خطأ', 'Erreur'), description: t('المبلغ غير صحيح', 'Montant invalide'), variant: 'destructive' });
+        setIsSubmitting(false);
+        return;
+      }
 
-    const result = await recordProviderPayment(providerId, amount, parseInt(selectedCashBoxId));
-    if (result.success) {
-      toast({ title: 'تم تسجيل الدفعة بنجاح' });
-      setShowPaymentModal(false);
-      setPaymentAmount('');
-      setSelectedCashBoxId('');
-      fetchLedger();
-    } else {
-      toast({ title: 'خطأ', description: result.error || 'فشل تسجيل الدفعة', variant: 'destructive' });
+      const result = await recordProviderPayment(providerId, decAmount.toNumber(), parseInt(selectedCashBoxId));
+      if (result.success) {
+        toast({ title: t('تم تسجيل الدفعة بنجاح', 'Paiement enregistré avec succès') });
+        setShowPaymentModal(false);
+        setPaymentAmount('');
+        setSelectedCashBoxId('');
+        fetchLedger();
+      } else {
+        toast({ title: t('خطأ', 'Erreur'), description: result.error || t('فشل تسجيل الدفعة', 'Échec de l\'enregistrement du paiement'), variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: t('خطأ', 'Erreur'), description: t('المبلغ غير صحيح', 'Montant invalide'), variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const availableCashBoxes = cashBoxes.filter((cb) => cb.code !== 'secretary_cash');
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">جاري تحميل دفتر الأستاذ...</p>
+      <div className="flex items-center justify-center h-96" dir={dir}>
+        <p className="text-muted-foreground">{t('جاري تحميل دفتر الأستاذ...', 'Chargement du grand livre...')}</p>
       </div>
     );
   }
 
   if (!ledger) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">لا توجد بيانات متاحة</p>
+      <div className="text-center py-12" dir={dir}>
+        <p className="text-muted-foreground">{t('لا توجد بيانات متاحة', 'Aucune donnée disponible')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">دفتر الأستاذ - {ledger.provider.name}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">سجل الديون والمدفوعات للمزود</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('دفتر الأستاذ - ', 'Grand Livre - ')}{ledger.provider.name}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('سجل الديون والمدفوعات للمزود', 'Historique des créances, dettes et règlements du prestataire')}
+          </p>
         </div>
         <Button onClick={() => setShowPaymentModal(true)}>
-          <Wallet className="w-4 h-4 ml-2" />
-          تسوية دين
+          <Wallet className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('تسوية دين', 'Régler la dette')}
         </Button>
       </div>
 
@@ -148,7 +160,7 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-amber-500" />
-              إجمالي الدين
+              {t('إجمالي الدين', 'Dette Totale')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -162,14 +174,14 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Wrench className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              فواتير الصيانة
+              {t('فواتير الصيانة', 'Factures d\'Atelier')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">
               {ledger.entries.filter((e) => e.source === 'repair_invoice').length}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">فاتورة مسجلة</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('فاتورة مسجلة', 'facture(s) enregistrée(s)')}</p>
           </CardContent>
         </Card>
 
@@ -177,21 +189,21 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              مصاريف الشاحنات
+              {t('مصاريف الشاحنات', 'Frais Véhicules')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">
               {ledger.entries.filter((e) => e.source === 'truck_maintenance').length}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">عملية صيانة / وقود</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('عملية صيانة / وقود', 'opération(s) entretien / carburant')}</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-amiri text-foreground">الخط الزمني للمعاملات</CardTitle>
+          <CardTitle className="font-amiri text-foreground">{t('الخط الزمني للمعاملات', 'Chronologie des Opérations')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -211,14 +223,14 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
                     <p className="font-medium text-foreground">{entry.description}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                       <Calendar className="w-3 h-3" />
-                      <span>{new Date(entry.date).toLocaleDateString('ar-MA')}</span>
+                      <span>{new Date(entry.date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}</span>
                       <span className="px-2 py-0.5 bg-muted rounded-full text-[10px] font-bold uppercase">
-                        {entry.source === 'repair_invoice' ? 'فاتورة' : entry.source === 'truck_maintenance' ? 'صيانة' : 'دفعة'}
+                        {entry.source === 'repair_invoice' ? t('فاتورة', 'Facture') : entry.source === 'truck_maintenance' ? t('صيانة', 'Entretien') : t('دفعة', 'Règlement')}
                       </span>
                     </div>
                   </div>
                 </div>
-                <div className="text-left">
+                <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
                   {entry.debit > 0 && (
                     <p className="font-bold font-mono text-rose-600 dark:text-rose-400">
                       -{formatCurrency(entry.debit, entry.currency)}
@@ -230,14 +242,14 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    الرصيد: {formatCurrency(entry.runningBalance, entry.currency)}
+                    {t('الرصيد: ', 'Solde : ')}{formatCurrency(entry.runningBalance, entry.currency)}
                   </p>
                 </div>
               </div>
             ))}
             {ledger.entries.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">لا توجد معاملات مسجلة لهذا المزود</p>
+                <p className="text-muted-foreground">{t('لا توجد معاملات مسجلة لهذا المزود', 'Aucune transaction enregistrée pour ce prestataire')}</p>
               </div>
             )}
           </div>
@@ -245,15 +257,15 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
       </Card>
 
       {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" dir={dir}>
           <Card className="w-full max-w-lg shadow-2xl">
             <CardHeader>
-              <CardTitle className="font-amiri">تسوية دين - {ledger.provider.name}</CardTitle>
+              <CardTitle className="font-amiri">{t('تسوية دين - ', 'Règlement Dette - ')}{ledger.provider.name}</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSettleDebt} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">المبلغ</label>
+                  <label className="text-sm font-medium">{t('المبلغ', 'Montant')}</label>
                   <Input
                     type="number"
                     step="0.01"
@@ -266,29 +278,29 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">صندوق الدفع</label>
+                  <label className="text-sm font-medium">{t('صندوق الدفع', 'Caisse de paiement')}</label>
                   <select
                     value={selectedCashBoxId}
                     onChange={(e) => setSelectedCashBoxId(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     required
                   >
-                    <option value="">-- اختر الصندوق --</option>
+                    <option value="">{t('-- اختر الصندوق --', '-- Sélectionner la caisse --')}</option>
                     {availableCashBoxes.map((cb) => (
                       <option key={cb.id} value={cb.id}>
-                        {cb.code || `صندوق #${cb.id}`}
+                        {cb.code || `${t('صندوق', 'Caisse')} #${cb.id}`}
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-muted-foreground">يُمنع استخدام صندوق Secretary لهذه العملية</p>
+                  <p className="text-xs text-muted-foreground">{t('يُمنع استخدام صندوق Secretary لهذه العملية', 'La caisse Secretary est exclue pour cette opération')}</p>
                 </div>
 
                 <div className="flex gap-2 pt-2 border-t border-border">
                   <Button type="submit" disabled={isSubmitting} className="flex-1">
-                    {isSubmitting ? 'جاري الحفظ...' : 'تسوية الدين'}
+                    {isSubmitting ? t('جاري الحفظ...', 'Enregistrement...') : t('تسوية الدين', 'Régler la dette')}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setShowPaymentModal(false)}>
-                    إلغاء
+                    {t('إلغاء', 'Annuler')}
                   </Button>
                 </div>
               </form>

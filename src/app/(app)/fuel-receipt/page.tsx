@@ -9,8 +9,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Camera, Upload, FileText, Scan, WifiOff, RefreshCw } from 'lucide-react';
 import { compressImage } from '@/lib/image-compressor';
 import { saveToOfflineQueue, getOfflineQueue, processOfflineQueue } from '@/lib/offline-sync';
+import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 
 export default function FuelReceiptScanPage() {
+  const { t, dir, locale } = useLanguage();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [station, setStation] = useState('');
@@ -31,13 +34,16 @@ export default function FuelReceiptScanPage() {
 
     const handleOnline = () => {
       setIsOnline(true);
-      toast({ title: '🌐 عاد الاتصال بالإنترنت' });
+      toast({ title: t('🌐 عاد الاتصال بالإنترنت', '🌐 Connexion Internet rétablie') });
       handleSyncQueue();
     };
 
     const handleOffline = () => {
       setIsOnline(false);
-      toast({ title: '⚠️ انقطع الاتصال - تم تفعيل الحفظ المحلي (Offline)', variant: 'destructive' });
+      toast({
+        title: t('⚠️ انقطع الاتصال - تم تفعيل الحفظ المحلي (Offline)', '⚠️ Hors ligne - Mode local activé'),
+        variant: 'destructive',
+      });
     };
 
     window.addEventListener('online', handleOnline);
@@ -47,7 +53,7 @@ export default function FuelReceiptScanPage() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [t]);
 
   const handleSyncQueue = async () => {
     if (!navigator.onLine || isSyncing) return;
@@ -55,7 +61,9 @@ export default function FuelReceiptScanPage() {
     try {
       const { successCount } = await processOfflineQueue();
       if (successCount > 0) {
-        toast({ title: `✅ تمت مزامنة ${successCount} إيصال محفوظ بنجاح` });
+        toast({
+          title: t(`✅ تمت مزامنة ${successCount} إيصال محفوظ بنجاح`, `✅ ${successCount} reçu(s) synchronisé(s) avec succès`),
+        });
       }
     } finally {
       setIsSyncing(false);
@@ -83,10 +91,12 @@ export default function FuelReceiptScanPage() {
 
   const simulateOCR = async (_file: File) => {
     setTimeout(() => {
-      setOcrText('محطة إفريقيا - طنجة المتوسط\nالكمية: 45.5 لتر\nالمبلغ: 650.00 درهم');
+      setOcrText(locale === 'fr' 
+        ? 'Station Afriquia - Tanger Med\nQuantité : 45.5 L\nMontant : 650.00 MAD' 
+        : 'محطة إفريقيا - طنجة المتوسط\nالكمية: 45.5 لتر\nالمبلغ: 650.00 درهم');
       setAmount('650');
       setDate(new Date().toISOString().split('T')[0]);
-      setStation('محطة إفريقيا - طنجة المتوسط');
+      setStation(locale === 'fr' ? 'Station Afriquia - Tanger Med' : 'محطة إفريقيا - طنجة المتوسط');
     }, 1500);
   };
 
@@ -111,6 +121,7 @@ export default function FuelReceiptScanPage() {
         .maybeSingle();
 
       const assignedTruckId = driverData?.default_truck_id || null;
+      const parsedAmount = new Decimal(amount || '0').toNumber();
 
       if (!navigator.onLine) {
         let base64 = '';
@@ -119,15 +130,15 @@ export default function FuelReceiptScanPage() {
         }
         saveToOfflineQueue({
           truck_id: assignedTruckId,
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           currency: 'MAD',
           date,
-          notes: `المحطة: ${station}\n${ocrText}`,
+          notes: `${t('المحطة: ', 'Station : ')}${station}\n${ocrText}`,
           imageDataBase64: base64,
           fileName: `offline-fuel-${Date.now()}.jpg`,
         });
 
-        toast({ title: '💾 تم حفظ الإيصال محلياً، ستتم المزامنة تلقائياً عند توفر الإنترنت' });
+        toast({ title: t('💾 تم حفظ الإيصال محلياً، ستتم المزامنة تلقائياً عند توفر الإنترنت', '💾 Reçu enregistré localement. Synchronisation automatique dès la reconnexion.') });
         setPendingCount(getOfflineQueue().length);
       } else {
         let imageUrl = '';
@@ -142,16 +153,15 @@ export default function FuelReceiptScanPage() {
 
         const { error } = await supabase.from('truck_maintenance').insert({
           truck_id: assignedTruckId,
-          type: 'fuel',
-          amount: parseFloat(amount),
-          currency: 'MAD',
-          date,
-          notes: `${station}\n\nبيانات الفاتورة:\n${ocrText}\n\nرابط الإيصال: ${imageUrl}`,
+          expense_type: 'fuel',
+          amount: parsedAmount,
+          maintenance_date: date || new Date().toISOString(),
+          description: `${station}\n\n${t('بيانات الفاتورة:', 'Détails de la facture :')}\n${ocrText}\n\n${t('رابط الإيصال:', 'Lien du reçu :')} ${imageUrl}`,
           payment_method: 'cash',
         });
 
         if (error) throw error;
-        toast({ title: '✅ تم تسجيل وحفظ إيصال الوقود بنجاح' });
+        toast({ title: t('✅ تم تسجيل وحفظ إيصال الوقود بنجاح', '✅ Reçu de carburant enregistré avec succès') });
       }
 
       setAmount('');
@@ -162,7 +172,7 @@ export default function FuelReceiptScanPage() {
       setOcrText('');
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -172,22 +182,26 @@ export default function FuelReceiptScanPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6" dir="rtl">
+    <div className="max-w-2xl mx-auto space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">مسح إيصالات الوقود</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">تسجيل فواتير الديزل الميدانية وضغطها تلقائياً</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('مسح إيصالات الوقود', 'Scan des Reçus de Carburant')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('تسجيل فواتير الديزل الميدانية وضغطها تلقائياً', 'Enregistrement et compression automatique des tickets de gasoil')}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {!isOnline && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-600 border border-rose-500/30 animate-pulse">
-              <WifiOff className="w-3.5 h-3.5" /> غير متصل
+              <WifiOff className="w-3.5 h-3.5" /> {t('غير متصل', 'Hors ligne')}
             </span>
           )}
           {pendingCount > 0 && (
             <Button size="sm" variant="outline" onClick={handleSyncQueue} disabled={isSyncing || !isOnline}>
-              <RefreshCw className={`w-3.5 h-3.5 ml-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              مزامنة ({pendingCount})
+              <RefreshCw className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'} ${isSyncing ? 'animate-spin' : ''}`} />
+              {t('مزامنة', 'Synchroniser')} ({pendingCount})
             </Button>
           )}
         </div>
@@ -195,24 +209,26 @@ export default function FuelReceiptScanPage() {
 
       <Card>
         <CardHeader className="border-b border-border pb-3">
-          <CardTitle className="font-amiri text-foreground">التقاط أو رفع الفاتورة</CardTitle>
+          <CardTitle className="font-amiri text-foreground">
+            {t('التقاط أو رفع الفاتورة', 'Prendre une photo ou importer')}
+          </CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">صورة الإيصال</label>
+              <label className="text-sm font-medium text-foreground">{t('صورة الإيصال', 'Photo du reçu')}</label>
               <div className="border-2 border-dashed border-border hover:border-primary/50 bg-muted/20 rounded-xl p-6 text-center transition-colors">
                 {preview ? (
                   <div className="space-y-4">
                     <img src={preview} alt="Preview" className="max-h-64 mx-auto rounded-lg shadow-sm" />
                     <Button type="button" variant="outline" onClick={() => { setImage(null); setPreview(null); }}>
-                      إلغاء واختيار صورة أخرى
+                      {t('إلغاء واختيار صورة أخرى', 'Annuler et changer')}
                     </Button>
                   </div>
                 ) : (
                   <>
                     <Camera className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground mb-2">استخدم الكاميرا لالتقاط صورة الفاتورة</p>
+                    <p className="text-sm text-muted-foreground mb-2">{t('استخدم الكاميرا لالتقاط صورة الفاتورة', 'Utilisez l\'appareil photo pour capturer le ticket')}</p>
                     <input
                       type="file"
                       accept="image/*"
@@ -223,8 +239,8 @@ export default function FuelReceiptScanPage() {
                     />
                     <label htmlFor="fuel-image" className="cursor-pointer">
                       <Button type="button" variant="outline" size="sm">
-                        <Upload className="w-4 h-4 ml-2" />
-                        التقاط / اختيار صورة
+                        <Upload className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+                        {t('التقاط / اختيار صورة', 'Capturer / Choisir photo')}
                       </Button>
                     </label>
                   </>
@@ -235,7 +251,9 @@ export default function FuelReceiptScanPage() {
             {loading && (
               <div className="flex items-center gap-2 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                 <Scan className="w-5 h-5 text-primary animate-pulse" />
-                <p className="text-sm font-medium text-primary">جاري معالجة وضغط الصورة واستخراج النصوص...</p>
+                <p className="text-sm font-medium text-primary">
+                  {t('جاري معالجة وضغط الصورة واستخراج النصوص...', 'Traitement, compression et extraction OCR en cours...')}
+                </p>
               </div>
             )}
 
@@ -244,7 +262,7 @@ export default function FuelReceiptScanPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
                     <FileText className="w-4 h-4 text-primary" />
-                    البيانات المستخرجة (OCR)
+                    {t('البيانات المستخرجة (OCR)', 'Données extraites (OCR)')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -255,7 +273,7 @@ export default function FuelReceiptScanPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">المبلغ (MAD) *</label>
+                <label className="text-sm font-medium text-foreground">{t('المبلغ (MAD) *', 'Montant (MAD) *')}</label>
                 <Input
                   type="number"
                   value={amount}
@@ -266,7 +284,7 @@ export default function FuelReceiptScanPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">التاريخ *</label>
+                <label className="text-sm font-medium text-foreground">{t('التاريخ *', 'Date *')}</label>
                 <Input
                   type="date"
                   value={date}
@@ -278,16 +296,20 @@ export default function FuelReceiptScanPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">اسم المحطة أو المزود</label>
+              <label className="text-sm font-medium text-foreground">{t('اسم المحطة أو المزود', 'Station ou Fournisseur')}</label>
               <Input
                 value={station}
                 onChange={(e) => setStation(e.target.value)}
-                placeholder="محطة التزود (Afriquia, Total, Shell...)"
+                placeholder={t('محطة التزود (Afriquia, Total, Shell...)', 'Station (Afriquia, Total, Shell...)')}
               />
             </div>
 
             <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={loading || !amount || !date}>
-              {loading ? 'جاري الحفظ...' : isOnline ? 'تسجيل ورفع الإيصال' : 'حفظ محلياً (Offline)'}
+              {loading
+                ? t('جاري الحفظ...', 'Enregistrement en cours...')
+                : isOnline
+                ? t('تسجيل ورفع الإيصال', 'Enregistrer et téléverser')
+                : t('حفظ محلياً (Offline)', 'Enregistrer localement (Offline)')}
             </Button>
           </form>
         </CardContent>

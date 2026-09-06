@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import Decimal from 'decimal.js';
 import { revalidatePath } from 'next/cache';
-import type { FleetDocument, FleetDocumentRenewal, TreasuryTransaction } from '@/types/database';
+import type { FleetDocument, FleetDocumentRenewal, TreasuryTransaction, DocumentCategory } from '@/types/database';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -11,6 +11,7 @@ import {
   type FleetMatrixRow,
   CORE_DOC_TYPES,
   DOCUMENT_TYPE_LABELS,
+  DEFAULT_DOCUMENT_CATEGORIES,
 } from './fleet-documents.constants';
 
 export type { FleetMatrixRow };
@@ -285,6 +286,71 @@ export async function getDocumentRenewalHistory(
   }
 }
 
+export const getFleetDocRenewalHistory = getDocumentRenewalHistory;
+
+/**
+ * Quick Instant Renew directly (+365 days) without modal
+ */
+export async function quickRenewDocumentDirectly(
+  docId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: doc, error: fetchErr } = await supabase
+      .from('fleet_documents')
+      .select('*')
+      .eq('id', docId)
+      .single();
+
+    if (fetchErr || !doc) {
+      return { success: false, error: 'الوثيقة غير موجودة' };
+    }
+
+    const baseDate = doc.expiry_date ? new Date(doc.expiry_date) : new Date();
+    const now = new Date();
+    const targetDate = baseDate < now ? now : baseDate;
+    const nextYear = new Date(targetDate);
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    const newExpiry = nextYear.toISOString().split('T')[0];
+
+    const prevExpiry = doc.expiry_date;
+
+    const { error: updateErr } = await supabase
+      .from('fleet_documents')
+      .update({
+        previous_expiry_date: prevExpiry,
+        expiry_date: newExpiry,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', docId);
+
+    if (updateErr) throw updateErr;
+
+    // Record audit trail in fleet_document_renewals
+    await supabase.from('fleet_document_renewals').insert({
+      fleet_document_id: docId,
+      document_id: docId,
+      previous_expiry_date: prevExpiry,
+      new_expiry_date: newExpiry,
+      cost: 0,
+      renewal_cost: 0,
+      currency: doc.currency || 'MAD',
+      document_type: doc.doc_type || doc.document_type || 'other',
+      notes: 'تجديد سريع فوري (+365 يوم)',
+    });
+
+    revalidatePath('/fleet');
+    revalidatePath('/fleet/documents');
+    revalidatePath('/documents');
+    revalidatePath('/dashboard');
+
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'فشل في التجديد السريع';
+    return { success: false, error: msg };
+  }
+}
+
 /**
  * 6. Save or Create a Fleet Document
  */
@@ -531,6 +597,309 @@ export async function getFleetMatrixData(): Promise<{
       stats: { totalVehicles: 0, safeVehicles: 0, warningVehicles: 0, expiredVehicles: 0, missingDocsCount: 0 },
       error: msg,
     };
+  }
+}
+
+/**
+ * 9. Get Dynamic Document Categories with Usage Enrichment
+ */
+export async function getDocumentCategories(options?: {
+  activeOnly?: boolean;
+  vehicleType?: 'truck' | 'trailer';
+}): Promise<{ success: boolean; data: DocumentCategory[]; error?: string }> {
+  try {
+    const supabase = await createClient();
+    let query = supabase.from('document_categories').select('*');
+
+    if (options?.activeOnly) {
+      query = query.eq('is_active', true);
+    }
+
+    const { data: dbCategories, error } = await query.order('id', { ascending: true });
+
+    let categories: DocumentCategory[] = [];
+
+    if (error || !dbCategories || dbCategories.length === 0) {
+      // If table is empty or error, fallback to DEFAULT_DOCUMENT_CATEGORIES
+      categories = DEFAULT_DOCUMENT_CATEGORIES.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        name_fr: cat.name_fr,
+        applicable_to: cat.applicable_to,
+        is_active: cat.is_active,
+        created_at: new Date().toISOString(),
+        usage_count: 0,
+      }));
+    } else {
+      categories = dbCategories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        name_fr: c.name_fr || null,
+        applicable_to: (c.applicable_to as 'both' | 'truck' | 'trailer') || 'both',
+        is_active: c.is_active ?? true,
+        created_at: c.created_at || new Date().toISOString(),
+        updated_at: c.updated_at,
+        usage_count: 0,
+      }));
+    }
+
+    // Filter by vehicle type if specified
+    if (options?.vehicleType) {
+      categories = categories.filter(
+        (c) => c.applicable_to === 'both' || c.applicable_to === options.vehicleType
+      );
+    }
+
+    // Enrich with usage count from fleet_documents (supports both document_type and legacy doc_type)
+    const { data: fleetDocs } = await supabase.from('fleet_documents').select('document_type, doc_type');
+    if (fleetDocs && fleetDocs.length > 0) {
+      const usageMap = new Map<string, number>();
+      for (const doc of fleetDocs) {
+        const raw = (doc.document_type || doc.doc_type || '').trim().toLowerCase();
+        if (raw) {
+          usageMap.set(raw, (usageMap.get(raw) || 0) + 1);
+          const noStar = raw.replace(/^\*/, '').trim();
+          if (noStar !== raw) {
+            usageMap.set(noStar, (usageMap.get(noStar) || 0) + 1);
+          }
+        }
+      }
+
+      categories = categories.map((cat) => {
+        const catNameLower = cat.name.trim().toLowerCase();
+        const catNameClean = catNameLower.replace(/^\*/, '').trim();
+        let count = (usageMap.get(catNameLower) || 0) || (usageMap.get(catNameClean) || 0);
+        // Also check if any English or legacy aliases map to this category
+        for (const [key, val] of Object.entries(DOCUMENT_TYPE_LABELS)) {
+          if (
+            val.label_ar.trim().toLowerCase() === catNameLower ||
+            val.label_ar.trim().toLowerCase() === catNameClean ||
+            (cat.name_fr && val.label_fr.trim().toLowerCase() === cat.name_fr.trim().toLowerCase())
+          ) {
+            const aliasUsage = usageMap.get(key.toLowerCase());
+            if (aliasUsage) count += aliasUsage;
+          }
+        }
+        return {
+          ...cat,
+          usage_count: count,
+        };
+      });
+    }
+
+    return { success: true, data: categories };
+  } catch (err: unknown) {
+    const msg =
+      (err as { message?: string })?.message ||
+      (err instanceof Error ? err.message : 'فشل في جلب أنواع الوثائق');
+    return { success: false, data: [], error: msg };
+  }
+}
+
+/**
+ * 10. Check if a Document Category is in use in fleet_documents or renewals
+ */
+export async function checkDocumentCategoryUsage(
+  categoryIdOrName: number | string
+): Promise<{ inUse: boolean; count: number; error?: string }> {
+  try {
+    const supabase = await createClient();
+    let categoryName = '';
+
+    if (typeof categoryIdOrName === 'number') {
+      const { data: cat } = await supabase
+        .from('document_categories')
+        .select('name')
+        .eq('id', categoryIdOrName)
+        .maybeSingle();
+      if (cat) {
+        categoryName = cat.name;
+      }
+    } else {
+      categoryName = categoryIdOrName;
+    }
+
+    if (!categoryName) {
+      return { inUse: false, count: 0 };
+    }
+
+    const cleanName = categoryName.replace(/^\*/, '').trim();
+
+    // Check in fleet_documents (both document_type and legacy doc_type)
+    const { count: docsCount, error: docErr } = await supabase
+      .from('fleet_documents')
+      .select('id', { count: 'exact' })
+      .or(
+        `document_type.eq.${categoryName},document_type.eq.${cleanName},doc_type.eq.${categoryName},doc_type.eq.${cleanName}`
+      );
+
+    if (docErr) throw docErr;
+
+    // Check in renewals
+    const { count: renewalsCount, error: renErr } = await supabase
+      .from('fleet_document_renewals')
+      .select('id', { count: 'exact' })
+      .or(
+        `document_type.eq.${categoryName},document_type.eq.${cleanName}`
+      );
+
+    if (renErr) throw renErr;
+
+    const totalCount = (docsCount || 0) + (renewalsCount || 0);
+    return { inUse: totalCount > 0, count: totalCount };
+  } catch (err: unknown) {
+    const msg =
+      (err as { message?: string })?.message ||
+      (err instanceof Error ? err.message : 'فشل في فحص ارتباط نوع الوثيقة');
+    return { inUse: false, count: 0, error: msg };
+  }
+}
+
+/**
+ * 11. Save or Create a Document Category
+ */
+export async function saveDocumentCategory(payload: {
+  id?: number;
+  name: string;
+  name_fr?: string;
+  applicable_to: 'both' | 'truck' | 'trailer';
+  is_active: boolean;
+}): Promise<{ success: boolean; data?: DocumentCategory; error?: string }> {
+  try {
+    const trimmedName = payload.name.trim();
+    if (!trimmedName) {
+      return { success: false, error: 'يرجى إدخال اسم نوع الوثيقة' };
+    }
+
+    const supabase = await createClient();
+    const row = {
+      name: trimmedName,
+      name_fr: payload.name_fr?.trim() || null,
+      applicable_to: payload.applicable_to,
+      is_active: payload.is_active,
+      updated_at: new Date().toISOString(),
+    };
+
+    let result: DocumentCategory;
+
+    if (payload.id) {
+      const { data, error } = await supabase
+        .from('document_categories')
+        .update(row)
+        .eq('id', payload.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from('document_categories')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    }
+
+    revalidatePath('/fleet');
+    revalidatePath('/fleet/documents');
+    revalidatePath('/documents');
+    revalidatePath('/settings');
+
+    return { success: true, data: result };
+  } catch (err: unknown) {
+    const pgError = err as { code?: string; message?: string; details?: string };
+    if (pgError?.code === '23505') {
+      return { success: false, error: 'نوع الوثيقة بهذا الاسم موجود مسبقاً' };
+    }
+    const msg =
+      pgError?.message ||
+      (err instanceof Error ? err.message : 'فشل في حفظ نوع الوثيقة');
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * 12. Toggle Document Category Active Status
+ */
+export async function toggleDocumentCategoryStatus(
+  id: number,
+  isActive: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('document_categories')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/fleet');
+    revalidatePath('/fleet/documents');
+    revalidatePath('/documents');
+    revalidatePath('/settings');
+
+    return { success: true };
+  } catch (err: unknown) {
+    const msg =
+      (err as { message?: string })?.message ||
+      (err instanceof Error ? err.message : 'فشل في تحديث حالة نوع الوثيقة');
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * 13. Conditionally Delete Document Category (Blocked if linked to fleet_documents or renewals)
+ */
+export async function deleteDocumentCategory(
+  id: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Fetch the category to get its name
+    const { data: cat, error: fetchErr } = await supabase
+      .from('document_categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !cat) {
+      return { success: false, error: 'نوع الوثيقة غير موجود أو تم حذفه مسبقاً' };
+    }
+
+    // Check usage in fleet_documents & renewals
+    const usageRes = await checkDocumentCategoryUsage(cat.name);
+    if (usageRes.inUse && usageRes.count > 0) {
+      return {
+        success: false,
+        error: `لا يمكن حذف هذا النوع ("${cat.name}") لوجود ${usageRes.count} وثيقة مسجلة مرتبطة به في النظام. يمكنك إلغاء تفعيله بدلاً من حذفه حتى لا يظهر في القوائم الجديدة مع الحفاظ على سلامة سجلات الأسطول.`,
+      };
+    }
+
+    // Safe to delete
+    const { error: deleteErr } = await supabase
+      .from('document_categories')
+      .delete()
+      .eq('id', id);
+
+    if (deleteErr) throw deleteErr;
+
+    revalidatePath('/fleet');
+    revalidatePath('/fleet/documents');
+    revalidatePath('/documents');
+    revalidatePath('/settings');
+
+    return { success: true };
+  } catch (err: unknown) {
+    const msg =
+      (err as { message?: string })?.message ||
+      (err instanceof Error ? err.message : 'فشل في حذف نوع الوثيقة');
+    return { success: false, error: msg };
   }
 }
 

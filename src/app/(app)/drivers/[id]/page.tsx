@@ -1,11 +1,12 @@
 import { DriverDetailView } from '@/features/drivers/DriverDetailView';
 
-export default function DriverDetailPage({ params }: { params: { id: string } }) {
-    const driverId = parseInt(params.id, 10);
+export default async function DriverDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const resolvedParams = await params;
+    const driverId = parseInt(resolvedParams.id, 10);
     if (isNaN(driverId)) {
         return (
-            <div className="text-center py-16" dir="rtl">
-                <p className="text-sm font-semibold text-foreground">معرف السائق غير صحيح</p>
+            <div className="text-center py-16">
+                <p className="text-sm font-semibold text-foreground">Driver ID is invalid</p>
             </div>
         );
     }

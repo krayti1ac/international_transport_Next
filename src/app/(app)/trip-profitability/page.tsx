@@ -12,8 +12,11 @@ import { TrendingUp, DollarSign, Fuel, Search, ArrowUpRight, ArrowDownRight, Ale
 import { formatCurrency } from '@/lib/forex';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 
 export default function TripProfitabilityPage() {
+  const { t, dir, locale } = useLanguage();
   const [summaries, setSummaries] = useState<TripFinancialSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,7 +31,7 @@ export default function TripProfitabilityPage() {
       const [tripsRes, advancesRes, fuelRes, finesRes, ferriesRes, driversRes, trucksRes] = await Promise.all([
         supabase.from('trip_orders').select('*').order('departure_date', { ascending: false }),
         supabase.from('advances').select('*'),
-        supabase.from('truck_maintenance').select('*').eq('type', 'fuel'),
+        supabase.from('truck_maintenance').select('*'),
         supabase.from('fine_penalties').select('*'),
         supabase.from('ferry_expenses').select('*'),
         supabase.from('drivers').select('id, name'),
@@ -39,7 +42,10 @@ export default function TripProfitabilityPage() {
 
       const trips = tripsRes.data || [];
       const advances = advancesRes.data || [];
-      const fuelRecords = fuelRes.data || [];
+      const fuelRecords = (fuelRes.data || []).filter((r: { expense_type?: string; type?: string }) => {
+        const expType = (r.expense_type || r.type || '').toLowerCase();
+        return !expType || expType === 'fuel' || expType === 'carburant' || expType === 'gasoil';
+      });
       const fines = finesRes.data || [];
       const ferries = ferriesRes.data || [];
       const drivers = driversRes.data || [];
@@ -65,23 +71,36 @@ export default function TripProfitabilityPage() {
       setSummaries(calculated);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const totalRevenue = summaries.reduce((sum, s) => sum + s.revenue, 0);
-  const totalExpenses = summaries.reduce((sum, s) => sum + s.totalExpenses, 0);
-  const netProfit = totalRevenue - totalExpenses;
-  const averageMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  const totalRevenueDec = summaries.reduce(
+    (sum, s) => sum.plus(new Decimal(s.revenue || 0)),
+    new Decimal(0)
+  );
+  const totalExpensesDec = summaries.reduce(
+    (sum, s) => sum.plus(new Decimal(s.totalExpenses || 0)),
+    new Decimal(0)
+  );
+  const netProfitDec = totalRevenueDec.minus(totalExpensesDec);
+  const averageMarginDec = totalRevenueDec.gt(0)
+    ? netProfitDec.dividedBy(totalRevenueDec).times(100)
+    : new Decimal(0);
+
+  const totalRevenue = totalRevenueDec.toNumber();
+  const totalExpenses = totalExpensesDec.toNumber();
+  const netProfit = netProfitDec.toNumber();
+  const averageMargin = averageMarginDec.toNumber();
 
   const filtered = summaries.filter((s) => {
     const route = s.route?.toLowerCase() ?? '';
@@ -93,70 +112,90 @@ export default function TripProfitabilityPage() {
   });
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">أرباح وتحليلات الرحلات والوقود</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة</p>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">
+          {t('أرباح وتحليلات الرحلات والوقود', 'Rentabilité & Analyses des Trajets')}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {t('تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة', 'Analyse du résultat net réel (P&L) et de la consommation de gasoil par trajet')}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي إيرادات الرحلات</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('إجمالي إيرادات الرحلات', 'Total Chiffre d\'Affaires')}
+            </CardTitle>
             <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">{formatCurrency(totalRevenue, 'MAD')}</div>
-            <p className="text-xs text-muted-foreground mt-1">{summaries.length} رحلة مسجلة</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summaries.length} {t('رحلة مسجلة', 'trajets enregistrés')}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي مصاريف المسارات</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('إجمالي مصاريف المسارات', 'Total Frais d\'Itinéraires')}
+            </CardTitle>
             <Fuel className="w-5 h-5 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">{formatCurrency(totalExpenses, 'MAD')}</div>
-            <p className="text-xs text-muted-foreground mt-1">وقود + سلف + عبّارة + غرامات</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('وقود + سلف + عبّارة + غرامات', 'Gasoil + Avances + Ferry + Pénalités')}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">صافي الأرباح المحققة</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('صافي الأرباح المحققة', 'Bénéfice Net Réalisé')}
+            </CardTitle>
             <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold font-mono ${netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
               {formatCurrency(netProfit, 'MAD')}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">الأرباح الصافية بعد خصم كافة المصاريف</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('الأرباح الصافية بعد خصم كافة المصاريف', 'Résultat net après déduction de tous les coûts')}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">متوسط هامش الربح</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('متوسط هامش الربح', 'Marge Moyenne')}
+            </CardTitle>
             <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary">
               {averageMargin.toFixed(1)}%
             </span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">{averageMargin.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground mt-1">كفاءة تشغيل الأسطول</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('كفاءة تشغيل الأسطول', 'Efficience opérationnelle de la flotte')}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
         <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
           <Input
-            placeholder="بحث بالمسار، رقم CMR، السائق، أو رقم الشاحنة..."
+            placeholder={t('بحث بالمسار، رقم CMR، السائق، أو رقم الشاحنة...', 'Rechercher par trajet, N° CMR, conducteur ou matricule...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 h-9 text-xs rounded-xl"
+            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
           />
         </div>
         <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
@@ -164,7 +203,7 @@ export default function TripProfitabilityPage() {
 
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">جاري احتساب البيانات المالية...</p>
+          <p className="text-muted-foreground">{t('جاري احتساب البيانات المالية...', 'Calcul des données financières en cours...')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -178,7 +217,7 @@ export default function TripProfitabilityPage() {
                       <div>
                         <CardTitle className="text-base font-amiri font-bold text-foreground">{item.route}</CardTitle>
                         <CardDescription className="text-xs mt-0.5">
-                          {item.cmrNumber || `رحلة #${item.tripId}`} • {item.departureDate}
+                          {item.cmrNumber || `${t('رحلة', 'Trajet')} #${item.tripId}`} • {item.departureDate}
                         </CardDescription>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold font-mono ${
@@ -192,44 +231,44 @@ export default function TripProfitabilityPage() {
                   </CardHeader>
                   <CardContent className="space-y-3 pt-3 text-sm">
                     <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground items-center">
-                      <div>السائق: <span className="font-medium text-foreground">{item.driverName || 'غير محدد'}</span></div>
+                      <div>{t('السائق:', 'Conducteur :')} <span className="font-medium text-foreground">{item.driverName || t('غير محدد', 'Non assigné')}</span></div>
                       <div className="flex items-center gap-1">
-                        <span>الشاحنة:</span>
+                        <span>{t('الشاحنة:', 'Véhicule :')}</span>
                         {item.truckPlate ? (
                           <MatriculeBadge plate={item.truckPlate} variant="badge" size="xs" />
                         ) : (
-                          <span className="text-foreground">غير محدد</span>
+                          <span className="text-foreground">{t('غير محدد', 'Non assigné')}</span>
                         )}
                       </div>
                     </div>
 
                     <div className="space-y-1.5 p-3 bg-muted/40 rounded-xl border border-border text-xs">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">سعر الرحلة (الإيراد):</span>
+                        <span className="text-muted-foreground">{t('سعر الرحلة (الإيراد):', 'Prix du trajet (CA) :')}</span>
                         <span className="font-bold text-primary font-mono">{formatCurrency(item.revenue, 'MAD')}</span>
                       </div>
                       <div className="flex justify-between text-muted-foreground">
-                        <span>الوقود:</span>
+                        <span>{t('الوقود:', 'Gasoil :')}</span>
                         <span className="font-mono">-{formatCurrency(item.fuelCost, 'MAD')}</span>
                       </div>
                       <div className="flex justify-between text-muted-foreground">
-                        <span>سلف السائق:</span>
+                        <span>{t('سلف السائق:', 'Avances :')}</span>
                         <span className="font-mono">-{formatCurrency(item.advancesCost, 'MAD')}</span>
                       </div>
                       {item.ferryCost > 0 && (
                         <div className="flex justify-between text-muted-foreground">
-                          <span>العبّارة البحرية:</span>
+                          <span>{t('العبّارة البحرية:', 'Ferry :')}</span>
                           <span className="font-mono">-{formatCurrency(item.ferryCost, 'MAD')}</span>
                         </div>
                       )}
                       {item.finesCost > 0 && (
                         <div className="flex justify-between text-rose-600">
-                          <span>الغرامات:</span>
+                          <span>{t('الغرامات:', 'Pénalités :')}</span>
                           <span className="font-mono">-{formatCurrency(item.finesCost, 'MAD')}</span>
                         </div>
                       )}
                       <div className="flex justify-between border-t border-border pt-1.5 font-bold">
-                        <span className="text-foreground">صافي ربح الرحلة:</span>
+                        <span className="text-foreground">{t('صافي ربح الرحلة:', 'Bénéfice net :')}</span>
                         <span className={`font-mono ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
                           {formatCurrency(item.netProfit, 'MAD')}
                         </span>
@@ -240,7 +279,7 @@ export default function TripProfitabilityPage() {
                       <div className="flex items-center justify-between text-xs px-1">
                         <span className="text-muted-foreground flex items-center gap-1">
                           <Fuel className="w-3.5 h-3.5 text-primary" />
-                          معدل استهلاك الديزل:
+                          {t('معدل استهلاك الديزل:', 'Consommation gasoil :')}
                         </span>
                         <span className="font-mono font-bold flex items-center gap-1">
                           {item.litersPer100Km} L/100km
@@ -256,7 +295,7 @@ export default function TripProfitabilityPage() {
           })}
           {filtered.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">لا توجد رحلات مطابقة لمعايير البحث</p>
+              <p className="text-muted-foreground">{t('لا توجد رحلات مطابقة لمعايير البحث', 'Aucun trajet correspondant')}</p>
             </div>
           )}
         </div>
@@ -278,7 +317,7 @@ export default function TripProfitabilityPage() {
                     <div>
                       <CardTitle className="text-base font-amiri font-bold text-foreground">{item.route}</CardTitle>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                        <span>{item.cmrNumber || `رحلة #${item.tripId}`}</span>
+                        <span>{item.cmrNumber || `${t('رحلة', 'Trajet')} #${item.tripId}`}</span>
                         <span>•</span>
                         <span>{item.departureDate}</span>
                         {item.truckPlate && (
@@ -300,19 +339,19 @@ export default function TripProfitabilityPage() {
                   {/* Middle: Financials */}
                   <div className="flex flex-wrap items-center gap-3 text-xs">
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                      <span className="text-muted-foreground">الإيراد:</span>
+                      <span className="text-muted-foreground">{t('الإيراد:', 'CA :')}</span>
                       <span className="font-bold text-foreground font-mono">{formatCurrency(item.revenue, 'MAD')}</span>
                     </div>
 
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                      <span className="text-muted-foreground">التكاليف:</span>
+                      <span className="text-muted-foreground">{t('التكاليف:', 'Coûts :')}</span>
                       <span className="font-mono text-muted-foreground">
-                        -{formatCurrency(item.fuelCost + item.advancesCost + item.ferryCost + item.finesCost, 'MAD')}
+                        -{formatCurrency(item.totalExpenses, 'MAD')}
                       </span>
                     </div>
 
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                      <span className="text-muted-foreground">صافي الربح:</span>
+                      <span className="text-muted-foreground">{t('صافي الربح:', 'Résultat net :')}</span>
                       <span className={`font-mono font-bold ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
                         {formatCurrency(item.netProfit, 'MAD')}
                       </span>
@@ -333,7 +372,7 @@ export default function TripProfitabilityPage() {
                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
                         : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
                     }`}>
-                      هامش: {item.profitMarginPercentage}%
+                      {t('هامش:', 'Marge :')} {item.profitMarginPercentage}%
                     </span>
                   </div>
                 </div>
@@ -342,7 +381,7 @@ export default function TripProfitabilityPage() {
           })}
           {filtered.length === 0 && (
             <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-              <p className="text-muted-foreground">لا توجد رحلات مطابقة لمعايير البحث</p>
+              <p className="text-muted-foreground">{t('لا توجد رحلات مطابقة لمعايير البحث', 'Aucun trajet correspondant')}</p>
             </div>
           )}
         </div>

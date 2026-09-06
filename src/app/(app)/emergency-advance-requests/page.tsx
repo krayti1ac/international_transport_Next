@@ -1,17 +1,20 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import type { EmergencyAdvanceRequest, Driver } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 import { Plus, Search, AlertTriangle } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { DEFAULT_DRIVERS, fallbackArray } from '@/lib/default-data';
+import Decimal from 'decimal.js';
 
 export default function EmergencyAdvanceRequestsPage() {
+  const { t, dir, locale } = useLanguage();
   const [requests, setRequests] = useState<EmergencyAdvanceRequest[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,22 @@ export default function EmergencyAdvanceRequestsPage() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
+  // Deduplicate drivers by name to prevent repeated entries in the dropdown,
+  // prioritizing currently selected driver if active.
+  const uniqueDrivers = useMemo(() => {
+    const map = new Map<string, Driver>();
+    for (const driver of drivers) {
+      const nameKey = driver.name?.trim().toLowerCase();
+      if (!nameKey) continue;
+      if (!map.has(nameKey) || String(driver.id) === String(formData.driver_id)) {
+        map.set(nameKey, driver);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', locale === 'ar' ? 'ar' : 'fr', { sensitivity: 'base' })
+    );
+  }, [drivers, formData.driver_id, locale]);
+
   useEffect(() => {
     fetchRequests();
 
@@ -46,8 +65,8 @@ export default function EmergencyAdvanceRequestsPage() {
           const newReq = payload.new as EmergencyAdvanceRequest;
           setRequests((prev) => [newReq, ...prev.filter((r) => r.id !== newReq.id)]);
           toast({
-            title: 'طلب سلفة طارئة جديد',
-            description: `السائق: ${newReq.driver_name} - المبلغ: ${newReq.amount} ${newReq.currency}`,
+            title: t('طلب سلفة طارئة جديد', 'Nouvelle demande d’avance urgente'),
+            description: `${t('السائق:', 'Chauffeur :')} ${newReq.driver_name} - ${t('المبلغ:', 'Montant :')} ${newReq.amount} ${newReq.currency}`,
           });
         }
       )
@@ -82,7 +101,7 @@ export default function EmergencyAdvanceRequestsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -102,11 +121,21 @@ export default function EmergencyAdvanceRequestsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let amountNum: number;
+    try {
+      const dec = new Decimal(formData.amount);
+      if (dec.lte(0)) throw new Error();
+      amountNum = dec.toNumber();
+    } catch {
+      toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال مبلغ صالح أكبر من الصفر', 'Veuillez saisir un montant valide supérieur à zéro'), variant: 'destructive' });
+      return;
+    }
+
     try {
       const { error } = await supabase.from('emergency_advance_requests').insert({
         driver_id: formData.driver_id ? parseInt(formData.driver_id) : null,
         driver_name: formData.driver_name,
-        amount: parseFloat(formData.amount),
+        amount: amountNum,
         currency: formData.currency,
         reason: formData.reason,
         notes: formData.notes || null,
@@ -115,13 +144,13 @@ export default function EmergencyAdvanceRequestsPage() {
 
       if (error) throw error;
 
-      toast({ title: 'تم إرسال الطلب بنجاح' });
+      toast({ title: t('تم إرسال الطلب بنجاح', 'Demande envoyée avec succès') });
       setFormData({ driver_name: '', driver_id: '', amount: '', currency: 'MAD', reason: '', notes: '' });
       setShowForm(false);
       fetchRequests();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -136,10 +165,10 @@ export default function EmergencyAdvanceRequestsPage() {
         .eq('id', id);
 
       if (error) throw error;
-      toast({ title: 'تم تحديث الحالة بنجاح' });
+      toast({ title: t('تم تحديث الحالة بنجاح', 'Statut mis à jour avec succès') });
     } catch (error: any) {
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -148,20 +177,20 @@ export default function EmergencyAdvanceRequestsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      case 'completed': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'pending': return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25';
+      case 'approved': return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25';
+      case 'rejected': return 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25';
+      case 'completed': return 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25';
+      default: return 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/25';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return 'قيد الانتظار';
-      case 'approved': return 'معتمد';
-      case 'rejected': return 'مرفوض';
-      case 'completed': return 'مكتمل';
+      case 'pending': return t('قيد الانتظار', 'En attente');
+      case 'approved': return t('معتمد', 'Approuvé');
+      case 'rejected': return t('مرفوض', 'Rejeté');
+      case 'completed': return t('مكتمل', 'Terminé');
       default: return status;
     }
   };
@@ -172,25 +201,29 @@ export default function EmergencyAdvanceRequestsPage() {
   );
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold font-amiri">طلبات السلف الطارئة</h1>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">
+          {t('طلبات السلف الطارئة', 'Demandes d’Avances Urgentes')}
+        </h1>
         <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="w-4 h-4 ml-2" />
-          طلب جديد
+          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('طلب جديد', 'Nouvelle demande')}
         </Button>
       </div>
 
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri">طلب سلفة طارئة</CardTitle>
+            <CardTitle className="font-amiri text-foreground">
+              {t('طلب سلفة طارئة', 'Formulaire d’avance d’urgence')}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">السائق المسؤول *</label>
+                  <label className="text-sm font-medium text-foreground">{t('السائق المسؤول *', 'Conducteur concerné *')}</label>
                   <select
                     value={formData.driver_id || ''}
                     onChange={(e) => {
@@ -204,23 +237,23 @@ export default function EmergencyAdvanceRequestsPage() {
                     }}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                   >
-                    <option value="">-- اختر السائق من القائمة --</option>
-                    {drivers.map((d) => (
+                    <option value="">{t('-- اختر السائق من القائمة --', '-- Choisir un chauffeur --')}</option>
+                    {uniqueDrivers.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name} {d.phone ? `(${d.phone})` : ''}
+                        {d.name}
                       </option>
                     ))}
                   </select>
                   <Input
                     value={formData.driver_name}
                     onChange={(e) => setFormData({ ...formData, driver_name: e.target.value, driver_id: '' })}
-                    placeholder="أو اكتب اسم السائق يدوياً..."
+                    placeholder={t('أو اكتب اسم السائق يدوياً...', 'Ou saisissez le nom du chauffeur...')}
                     required
                     className="mt-1.5"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">المبلغ *</label>
+                  <label className="text-sm font-medium text-foreground">{t('المبلغ *', 'Montant *')}</label>
                   <Input
                     type="number"
                     value={formData.amount}
@@ -231,16 +264,16 @@ export default function EmergencyAdvanceRequestsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">السبب *</label>
+                <label className="text-sm font-medium text-foreground">{t('السبب *', 'Motif de l’avance *')}</label>
                 <Input
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  placeholder="سبب طلب السلفة..."
+                  placeholder={t('سبب طلب السلفة...', 'Justification ou urgence de la dépense...')}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">ملاحظات</label>
+                <label className="text-sm font-medium text-foreground">{t('ملاحظات', 'Remarques complémentaires')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -249,9 +282,9 @@ export default function EmergencyAdvanceRequestsPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="submit">إرسال الطلب</Button>
+                <Button type="submit">{t('إرسال الطلب', 'Soumettre la demande')}</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                  إلغاء
+                  {t('إلغاء', 'Annuler')}
                 </Button>
               </div>
             </form>
@@ -261,12 +294,12 @@ export default function EmergencyAdvanceRequestsPage() {
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
         <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+          <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
           <Input
-            placeholder="البحث عن طلب..."
+            placeholder={t('البحث عن طلب...', 'Rechercher une demande...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 h-9 text-xs rounded-xl"
+            className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl`}
           />
         </div>
         <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
@@ -274,7 +307,7 @@ export default function EmergencyAdvanceRequestsPage() {
 
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-slate-500">جاري تحميل البيانات...</p>
+          <p className="text-muted-foreground">{t('جاري تحميل البيانات...', 'Chargement des données...')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -282,9 +315,9 @@ export default function EmergencyAdvanceRequestsPage() {
             <Card key={request.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-amiri flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-orange-500" />
-                    طلب #{request.id}
+                  <CardTitle className="text-lg font-amiri flex items-center gap-2 text-foreground">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    {t(`طلب #${request.id}`, `Demande #${request.id}`)}
                   </CardTitle>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
                     {getStatusText(request.status)}
@@ -294,21 +327,23 @@ export default function EmergencyAdvanceRequestsPage() {
               <CardContent>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">السائق:</span>
-                    <span className="font-medium">{request.driver_name}</span>
+                    <span className="text-muted-foreground">{t('السائق:', 'Chauffeur :')}</span>
+                    <span className="font-medium text-foreground">{request.driver_name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">المبلغ:</span>
-                    <span className="font-medium">{request.amount} {request.currency}</span>
+                    <span className="text-muted-foreground">{t('المبلغ:', 'Montant :')}</span>
+                    <span className="font-bold font-mono text-primary">
+                      {new Decimal(request.amount || 0).toFixed(2)} {request.currency}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">السبب:</span>
-                    <span className="font-medium">{request.reason}</span>
+                    <span className="text-muted-foreground">{t('السبب:', 'Motif :')}</span>
+                    <span className="font-medium text-foreground">{request.reason}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">التاريخ:</span>
-                    <span className="font-medium">
-                      {new Date(request.created_at).toLocaleDateString('ar-MA')}
+                    <span className="text-muted-foreground">{t('التاريخ:', 'Date :')}</span>
+                    <span className="font-medium text-foreground font-mono">
+                      {new Date(request.created_at).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
                     </span>
                   </div>
                   {request.status === 'pending' && (
@@ -318,7 +353,7 @@ export default function EmergencyAdvanceRequestsPage() {
                         onClick={() => updateStatus(request.id, 'approved')}
                         className="flex-1"
                       >
-                        موافقة
+                        {t('موافقة', 'Approuver')}
                       </Button>
                       <Button
                         size="sm"
@@ -326,7 +361,7 @@ export default function EmergencyAdvanceRequestsPage() {
                         onClick={() => updateStatus(request.id, 'rejected')}
                         className="flex-1"
                       >
-                        رفض
+                        {t('رفض', 'Rejeter')}
                       </Button>
                     </div>
                   )}
@@ -336,7 +371,7 @@ export default function EmergencyAdvanceRequestsPage() {
           ))}
           {filteredRequests.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-slate-500">لا توجد طلبات</p>
+              <p className="text-muted-foreground">{t('لا توجد طلبات', 'Aucune demande')}</p>
             </div>
           )}
         </div>
@@ -348,15 +383,15 @@ export default function EmergencyAdvanceRequestsPage() {
               <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
                 {/* Right: ID & Driver */}
                 <div className="flex items-center gap-3 min-w-[200px]">
-                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                     <AlertTriangle className="w-4 h-4" />
                   </div>
                   <div>
                     <CardTitle className="text-base font-amiri font-bold text-foreground">
-                      طلب #{request.id}
+                      {t(`طلب #${request.id}`, `Demande #${request.id}`)}
                     </CardTitle>
                     <span className="text-[11px] text-muted-foreground">
-                      السائق: {request.driver_name}
+                      {t('السائق:', 'Chauffeur :')} {request.driver_name}
                     </span>
                   </div>
                 </div>
@@ -364,19 +399,21 @@ export default function EmergencyAdvanceRequestsPage() {
                 {/* Middle: Amount, Reason, Date */}
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                    <span className="text-muted-foreground">المبلغ:</span>
-                    <span className="font-bold text-foreground font-mono text-sm">{request.amount} {request.currency}</span>
+                    <span className="text-muted-foreground">{t('المبلغ:', 'Montant :')}</span>
+                    <span className="font-bold text-foreground font-mono text-sm">
+                      {new Decimal(request.amount || 0).toFixed(2)} {request.currency}
+                    </span>
                   </div>
 
                   {request.reason && (
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
-                      <span className="text-muted-foreground">السبب:</span>
+                      <span className="text-muted-foreground">{t('السبب:', 'Motif :')}</span>
                       <span className="font-medium text-foreground">{request.reason}</span>
                     </div>
                   )}
 
                   <span className="text-muted-foreground font-mono text-[11px]">
-                    {new Date(request.created_at).toLocaleDateString('ar-MA')}
+                    {new Date(request.created_at).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
                   </span>
                 </div>
 
@@ -393,7 +430,7 @@ export default function EmergencyAdvanceRequestsPage() {
                         onClick={() => updateStatus(request.id, 'approved')}
                         className="rounded-xl h-8 text-xs px-3"
                       >
-                        موافقة
+                        {t('موافقة', 'Approuver')}
                       </Button>
                       <Button
                         size="sm"
@@ -401,7 +438,7 @@ export default function EmergencyAdvanceRequestsPage() {
                         onClick={() => updateStatus(request.id, 'rejected')}
                         className="rounded-xl h-8 text-xs px-3"
                       >
-                        رفض
+                        {t('رفض', 'Rejeter')}
                       </Button>
                     </div>
                   )}
@@ -411,7 +448,7 @@ export default function EmergencyAdvanceRequestsPage() {
           ))}
           {filteredRequests.length === 0 && (
             <div className="text-center py-12 bg-card border border-border/80 rounded-2xl">
-              <p className="text-slate-500">لا توجد طلبات</p>
+              <p className="text-muted-foreground">{t('لا توجد طلبات', 'Aucune demande')}</p>
             </div>
           )}
         </div>

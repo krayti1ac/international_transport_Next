@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import Decimal from 'decimal.js';
+import { createClient } from '@/lib/supabase/browser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 import {
   CircleDollarSign,
   TrendingUp,
@@ -107,6 +109,7 @@ interface ForexGainLossEntry {
 }
 
 export default function ForexPage() {
+  const { t, dir } = useLanguage();
   const [activeTab, setActiveTab] = useState<'rates' | 'gain_loss'>('rates');
   const [rates, setRates] = useState<ForexRate[]>([]);
   const [gainLossEntries, setGainLossEntries] = useState<ForexGainLossEntry[]>([]);
@@ -177,9 +180,10 @@ export default function ForexPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
+        const rateVal = new Decimal(data.rate.eur_to_mad).toFixed(4);
         toast({
-          title: 'تم التحديث بنجاح',
-          description: `سعر اليوم: 1 EUR = ${Number(data.rate.eur_to_mad).toFixed(4)} MAD`,
+          title: t('تم التحديث بنجاح', 'Mise à jour réussie'),
+          description: t(`سعر اليوم: 1 EUR = ${rateVal} MAD`, `Taux du jour: 1 EUR = ${rateVal} MAD`),
         });
         setIsTableMissing(false);
         loadData();
@@ -189,24 +193,25 @@ export default function ForexPage() {
       if (data?.error === 'TABLE_MISSING' || data?.code === 'PGRST205') {
         setIsTableMissing(true);
         setShowSqlModal(true);
-        throw new Error('جداول أسعار الصرف غير موجودة في Supabase. يرجى تطبيق كود الـ SQL المرفق.');
+        throw new Error(t('جداول أسعار الصرف غير موجودة في Supabase. يرجى تطبيق كود الـ SQL المرفق.', 'Les tables Forex sont introuvables dans Supabase. Veuillez appliquer la migration SQL.'));
       }
 
       // 2. Client-side fallback if server route failed for another reason
       const extRes = await fetch('https://open.er-api.com/v6/latest/EUR');
-      if (!extRes.ok) throw new Error(data?.message || 'فشل الاتصال بمزود أسعار الصرف');
+      if (!extRes.ok) throw new Error(data?.message || t('فشل الاتصال بمزود أسعار الصرف', 'Échec de connexion au fournisseur de taux'));
       const extData = await extRes.json();
-      const eurToMad = extData?.rates?.MAD;
-      if (!eurToMad) throw new Error('لم يتم العثور على سعر صرف الدرهم');
+      const rawEurMad = extData?.rates?.MAD;
+      if (!rawEurMad) throw new Error(t('لم يتم العثور على سعر صرف الدرهم', 'Taux de change MAD introuvable'));
 
-      const madToEur = 1 / eurToMad;
+      const eurToMadDec = new Decimal(rawEurMad);
+      const madToEurDec = new Decimal(1).dividedBy(eurToMadDec);
       const today = new Date().toISOString().split('T')[0];
 
       const { error } = await supabase.from('forex_rates').upsert(
         {
           rate_date: today,
-          eur_to_mad: Number(eurToMad.toFixed(4)),
-          mad_to_eur: Number(madToEur.toFixed(6)),
+          eur_to_mad: Number(eurToMadDec.toFixed(4)),
+          mad_to_eur: Number(madToEurDec.toFixed(6)),
           source: 'api_live',
         },
         { onConflict: 'rate_date' }
@@ -216,22 +221,22 @@ export default function ForexPage() {
         if (error.code === 'PGRST205') {
           setIsTableMissing(true);
           setShowSqlModal(true);
-          throw new Error('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL.');
+          throw new Error(t('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL.', 'La table forex_rates est introuvable dans Supabase. Veuillez exécuter le script SQL.'));
         }
-        throw new Error(error.message || 'فشل حفظ سعر الصرف في قاعدة البيانات');
+        throw new Error(error.message || t('فشل حفظ سعر الصرف في قاعدة البيانات', 'Échec d’enregistrement du taux de change'));
       }
 
       toast({
-        title: 'تم التحديث بنجاح',
-        description: `سعر اليوم: 1 EUR = ${Number(eurToMad).toFixed(4)} MAD`,
+        title: t('تم التحديث بنجاح', 'Mise à jour réussie'),
+        description: t(`سعر اليوم: 1 EUR = ${eurToMadDec.toFixed(4)} MAD`, `Taux du jour: 1 EUR = ${eurToMadDec.toFixed(4)} MAD`),
       });
       setIsTableMissing(false);
       loadData();
     } catch (err: unknown) {
       const postgrestErr = err as { message?: string };
-      const msg = err instanceof Error ? err.message : postgrestErr?.message || 'تعذر جلب سعر الصرف';
+      const msg = err instanceof Error ? err.message : postgrestErr?.message || t('تعذر جلب سعر الصرف', 'Impossible de récupérer le taux de change');
       toast({
-        title: 'خطأ في جلب السعر الحي',
+        title: t('خطأ في جلب السعر الحي', 'Erreur lors de la récupération du taux direct'),
         description: msg,
         variant: 'destructive',
       });
@@ -242,24 +247,33 @@ export default function ForexPage() {
 
   const handleManualRateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const eurMad = parseFloat(manualRate.eur_to_mad);
-    let madEur = parseFloat(manualRate.mad_to_eur);
+    let eurMadDec: Decimal;
+    let madEurDec: Decimal;
 
-    if (isNaN(eurMad) || eurMad <= 0) {
-      toast({ title: 'خطأ', description: 'يرجى إدخال سعر EUR إلى MAD بشكل صحيح', variant: 'destructive' });
+    try {
+      eurMadDec = new Decimal(manualRate.eur_to_mad);
+      if (eurMadDec.lte(0)) throw new Error();
+    } catch {
+      toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال سعر EUR إلى MAD بشكل صحيح', 'Veuillez saisir un taux EUR -> MAD valide'), variant: 'destructive' });
       return;
     }
 
-    if (isNaN(madEur) || madEur <= 0) {
-      madEur = 1 / eurMad;
+    try {
+      if (!manualRate.mad_to_eur || isNaN(Number(manualRate.mad_to_eur)) || Number(manualRate.mad_to_eur) <= 0) {
+        madEurDec = new Decimal(1).dividedBy(eurMadDec);
+      } else {
+        madEurDec = new Decimal(manualRate.mad_to_eur);
+      }
+    } catch {
+      madEurDec = new Decimal(1).dividedBy(eurMadDec);
     }
 
     try {
       const { error } = await supabase.from('forex_rates').upsert(
         {
           rate_date: manualRate.rate_date,
-          eur_to_mad: Number(eurMad.toFixed(4)),
-          mad_to_eur: Number(madEur.toFixed(6)),
+          eur_to_mad: Number(eurMadDec.toFixed(4)),
+          mad_to_eur: Number(madEurDec.toFixed(6)),
           source: 'manual',
         },
         { onConflict: 'rate_date' }
@@ -269,12 +283,12 @@ export default function ForexPage() {
         if (error.code === 'PGRST205') {
           setIsTableMissing(true);
           setShowSqlModal(true);
-          throw new Error('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL المرفق أولاً.');
+          throw new Error(t('جدول forex_rates غير موجود في Supabase. يرجى تطبيق كود الـ SQL المرفق أولاً.', 'Table forex_rates introuvable dans Supabase. Veuillez appliquer le script SQL.'));
         }
-        throw new Error(error.message || 'فشل في حفظ سعر الصرف');
+        throw new Error(error.message || t('فشل في حفظ سعر الصرف', 'Échec de l’enregistrement'));
       }
 
-      toast({ title: 'تم الحفظ', description: 'تم تسجيل سعر الصرف بنجاح' });
+      toast({ title: t('تم الحفظ', 'Enregistré'), description: t('تم تسجيل سعر الصرف بنجاح', 'Taux de change enregistré avec succès') });
       setIsTableMissing(false);
       setIsAddRateOpen(false);
       setManualRate({
@@ -285,39 +299,44 @@ export default function ForexPage() {
       loadData();
     } catch (err: unknown) {
       const postgrestErr = err as { message?: string };
-      const msg = err instanceof Error ? err.message : postgrestErr?.message || 'فشل في حفظ سعر الصرف';
-      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
+      const msg = err instanceof Error ? err.message : postgrestErr?.message || t('فشل في حفظ سعر الصرف', 'Échec d’enregistrement');
+      toast({ title: t('خطأ', 'Erreur'), description: msg, variant: 'destructive' });
     }
   };
 
-  // Calculations for Gain/Loss
+  // Calculations for Gain/Loss using Decimal.js
   const totalGain = useMemo(() => {
     return gainLossEntries
       .filter((e) => e.entry_type === 'gain')
-      .reduce((acc, curr) => acc + (Number(curr.realized_gain_loss) || 0), 0);
+      .reduce((acc, curr) => acc.plus(new Decimal(curr.realized_gain_loss || 0)), new Decimal(0));
   }, [gainLossEntries]);
 
   const totalLoss = useMemo(() => {
     return gainLossEntries
       .filter((e) => e.entry_type === 'loss')
-      .reduce((acc, curr) => acc + (Number(curr.realized_gain_loss) || 0), 0);
+      .reduce((acc, curr) => acc.plus(new Decimal(curr.realized_gain_loss || 0)), new Decimal(0));
   }, [gainLossEntries]);
 
-  const netGainLoss = totalGain - totalLoss;
+  const netGainLoss = useMemo(() => {
+    return totalGain.minus(totalLoss);
+  }, [totalGain, totalLoss]);
 
   const latestRate = rates[0];
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <CircleDollarSign className="w-7 h-7 text-purple-400" />
-            أسعار الصرف وفروق العملات المحققة (Forex)
+            {t('أسعار الصرف وفروق العملات المحققة (Forex)', 'Taux de change et écarts de conversion (Forex)')}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            متابعة أسعار صرف اليورو والدرهم المغربي وحساب الفروقات الربحية والمحققة للرحلات والفواتير الدولية.
+            {t(
+              'متابعة أسعار صرف اليورو والدرهم المغربي وحساب الفروقات الربحية والمحققة للرحلات والفواتير الدولية.',
+              'Suivi des taux de change EUR/MAD et calcul des gains/pertes de change réalisés pour les voyages et factures internationales.'
+            )}
           </p>
         </div>
 
@@ -329,7 +348,7 @@ export default function ForexPage() {
             className="border-purple-500/40 text-purple-400 hover:bg-purple-500/10 flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncingLive ? 'animate-spin' : ''}`} />
-            <span>تحديث السعر المباشر الآن</span>
+            <span>{t('تحديث السعر المباشر الآن', 'Actualiser le taux direct')}</span>
           </Button>
 
           <Button
@@ -337,7 +356,7 @@ export default function ForexPage() {
             className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2 shadow-md cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>إضافة سعر يدوي</span>
+            <span>{t('إضافة سعر يدوي', 'Ajouter un taux manuel')}</span>
           </Button>
         </div>
       </div>
@@ -349,10 +368,13 @@ export default function ForexPage() {
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
               <h4 className="font-bold text-sm text-amber-300">
-                جداول أسعار الصرف (Forex) بحاجة للإنشاء في قاعدة بيانات Supabase
+                {t('جداول أسعار الصرف (Forex) بحاجة للإنشاء في قاعدة بيانات Supabase', 'Tables Forex requises dans la base Supabase')}
               </h4>
               <p className="text-xs text-amber-200/80 mt-1">
-                سبب ظهور الخطأ: جدول <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300 font-mono">forex_rates</code> لم يتم تفعيله بعد في Supabase. يمكنك نسخ كود الـ SQL وتشغيله بنقرة زر واحدة في لوحة التحكم.
+                {t(
+                  'سبب ظهور الخطأ: جدول forex_rates لم يتم تفعيله بعد في Supabase. يمكنك نسخ كود الـ SQL وتشغيله بنقرة زر واحدة في لوحة التحكم.',
+                  'Cause: La table forex_rates n’est pas encore créée dans Supabase. Copiez et exécutez le script SQL ci-dessous dans l’éditeur SQL.'
+                )}
               </p>
             </div>
           </div>
@@ -361,7 +383,7 @@ export default function ForexPage() {
             onClick={() => setShowSqlModal(true)}
             className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shrink-0 cursor-pointer shadow-sm"
           >
-            عرض ونسخ كود الـ SQL
+            {t('عرض ونسخ كود الـ SQL', 'Afficher et copier le script SQL')}
           </Button>
         </div>
       )}
@@ -378,7 +400,7 @@ export default function ForexPage() {
           }`}
         >
           <CircleDollarSign className="w-4 h-4" />
-          <span>سجل أسعار الصرف ({rates.length})</span>
+          <span>{t('سجل أسعار الصرف', 'Historique des taux')} ({rates.length})</span>
         </button>
 
         <button
@@ -391,7 +413,7 @@ export default function ForexPage() {
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          <span>فروق الصرف المحققة ({gainLossEntries.length})</span>
+          <span>{t('فروق الصرف المحققة', 'Écarts de change réalisés')} ({gainLossEntries.length})</span>
         </button>
       </div>
 
@@ -402,37 +424,47 @@ export default function ForexPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">آخر سعر صرف مسجل (EUR → MAD)</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('آخر سعر صرف مسجل (EUR → MAD)', 'Dernier taux enregistré (EUR → MAD)')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-purple-400">
-                  {latestRate ? `1 € = ${latestRate.eur_to_mad} MAD` : 'غير محدد'}
+                  {latestRate ? `1 € = ${latestRate.eur_to_mad} MAD` : t('غير محدد', 'Non défini')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  بتاريخ: {latestRate?.rate_date || '—'} ({latestRate?.source === 'api_live' ? 'سعر حي' : 'يدوي'})
+                  {t('بتاريخ: ', 'Date: ')} {latestRate?.rate_date || '—'} ({latestRate?.source === 'api_live' ? t('سعر حي', 'Taux direct') : t('يدوي', 'Manuel')})
                 </p>
               </CardContent>
             </Card>
 
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">السعر المقابل (MAD → EUR)</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('السعر المقابل (MAD → EUR)', 'Taux inverse (MAD → EUR)')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-400">
-                  {latestRate ? `1 MAD = ${latestRate.mad_to_eur} €` : 'غير محدد'}
+                  {latestRate ? `1 MAD = ${latestRate.mad_to_eur} €` : t('غير محدد', 'Non défini')}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">معدل التحويل للدرهم إلى اليورو</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('معدل التحويل للدرهم إلى اليورو', 'Taux de conversion MAD vers EUR')}
+                </p>
               </CardContent>
             </Card>
 
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">إجمالي الأيام المسجلة</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('إجمالي الأيام المسجلة', 'Total des jours enregistrés')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{rates.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">تاريخ توثيق أسعار العملات</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('تاريخ توثيق أسعار العملات', 'Historique de documentation des devises')}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -440,26 +472,26 @@ export default function ForexPage() {
           {/* Rates Table */}
           <Card className="bg-card border-border/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className={`w-full text-xs ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
                 <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
                   <tr>
-                    <th className="p-3">التاريخ</th>
-                    <th className="p-3">سعر اليورو مقابل الدرهم (1 EUR)</th>
-                    <th className="p-3">سعر الدرهم مقابل اليورو (1 MAD)</th>
-                    <th className="p-3">المصدر</th>
+                    <th className="p-3">{t('التاريخ', 'Date')}</th>
+                    <th className="p-3">{t('سعر اليورو مقابل الدرهم (1 EUR)', 'Taux EUR/MAD (1 EUR)')}</th>
+                    <th className="p-3">{t('سعر الدرهم مقابل اليورو (1 MAD)', 'Taux MAD/EUR (1 MAD)')}</th>
+                    <th className="p-3">{t('المصدر', 'Source')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {loading ? (
                     <tr>
                       <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                        جاري تحميل أسعار الصرف...
+                        {t('جاري تحميل أسعار الصرف...', 'Chargement des taux de change...')}
                       </td>
                     </tr>
                   ) : rates.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                        لا توجد أسعار صرف مسجلة. انقر على &quot;تحديث السعر المباشر الآن&quot; للمزامنة.
+                        {t('لا توجد أسعار صرف مسجلة. انقر على "تحديث السعر المباشر الآن" للمزامنة.', 'Aucun taux enregistré. Cliquez sur "Actualiser le taux direct" pour synchroniser.')}
                       </td>
                     </tr>
                   ) : (
@@ -484,7 +516,7 @@ export default function ForexPage() {
                                 : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                             }
                           >
-                            {rate.source === 'api_live' ? '⚡ API مباشر' : 'يدوي'}
+                            {rate.source === 'api_live' ? t('⚡ API مباشر', '⚡ API Direct') : t('يدوي', 'Manuel')}
                           </Badge>
                         </td>
                       </tr>
@@ -504,39 +536,51 @@ export default function ForexPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">إجمالي أرباح الصرف (FX Gain)</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('إجمالي أرباح الصرف (FX Gain)', 'Gains de change totaux (FX Gain)')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-400 flex items-center gap-1">
                   <TrendingUp className="w-5 h-5" />
                   +{totalGain.toFixed(2)} MAD
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">مكاسب ناتجة عن تغير سعر التحويل</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('مكاسب ناتجة عن تغير سعر التحويل', 'Gains issus des fluctuations de change')}
+                </p>
               </CardContent>
             </Card>
 
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">إجمالي خسائر الصرف (FX Loss)</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('إجمالي خسائر الصرف (FX Loss)', 'Pertes de change totales (FX Loss)')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-rose-400 flex items-center gap-1">
                   <TrendingDown className="w-5 h-5" />
                   -{totalLoss.toFixed(2)} MAD
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">فروقات سلبية عند التسوية</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('فروقات سلبية عند التسوية', 'Écarts défavorables au règlement')}
+                </p>
               </CardContent>
             </Card>
 
             <Card className="bg-card/70 border-border/70 backdrop-blur-sm shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">صافي فروق الصرف المحققة</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {t('صافي فروق الصرف المحققة', 'Résultat net de change réalisé')}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${netGainLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {netGainLoss >= 0 ? `+${netGainLoss.toFixed(2)}` : netGainLoss.toFixed(2)} MAD
+                <div className={`text-2xl font-bold ${netGainLoss.gte(0) ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {netGainLoss.gte(0) ? `+${netGainLoss.toFixed(2)}` : netGainLoss.toFixed(2)} MAD
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">الرصيد الصافي للأرباح والخسائر</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('الرصيد الصافي للأرباح والخسائر', 'Solde net des gains et pertes')}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -544,23 +588,23 @@ export default function ForexPage() {
           {/* Gain/Loss Table */}
           <Card className="bg-card border-border/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className={`w-full text-xs ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
                 <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
                   <tr>
-                    <th className="p-3">رقم العملية</th>
-                    <th className="p-3">المرجع (رحلة / فاتورة)</th>
-                    <th className="p-3">المبلغ الأصلي</th>
-                    <th className="p-3">السعر الأولي</th>
-                    <th className="p-3">سعر التسوية</th>
-                    <th className="p-3">الفرق المحقق</th>
-                    <th className="p-3 text-center">الحالة</th>
+                    <th className="p-3">{t('رقم العملية', 'N° Opération')}</th>
+                    <th className="p-3">{t('المرجع (رحلة / فاتورة)', 'Référence (Voyage / Facture)')}</th>
+                    <th className="p-3">{t('المبلغ الأصلي', 'Montant d’origine')}</th>
+                    <th className="p-3">{t('السعر الأولي', 'Taux initial')}</th>
+                    <th className="p-3">{t('سعر التسوية', 'Taux de règlement')}</th>
+                    <th className="p-3">{t('الفرق المحقق', 'Écart réalisé')}</th>
+                    <th className="p-3 text-center">{t('الحالة', 'Statut')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {gainLossEntries.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        لا توجد فروق صرف محققة مسجلة حتى الآن.
+                        {t('لا توجد فروق صرف محققة مسجلة حتى الآن.', 'Aucun écart de change enregistré pour le moment.')}
                       </td>
                     </tr>
                   ) : (
@@ -569,9 +613,9 @@ export default function ForexPage() {
                         <td className="p-3 font-mono">#{entry.id}</td>
                         <td className="p-3">
                           {entry.trip_id ? (
-                            <span className="font-semibold text-foreground">رحلة #{entry.trip_id}</span>
+                            <span className="font-semibold text-foreground">{t(`رحلة #${entry.trip_id}`, `Voyage #${entry.trip_id}`)}</span>
                           ) : entry.invoice_id ? (
-                            <span className="font-semibold text-foreground">فاتورة #{entry.invoice_id}</span>
+                            <span className="font-semibold text-foreground">{t(`فاتورة #${entry.invoice_id}`, `Facture #${entry.invoice_id}`)}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -584,7 +628,7 @@ export default function ForexPage() {
                         <td className="p-3 font-bold">
                           <span className={entry.entry_type === 'gain' ? 'text-emerald-400' : 'text-rose-400'}>
                             {entry.entry_type === 'gain' ? '+' : '-'}
-                            {Number(entry.realized_gain_loss).toFixed(2)} MAD
+                            {new Decimal(entry.realized_gain_loss || 0).toFixed(2)} MAD
                           </span>
                         </td>
                         <td className="p-3 text-center">
@@ -595,7 +639,7 @@ export default function ForexPage() {
                                 : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                             }
                           >
-                            {entry.entry_type === 'gain' ? 'ربح تحويل' : 'خسارة تحويل'}
+                            {entry.entry_type === 'gain' ? t('ربح تحويل', 'Gain de change') : t('خسارة تحويل', 'Perte de change')}
                           </Badge>
                         </td>
                       </tr>
@@ -615,7 +659,7 @@ export default function ForexPage() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-base text-foreground flex items-center gap-2">
                 <CircleDollarSign className="w-5 h-5 text-purple-400" />
-                إضافة سعر صرف يدوي
+                {t('إضافة سعر صرف يدوي', 'Ajouter un cours manuel')}
               </h3>
               <button
                 type="button"
@@ -628,7 +672,7 @@ export default function ForexPage() {
 
             <form onSubmit={handleManualRateSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-muted-foreground mb-1 font-medium">التاريخ</label>
+                <label className="block text-muted-foreground mb-1 font-medium">{t('التاريخ', 'Date')}</label>
                 <Input
                   type="date"
                   required
@@ -638,28 +682,39 @@ export default function ForexPage() {
               </div>
 
               <div>
-                <label className="block text-muted-foreground mb-1 font-medium">1 EUR = كم بالدرهم المغربي (MAD)؟</label>
+                <label className="block text-muted-foreground mb-1 font-medium">
+                  {t('1 EUR = كم بالدرهم المغربي (MAD)؟', '1 EUR = combien en Dirhams marocains (MAD) ?')}
+                </label>
                 <Input
                   type="number"
                   step="0.0001"
                   required
-                  placeholder="مثال: 10.8500"
+                  placeholder={t('مثال: 10.8500', 'Ex: 10.8500')}
                   value={manualRate.eur_to_mad}
                   onChange={(e) => {
                     const val = e.target.value;
-                    const num = parseFloat(val);
-                    const inv = num > 0 ? (1 / num).toFixed(6) : '';
+                    let inv = '';
+                    try {
+                      const num = new Decimal(val);
+                      if (num.gt(0)) {
+                        inv = new Decimal(1).dividedBy(num).toFixed(6);
+                      }
+                    } catch {
+                      inv = '';
+                    }
                     setManualRate({ ...manualRate, eur_to_mad: val, mad_to_eur: inv });
                   }}
                 />
               </div>
 
               <div>
-                <label className="block text-muted-foreground mb-1 font-medium">1 MAD = كم باليورو (EUR)؟ (تلقائي)</label>
+                <label className="block text-muted-foreground mb-1 font-medium">
+                  {t('1 MAD = كم باليورو (EUR)؟ (تلقائي)', '1 MAD = combien en Euros (EUR) ? (automatique)')}
+                </label>
                 <Input
                   type="number"
                   step="0.000001"
-                  placeholder="مثال: 0.092166"
+                  placeholder={t('مثال: 0.092166', 'Ex: 0.092166')}
                   value={manualRate.mad_to_eur}
                   onChange={(e) => setManualRate({ ...manualRate, mad_to_eur: e.target.value })}
                 />
@@ -671,13 +726,13 @@ export default function ForexPage() {
                   variant="ghost"
                   onClick={() => setIsAddRateOpen(false)}
                 >
-                  إلغاء
+                  {t('إلغاء', 'Annuler')}
                 </Button>
                 <Button
                   type="submit"
                   className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
                 >
-                  حفظ سعر الصرف
+                  {t('حفظ سعر الصرف', 'Enregistrer le cours')}
                 </Button>
               </div>
             </form>
@@ -692,7 +747,7 @@ export default function ForexPage() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-base text-foreground flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
-                كود ترحيل قاعدة البيانات (SQL Migration)
+                {t('كود ترحيل قاعدة البيانات (SQL Migration)', 'Migration Base de Données (SQL)')}
               </h3>
               <button
                 type="button"
@@ -704,7 +759,10 @@ export default function ForexPage() {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              قم بنسخ هذا الاستعلام ولصقه في <strong className="text-foreground">Supabase Dashboard &gt; SQL Editor</strong> ثم الضغط على <strong className="text-emerald-400">Run</strong> لتفعيل ميزة وتخزين أسعار الصرف فوراً وبشكل دائم.
+              {t(
+                'قم بنسخ هذا الاستعلام ولصقه في Supabase Dashboard > SQL Editor ثم الضغط على Run لتفعيل ميزة وتخزين أسعار الصرف فوراً وبشكل دائم.',
+                'Copiez cette requête et collez-la dans Supabase Dashboard > SQL Editor, puis cliquez sur Run pour activer et persister les tables Forex.'
+              )}
             </p>
 
             <div className="relative flex-1 min-h-0 bg-slate-950 text-slate-200 rounded-lg p-3 font-mono text-xs overflow-auto border border-border/60 dir-ltr text-left">
@@ -713,7 +771,7 @@ export default function ForexPage() {
 
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border">
               <span className="text-[11px] text-muted-foreground dir-ltr">
-                الملف: <code className="text-purple-400 font-mono">supabase/migrations/20260904_create_forex_tables.sql</code>
+                {t('الملف: ', 'Fichier : ')}<code className="text-purple-400 font-mono">supabase/migrations/20260904_create_forex_tables.sql</code>
               </span>
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <Button
@@ -721,7 +779,7 @@ export default function ForexPage() {
                   variant="outline"
                   onClick={() => setShowSqlModal(false)}
                 >
-                  إغلاق
+                  {t('إغلاق', 'Fermer')}
                 </Button>
                 <Button
                   type="button"
@@ -733,7 +791,7 @@ export default function ForexPage() {
                   className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 cursor-pointer"
                 >
                   {copiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-                  <span>{copiedSql ? 'تم النسخ!' : 'نسخ كود الـ SQL'}</span>
+                  <span>{copiedSql ? t('تم النسخ!', 'Copié !') : t('نسخ كود الـ SQL', 'Copier le script SQL')}</span>
                 </Button>
               </div>
             </div>

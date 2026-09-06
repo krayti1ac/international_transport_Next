@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { X, Save, User } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import type { Truck as TruckType, Driver, Trailer } from '@/types/database';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
+import { useLanguage } from '@/components/language-provider';
 
 type EntityType = 'truck' | 'driver' | 'trailer';
 
@@ -32,12 +33,29 @@ export function FleetFormModal({
   trailersList = [],
   onSave,
 }: FleetModalProps) {
+  const { locale, dir, t } = useLanguage();
   const availableDrivers = fallbackArray(driversList, DEFAULT_DRIVERS);
   const availableTrucks = fallbackArray(trucksList, DEFAULT_TRUCKS);
   const availableTrailers = fallbackArray(trailersList, DEFAULT_TRAILERS);
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
+
+  // Deduplicate drivers by name to prevent repeated entries in the dropdown,
+  // prioritizing the currently selected driver ID if active.
+  const uniqueDrivers = useMemo(() => {
+    const map = new Map<string, Driver>();
+    for (const driver of availableDrivers) {
+      const nameKey = driver.name?.trim().toLowerCase();
+      if (!nameKey) continue;
+      if (!map.has(nameKey) || driver.id === formData.default_driver_id) {
+        map.set(nameKey, driver);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', locale === 'ar' ? 'ar' : 'fr', { sensitivity: 'base' })
+    );
+  }, [availableDrivers, formData.default_driver_id, locale]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -90,9 +108,11 @@ export function FleetFormModal({
         );
         if (assignedTruck) {
           const driver = availableDrivers.find((d) => d.id === selectedDriverId);
-          const driverName = driver?.name || 'السائق المختار';
+          const driverName = driver?.name || t('السائق المختار', 'le chauffeur sélectionné');
           const confirmed = window.confirm(
-            `⚠️ تنبيه إعادة تخصيص السائق:\n\nالسائق "${driverName}" مخصص مسبقاً للشاحنة (${assignedTruck.plate_number}).\n\nهل توافق على نقله وإلغاء تخصيصه من الشاحنة السابقة وتعيينه لهذه الشاحنة؟`
+            locale === 'fr'
+              ? `⚠️ Réaffectation du chauffeur :\n\nLe chauffeur "${driverName}" est déjà assigné au camion (${assignedTruck.plate_number}).\n\nConfirmez-vous son transfert vers ce camion ?`
+              : `⚠️ تنبيه إعادة تخصيص السائق:\n\nالسائق "${driverName}" مخصص مسبقاً للشاحنة (${assignedTruck.plate_number}).\n\nهل توافق على نقله وإلغاء تخصيصه من الشاحنة السابقة وتعيينه لهذه الشاحنة؟`
           );
           if (!confirmed) return;
         }
@@ -105,9 +125,11 @@ export function FleetFormModal({
         );
         if (assignedTruck) {
           const trailer = availableTrailers.find((tr) => tr.id === selectedTrailerId);
-          const trailerLabel = trailer ? `${trailer.plate_number} ${trailer.model || ''}` : 'المقطورة المختارة';
+          const trailerLabel = trailer ? `${trailer.plate_number} ${trailer.model || ''}` : t('المقطورة المختارة', 'la remorque sélectionnée');
           const confirmed = window.confirm(
-            `⚠️ تنبيه إعادة تخصيص المقطورة:\n\nالمقطورة "${trailerLabel}" مخصصة مسبقاً للشاحنة (${assignedTruck.plate_number}).\n\nهل توافق على نقلها وإلغاء تخصيصها من الشاحنة السابقة وتعيينها لهذه الشاحنة؟`
+            locale === 'fr'
+              ? `⚠️ Réaffectation de la remorque :\n\nLa remorque "${trailerLabel}" est déjà assignée au camion (${assignedTruck.plate_number}).\n\nConfirmez-vous son transfert vers ce camion ?`
+              : `⚠️ تنبيه إعادة تخصيص المقطورة:\n\nالمقطورة "${trailerLabel}" مخصصة مسبقاً للشاحنة (${assignedTruck.plate_number}).\n\nهل توافق على نقلها وإلغاء تخصيصها من الشاحنة السابقة وتعيينها لهذه الشاحنة؟`
           );
           if (!confirmed) return;
         }
@@ -120,9 +142,11 @@ export function FleetFormModal({
         );
         if (assignedDriver) {
           const truck = availableTrucks.find((t) => t.id === selectedTruckId);
-          const truckLabel = truck ? `${truck.plate_number} ${truck.model || ''}` : 'الشاحنة المختارة';
+          const truckLabel = truck ? `${truck.plate_number} ${truck.model || ''}` : t('الشاحنة المختارة', 'le camion sélectionné');
           const confirmed = window.confirm(
-            `⚠️ تنبيه إعادة تعيين الشاحنة:\n\nالشاحنة "${truckLabel}" مخصصة مسبقاً للسائق (${assignedDriver.name}).\n\nهل توافق على نقلها وإلغاء تعيينها من السائق السابق؟`
+            locale === 'fr'
+              ? `⚠️ Réaffectation du camion :\n\nLe camion "${truckLabel}" est déjà assigné au chauffeur (${assignedDriver.name}).\n\nConfirmez-vous son transfert vers ce chauffeur ?`
+              : `⚠️ تنبيه إعادة تعيين الشاحنة:\n\nالشاحنة "${truckLabel}" مخصصة مسبقاً للسائق (${assignedDriver.name}).\n\nهل توافق على نقلها وإلغاء تعيينها من السائق السابق؟`
           );
           if (!confirmed) return;
         }
@@ -172,10 +196,10 @@ export function FleetFormModal({
   };
 
   const getTitle = () => {
-    const action = initialData?.id ? 'تعديل بيانات' : 'إضافة';
-    if (entityType === 'truck') return `${action} شاحنة`;
-    if (entityType === 'driver') return `${action} سائق`;
-    return `${action} مقطورة (Remorque)`;
+    const action = initialData?.id ? t('تعديل بيانات', 'Modifier') : t('إضافة', 'Ajouter');
+    if (entityType === 'truck') return `${action} ${t('شاحنة', 'un camion')}`;
+    if (entityType === 'driver') return `${action} ${t('سائق', 'un chauffeur')}`;
+    return `${action} ${t('مقطورة (Remorque)', 'une remorque')}`;
   };
 
   return (
@@ -197,23 +221,23 @@ export function FleetFormModal({
           </Button>
         </CardHeader>
         <CardContent className="pt-4">
-          <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+          <form onSubmit={handleSubmit} className="space-y-4" dir={dir}>
             {/* حقول الشاحنة */}
             {entityType === 'truck' && (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم اللوحة (Matricule) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم اللوحة (Matricule) *', 'Numéro d\'immatriculation (Matricule) *')}</label>
                     <Input
                       value={formData.plate_number || ''}
                       onChange={(e) => setFormData({ ...formData, plate_number: e.target.value })}
-                      placeholder="مثال: 12345-A-1"
+                      placeholder={t('مثال: 12345-A-1', 'Ex: 12345-A-1')}
                       required
                       dir="ltr"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الموديل والعلامة *</label>
+                    <label className="text-sm font-medium text-foreground">{t('الموديل والعلامة *', 'Modèle et marque *')}</label>
                     <Input
                       value={formData.model || ''}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
@@ -225,7 +249,7 @@ export function FleetFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">السائق الافتراضي</label>
+                    <label className="text-sm font-medium text-foreground">{t('السائق الافتراضي', 'Chauffeur par défaut')}</label>
                     <select
                       value={formData.default_driver_id || ''}
                       onChange={(e) => {
@@ -237,16 +261,16 @@ export function FleetFormModal({
                       }}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- بدون سائق افتراضي --</option>
-                      {availableDrivers.map((driver) => (
+                      <option value="">{t('-- بدون سائق افتراضي --', '-- Sans chauffeur par défaut --')}</option>
+                      {uniqueDrivers.map((driver) => (
                         <option key={driver.id} value={driver.id}>
-                          {driver.name} {driver.phone ? `(${driver.phone})` : ''}
+                          {driver.name}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">المقطورة المجرورة الافتراضية (Remorque)</label>
+                    <label className="text-sm font-medium text-foreground">{t('المقطورة المجرورة الافتراضية (Remorque)', 'Remorque attelée par défaut')}</label>
                     <select
                       value={formData.default_trailer_id || ''}
                       onChange={(e) => {
@@ -258,7 +282,7 @@ export function FleetFormModal({
                       }}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- بدون مقطورة افتراضية --</option>
+                      <option value="">{t('-- بدون مقطورة افتراضية --', '-- Sans remorque par défaut --')}</option>
                       {availableTrailers.map((trailer) => (
                         <option key={trailer.id} value={trailer.id}>
                           {trailer.plate_number} {trailer.model ? `(${trailer.model})` : ''}
@@ -270,32 +294,32 @@ export function FleetFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الحالة التشغيلية</label>
+                    <label className="text-sm font-medium text-foreground">{t('الحالة التشغيلية', 'Statut opérationnel')}</label>
                     <select
                       value={formData.status || 'active'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="active">جاهزة للعمل (Actif)</option>
-                      <option value="in_maintenance">في الصيانة (En maintenance)</option>
-                      <option value="inactive">متوقفة (Inactif)</option>
+                      <option value="active">{t('جاهزة للعمل (Actif)', 'Disponible (Actif)')}</option>
+                      <option value="in_maintenance">{t('في الصيانة (En maintenance)', 'En maintenance')}</option>
+                      <option value="inactive">{t('متوقفة (Inactif)', 'Arrêté (Inactif)')}</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">حمولة الوزن (بالأطنان)</label>
+                    <label className="text-sm font-medium text-foreground">{t('حمولة الوزن (بالأطنان)', 'Capacité de charge (Tonnes)')}</label>
                     <Input
                       type="number"
                       value={formData.weight_capacity || ''}
                       onChange={(e) => setFormData({ ...formData, weight_capacity: parseFloat(e.target.value) || 0 })}
-                      placeholder="مثال: 25"
+                      placeholder={t('مثال: 25', 'Ex: 25')}
                       dir="ltr"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">قوة المحرك (Ch)</label>
+                    <label className="text-sm font-medium text-foreground">{t('قوة المحرك (Ch)', 'Puissance moteur (Ch)')}</label>
                     <Input
                       type="number"
                       value={formData.power || ''}
@@ -313,16 +337,16 @@ export function FleetFormModal({
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الاسم الكامل *</label>
+                    <label className="text-sm font-medium text-foreground">{t('الاسم الكامل *', 'Nom complet *')}</label>
                     <Input
                       value={formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="اسم السائق..."
+                      placeholder={t('اسم السائق...', 'Nom du chauffeur...')}
                       required
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم الهاتف *</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم الهاتف *', 'Numéro de téléphone *')}</label>
                     <Input
                       value={formData.phone || ''}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -335,7 +359,7 @@ export function FleetFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم رخصة السياقة *</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم رخصة السياقة *', 'Numéro de permis *')}</label>
                     <Input
                       value={formData.license || ''}
                       onChange={(e) => setFormData({ ...formData, license: e.target.value })}
@@ -345,7 +369,7 @@ export function FleetFormModal({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الراتب الأساسي (MAD) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('الراتب الأساسي (MAD) *', 'Salaire de base (MAD) *')}</label>
                     <Input
                       type="number"
                       value={formData.base_salary || ''}
@@ -359,7 +383,7 @@ export function FleetFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الشاحنة المعينة للسائق</label>
+                    <label className="text-sm font-medium text-foreground">{t('الشاحنة المعينة للسائق', 'Camion assigné au chauffeur')}</label>
                     <select
                       value={formData.default_truck_id || ''}
                       onChange={(e) => {
@@ -371,7 +395,7 @@ export function FleetFormModal({
                       }}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- بدون شاحنة مخصصة --</option>
+                      <option value="">{t('-- بدون شاحنة مخصصة --', '-- Sans camion assigné --')}</option>
                       {availableTrucks.map((truck) => (
                         <option key={truck.id} value={truck.id}>
                           {truck.plate_number} {truck.model ? `(${truck.model})` : ''}
@@ -380,16 +404,16 @@ export function FleetFormModal({
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الحالة</label>
+                    <label className="text-sm font-medium text-foreground">{t('الحالة', 'Statut')}</label>
                     <select
                       value={formData.status || 'active'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="active">متاح للعمل (Actif)</option>
-                      <option value="in_trip">في رحلة (En voyage)</option>
-                      <option value="vacation">في إجازة (En congé)</option>
-                      <option value="inactive">غير متاح</option>
+                      <option value="active">{t('متاح للعمل (Actif)', 'Disponible (Actif)')}</option>
+                      <option value="in_trip">{t('في رحلة (En voyage)', 'En voyage')}</option>
+                      <option value="vacation">{t('في إجازة (En congé)', 'En congé')}</option>
+                      <option value="inactive">{t('غير متاح', 'Indisponible')}</option>
                     </select>
                   </div>
                 </div>
@@ -397,7 +421,7 @@ export function FleetFormModal({
                 {/* تأشيرات الدخول الدولية */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-3">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم التأشيرة (Visa Schengen)</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم التأشيرة (Visa Schengen)', 'Numéro de visa (Visa Schengen)')}</label>
                     <Input
                       value={formData.visa_number || ''}
                       onChange={(e) => setFormData({ ...formData, visa_number: e.target.value })}
@@ -406,7 +430,7 @@ export function FleetFormModal({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ انتهاء التأشيرة</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ انتهاء التأشيرة', 'Date d\'expiration du visa')}</label>
                     <Input
                       type="date"
                       value={formData.visa_expiry_date || ''}
@@ -422,7 +446,7 @@ export function FleetFormModal({
             {entityType === 'trailer' && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">رقم لوحة المقطورة (Remorque) *</label>
+                  <label className="text-sm font-medium text-foreground">{t('رقم لوحة المقطورة (Remorque) *', 'Numéro d\'immatriculation de la remorque *')}</label>
                   <Input
                     value={formData.plate_number || ''}
                     onChange={(e) => setFormData({ ...formData, plate_number: e.target.value })}
@@ -432,7 +456,7 @@ export function FleetFormModal({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">النوع / الموديل *</label>
+                  <label className="text-sm font-medium text-foreground">{t('النوع / الموديل *', 'Type / Modèle *')}</label>
                   <Input
                     value={formData.model || ''}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
@@ -441,15 +465,15 @@ export function FleetFormModal({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">الحالة</label>
+                  <label className="text-sm font-medium text-foreground">{t('الحالة', 'Statut')}</label>
                   <select
                     value={formData.status || 'active'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                   >
-                    <option value="active">جاهزة للاستخدام</option>
-                    <option value="in_maintenance">في الصيانة</option>
-                    <option value="inactive">معطلة</option>
+                    <option value="active">{t('جاهزة للاستخدام', 'Prête à l\'emploi (Actif)')}</option>
+                    <option value="in_maintenance">{t('في الصيانة', 'En maintenance')}</option>
+                    <option value="inactive">{t('معطلة', 'Inactif')}</option>
                   </select>
                 </div>
               </div>
@@ -458,10 +482,14 @@ export function FleetFormModal({
             <div className="flex gap-2 pt-4 border-t border-border">
               <Button type="submit" disabled={loading} className="flex-1 flex items-center justify-center gap-2">
                 <Save className="w-4 h-4" />
-                {loading ? 'جاري الحفظ...' : initialData?.id ? 'تحديث البيانات' : 'إضافة الآن'}
+                {loading
+                  ? t('جاري الحفظ...', 'Enregistrement...')
+                  : initialData?.id
+                  ? t('تحديث البيانات', 'Mettre à jour')
+                  : t('إضافة الآن', 'Ajouter')}
               </Button>
               <Button type="button" variant="outline" onClick={onClose}>
-                إلغاء
+                {t('إلغاء', 'Annuler')}
               </Button>
             </div>
           </form>

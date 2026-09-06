@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof window !== 'undefined'
               ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
               : null
-          ) || 'ar') as 'ar' | 'fr';
+           ) || 'ar') as 'ar' | 'fr' | 'en';
 
           if (typeof window !== 'undefined') {
             try {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof window !== 'undefined'
               ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
               : null
-          ) || 'ar') as 'ar' | 'fr';
+           ) || 'ar') as 'ar' | 'fr' | 'en';
 
           if (typeof window !== 'undefined') {
             try {
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           typeof window !== 'undefined'
             ? (localStorage.getItem(`user_lang_${profile.id}`) || localStorage.getItem(`user_lang_${(profile.email || email).toLowerCase()}`))
             : null
-        ) || 'ar') as 'ar' | 'fr';
+         ) || 'ar') as 'ar' | 'fr' | 'en';
 
         if (typeof window !== 'undefined') {
           try {

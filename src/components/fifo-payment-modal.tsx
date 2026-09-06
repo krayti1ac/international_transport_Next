@@ -10,6 +10,7 @@ import type { Client, BankAccount, CashBox } from '@/types/database';
 import { processFIFOPayment, FIFOPaymentResult } from '@/lib/fifo-payment';
 import { createClient } from '@/lib/supabase/client';
 import { DEFAULT_CLIENTS, DEFAULT_BANK_ACCOUNTS, DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
+import { useLanguage } from '@/components/language-provider';
 
 interface FIFOPaymentModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export function FIFOPaymentModal({
   onPaymentProcessed,
   initialClientId,
 }: FIFOPaymentModalProps) {
+  const { t, dir, locale } = useLanguage();
   const availableClients = fallbackArray(clients, DEFAULT_CLIENTS);
   const availableBankAccounts = fallbackArray(bankAccounts, DEFAULT_BANK_ACCOUNTS);
   const availableCashBoxes = fallbackArray(cashBoxes, DEFAULT_CASH_BOXES);
@@ -59,13 +61,13 @@ export function FIFOPaymentModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClientId) {
-      toast({ title: 'يرجى اختيار العميل', variant: 'destructive' });
+      toast({ title: t('يرجى اختيار العميل', 'Veuillez sélectionner le client'), variant: 'destructive' });
       return;
     }
 
     const numAmount = parseFloat(amount);
     if (!numAmount || numAmount <= 0) {
-      toast({ title: 'يرجى إدخال مبلغ صحيح أكبر من الصفر', variant: 'destructive' });
+      toast({ title: t('يرجى إدخال مبلغ صحيح أكبر من الصفر', 'Veuillez saisir un montant supérieur à zéro'), variant: 'destructive' });
       return;
     }
 
@@ -86,15 +88,15 @@ export function FIFOPaymentModal({
 
       if (!res.success) {
         toast({
-          title: 'خطأ في معالجة الدفعة',
+          title: t('خطأ في معالجة الدفعة', 'Erreur lors du traitement du paiement'),
           description: res.error,
           variant: 'destructive',
         });
       } else {
         setResult(res);
         toast({
-          title: '✅ تمت معالجة الدفعة بنجاح',
-          description: `تم توزيع المبلغ على ${res.affectedInvoicesCount} فاتورة مستحقة.`,
+          title: t('✅ تمت معالجة الدفعة بنجاح', '✅ Paiement traité avec succès'),
+          description: t(`تم توزيع المبلغ على ${res.affectedInvoicesCount} فاتورة مستحقة.`, `Montant alloué sur ${res.affectedInvoicesCount} facture(s) due(s).`),
         });
         if (onPaymentProcessed) {
           onPaymentProcessed();
@@ -114,12 +116,12 @@ export function FIFOPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto" dir={dir}>
       <Card className="w-full max-w-2xl my-8 shadow-2xl border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <CardTitle className="font-amiri text-xl flex items-center gap-2 text-foreground">
             <Layers className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            تحصيل دفعة عميل بنظام FIFO (تسوية الأقدم أولاً)
+            {t('تحصيل دفعة عميل بنظام FIFO (تسوية الأقدم أولاً)', 'Encaissement Client FIFO (Règlement par antériorité)')}
           </CardTitle>
           <Button variant="ghost" size="icon" onClick={handleReset}>
             <X className="w-5 h-5" />
@@ -131,13 +133,13 @@ export function FIFOPaymentModal({
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200">
                 <div className="flex items-center gap-2 font-bold text-base mb-1">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  تم تسجيل التحصيل وتوزيع الدفعة بنجاح
+                  {t('تم تسجيل التحصيل وتوزيع الدفعة بنجاح', 'Encaissement et allocation réussis')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  المبلغ الموزع على الفواتير: <span className="font-bold text-foreground">{result.totalAllocated.toFixed(2)} {currency}</span>
+                  {t('المبلغ الموزع على الفواتير:', 'Montant imputé sur les factures :')} <span className="font-bold text-foreground">{result.totalAllocated.toFixed(2)} {currency}</span>
                   {result.unallocatedCredit > 0 && (
-                    <span className="mr-3 text-amber-600 dark:text-amber-400">
-                      (رصيد متبقي كفائض للعميل: {result.unallocatedCredit.toFixed(2)} {currency})
+                    <span className={`${dir === 'rtl' ? 'mr-3' : 'ml-3'} text-amber-600 dark:text-amber-400`}>
+                      ({t('رصيد متبقي كفائض للعميل:', 'Solde restant en avoir :')} {result.unallocatedCredit.toFixed(2)} {currency})
                     </span>
                   )}
                 </p>
@@ -145,22 +147,22 @@ export function FIFOPaymentModal({
 
               {result.allocations.length > 0 ? (
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2">تفاصيل تسوية الفواتير الأقدم:</h4>
+                  <h4 className="text-sm font-semibold text-foreground mb-2">{t('تفاصيل تسوية الفواتير الأقدم:', 'Détails des factures apurées :')}</h4>
                   <div className="border border-border rounded-lg overflow-hidden divide-y divide-border text-sm">
                     {result.allocations.map((alloc) => (
                       <div key={alloc.invoiceId} className="p-3 flex items-center justify-between bg-muted/20">
                         <div>
-                          <p className="font-bold text-foreground">فاتورة رقم: {alloc.invoiceNumber}</p>
+                          <p className="font-bold text-foreground">{t('فاتورة رقم:', 'Facture n° :')} {alloc.invoiceNumber}</p>
                           <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full mt-1 ${
                             alloc.newStatus === 'paid'
                               ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
                               : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
                           }`}>
-                            {alloc.newStatus === 'paid' ? 'تم السداد بالكامل' : 'سداد جزئي'}
+                            {alloc.newStatus === 'paid' ? t('تم السداد بالكامل', 'Payée en totalité') : t('سداد جزئي', 'Partiellement payée')}
                           </span>
                         </div>
                         <div className="text-left font-mono">
-                          <p className="text-xs text-muted-foreground">المبلغ المسدد:</p>
+                          <p className="text-xs text-muted-foreground">{t('المبلغ المسدد:', 'Montant alloué :')}</p>
                           <p className="font-bold text-emerald-600 dark:text-emerald-400">
                             +{alloc.allocatedAmount.toFixed(2)} {currency}
                           </p>
@@ -170,25 +172,25 @@ export function FIFOPaymentModal({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">لا توجد فواتير غير مدفوعة حالياً لهذا العميل. تم حفظ المبلغ كرصيد مستحق.</p>
+                <p className="text-sm text-muted-foreground">{t('لا توجد فواتير غير مدفوعة حالياً لهذا العميل. تم حفظ المبلغ كرصيد مستحق.', 'Aucune facture impayée pour ce client. Le montant est conservé comme avoir.')}</p>
               )}
 
               <Button onClick={handleReset} className="w-full mt-4">
-                إغلاق
+                {t('إغلاق', 'Fermer')}
               </Button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">العميل *</label>
+                  <label className="text-sm font-medium text-foreground">{t('العميل *', 'Client *')}</label>
                   <select
                     value={selectedClientId}
                     onChange={(e) => setSelectedClientId(e.target.value ? Number(e.target.value) : '')}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
                     required
                   >
-                    <option value="">-- اختر العميل --</option>
+                    <option value="">{`-- ${t('اختر العميل', 'Sélectionner le client')} --`}</option>
                     {availableClients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} {c.city ? `(${c.city})` : ''}
@@ -198,7 +200,7 @@ export function FIFOPaymentModal({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">مبلغ الدفعة المستلمة *</label>
+                  <label className="text-sm font-medium text-foreground">{t('مبلغ الدفعة المستلمة *', 'Montant reçu *')}</label>
                   <div className="flex gap-2">
                     <Input
                       type="number"
@@ -224,21 +226,21 @@ export function FIFOPaymentModal({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">طريقة الدفع *</label>
+                  <label className="text-sm font-medium text-foreground">{t('طريقة الدفع *', 'Mode de paiement *')}</label>
                   <select
                     value={method}
                     onChange={(e) => setMethod(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring [color-scheme:light] dark:[color-scheme:dark]"
                   >
-                    <option value="bank_transfer">تحويل بنكي (Virement)</option>
-                    <option value="check">شيك بنكي (Chèque)</option>
-                    <option value="cash">نقداً (Espèces)</option>
+                    <option value="bank_transfer">{t('تحويل بنكي (Virement)', 'Virement bancaire')}</option>
+                    <option value="check">{t('شيك بنكي (Chèque)', 'Chèque')}</option>
+                    <option value="cash">{t('نقداً (Espèces)', 'Espèces')}</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">
-                    {method === 'cash' ? 'صندوق الخزينة المستلم' : 'الحساب البنكي المودع به'}
+                    {method === 'cash' ? t('صندوق الخزينة المستلم', 'Caisse de destination') : t('الحساب البنكي المودع به', 'Compte bancaire')}
                   </label>
                   {method === 'cash' ? (
                     <select
@@ -246,7 +248,7 @@ export function FIFOPaymentModal({
                       onChange={(e) => setCashBoxId(e.target.value ? Number(e.target.value) : '')}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- الصندوق المكتبي الافتراضي --</option>
+                      <option value="">{`-- ${t('الصندوق المكتبي الافتراضي', 'Caisse par défaut')} --`}</option>
                       {availableCashBoxes.map((box) => (
                         <option key={box.id} value={box.id}>
                           {box.name} ({box.currency})
@@ -259,7 +261,7 @@ export function FIFOPaymentModal({
                       onChange={(e) => setBankAccountId(e.target.value ? Number(e.target.value) : '')}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- الحساب البنكي الافتراضي --</option>
+                      <option value="">{`-- ${t('الحساب البنكي الافتراضي', 'Compte bancaire par défaut')} --`}</option>
                       {availableBankAccounts.map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.bank_name} - {b.account_number} ({b.currency})
@@ -272,18 +274,18 @@ export function FIFOPaymentModal({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">رقم المرجع / الشيك / التحويل</label>
+                  <label className="text-sm font-medium text-foreground">{t('رقم المرجع / الشيك / التحويل', 'N° de référence / Chèque / Virement')}</label>
                   <Input
-                    placeholder="مثال: CHQ-89021 أو VIR-4412"
+                    placeholder={t('مثال: CHQ-89021 أو VIR-4412', 'Ex: VIR-1029 أو CHQ-4412')}
                     value={reference}
                     onChange={(e) => setReference(e.target.value)}
                     dir="ltr"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">ملاحظات التحصيل</label>
+                  <label className="text-sm font-medium text-foreground">{t('ملاحظات التحصيل', 'Notes')}</label>
                   <Input
-                    placeholder="ملاحظات اختيارية..."
+                    placeholder={t('ملاحظات اختيارية...', 'Notes optionnelles...')}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
@@ -291,16 +293,16 @@ export function FIFOPaymentModal({
               </div>
 
               <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-900 dark:text-blue-200">
-                💡 <strong>مبدأ FIFO:</strong> سيقوم النظام تلقائياً بالبحث عن أقدم الفواتير المستحقة لهذا العميل وسدادها أولاً بأول حتى اكتمال المبلغ بالكامل.
+                💡 <strong>{t('مبدأ FIFO:', 'Principe FIFO :')}</strong> {t('سيقوم النظام تلقائياً بالبحث عن أقدم الفواتير المستحقة لهذا العميل وسدادها أولاً بأول حتى اكتمال المبلغ بالكامل.', 'Le système affecte ce paiement aux factures impayées les plus anciennes du client par ordre chronologique.')}
               </div>
 
               <div className="flex gap-2 pt-4 border-t border-border">
                 <Button type="submit" disabled={loading} className="flex-1 flex items-center justify-center gap-2">
                   <ArrowRightLeft className="w-4 h-4" />
-                  {loading ? 'جاري المعالجة وتوزيع الدفعة...' : 'تنفيذ التحصيل وتوزيع FIFO'}
+                  {loading ? t('جاري المعالجة وتوزيع الدفعة...', 'Traitement...') : t('تنفيذ التحصيل وتوزيع FIFO', 'Encaisser via FIFO')}
                 </Button>
                 <Button type="button" variant="outline" onClick={handleReset}>
-                  إلغاء
+                  {t('إلغاء', 'Annuler')}
                 </Button>
               </div>
             </form>

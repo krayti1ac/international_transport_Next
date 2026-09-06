@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 import {
   BarChart,
   Bar,
@@ -45,6 +47,7 @@ import { formatCurrency } from '@/lib/forex';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 
 export default function ExecutiveDashboard() {
+  const { t, dir, locale } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [kpis, setKpis] = useState<ExecutiveKPI | null>(null);
@@ -60,15 +63,15 @@ export default function ExecutiveDashboard() {
         setKpis(result.data);
       } else {
         toast({
-          title: 'خطأ',
-          description: result.error || 'فشل في جلب المؤشرات التنفيذية',
+          title: t('خطأ', 'Erreur'),
+          description: result.error || t('فشل في جلب المؤشرات التنفيذية', 'Échec de récupération des indicateurs exécutifs'),
           variant: 'destructive',
         });
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'خطأ غير متوقع';
+      const message = error instanceof Error ? error.message : t('خطأ غير متوقع', 'Erreur inattendue');
       toast({
-        title: 'خطأ',
+        title: t('خطأ', 'Erreur'),
         description: message,
         variant: 'destructive',
       });
@@ -76,7 +79,7 @@ export default function ExecutiveDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchKPIs();
@@ -84,20 +87,22 @@ export default function ExecutiveDashboard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[500px] space-y-4" dir="rtl">
+      <div className="flex flex-col items-center justify-center min-h-[500px] space-y-4" dir={dir}>
         <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
-        <p className="text-sm text-muted-foreground font-medium">جاري إعداد وتحليل مؤشرات لوحة القيادة التنفيذية...</p>
+        <p className="text-sm text-muted-foreground font-medium">
+          {t('جاري إعداد وتحليل مؤشرات لوحة القيادة التنفيذية...', 'Analyse et chargement des indicateurs décisionnels...')}
+        </p>
       </div>
     );
   }
 
   if (!kpis) {
     return (
-      <div className="text-center py-16 space-y-4" dir="rtl">
+      <div className="text-center py-16 space-y-4" dir={dir}>
         <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
-        <p className="text-foreground font-bold">لا توجد بيانات متاحة حالياً</p>
+        <p className="text-foreground font-bold">{t('لا توجد بيانات متاحة حالياً', 'Aucune donnée disponible actuellement')}</p>
         <Button onClick={fetchKPIs} variant="outline" className="rounded-xl">
-          إعادة المحاولة
+          {t('إعادة المحاولة', 'Réessayer')}
         </Button>
       </div>
     );
@@ -111,19 +116,22 @@ export default function ExecutiveDashboard() {
     : kpis.criticalAlerts.filter((a) => a.type === alertFilter);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto pb-10" dir={dir}>
       {/* 1. Header with Title & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-            <span>ذكاء الأعمال واللوحة التنفيذية (Executive BI)</span>
+            <span>{t('ذكاء الأعمال واللوحة التنفيذية (Executive BI)', 'Décisionnel & Tableaux de Bord (Executive BI)')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold font-amiri tracking-tight text-foreground flex items-center gap-2">
-            اللوحة القيادية التنفيذية
+            {t('اللوحة القيادية التنفيذية', 'Tableau de Bord Exécutif')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            متابعة شاملة للإيرادات، صافي الأرباح، التدفقات النقدية، وكفاءة أسطول النقل الدولي
+            {t(
+              'متابعة شاملة للإيرادات، صافي الأرباح، التدفقات النقدية، وكفاءة أسطول النقل الدولي',
+              'Vue consolidée du chiffre d’affaires, rentabilité nette, trésorerie et performance de la flotte'
+            )}
           </p>
         </div>
 
@@ -136,13 +144,13 @@ export default function ExecutiveDashboard() {
             className="rounded-xl h-9 text-xs flex items-center gap-1.5 shadow-2xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>تحديث المؤشرات</span>
+            <span>{t('تحديث المؤشرات', 'Actualiser')}</span>
           </Button>
 
           <Link href="/trips">
             <Button size="sm" className="rounded-xl h-9 text-xs flex items-center gap-1.5 shadow-sm">
               <Truck className="w-3.5 h-3.5" />
-              <span>إدارة الرحلات</span>
+              <span>{t('إدارة الرحلات', 'Gestion des voyages')}</span>
             </Button>
           </Link>
         </div>
@@ -153,7 +161,7 @@ export default function ExecutiveDashboard() {
         {/* Card 1: Total Revenue */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">إجمالي الإيرادات</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('إجمالي الإيرادات', 'Chiffre d’affaires')}</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
@@ -164,7 +172,7 @@ export default function ExecutiveDashboard() {
             </div>
             <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>عقود النقل الدولي النشطة</span>
+              <span>{t('عقود النقل الدولي النشطة', 'Contrats de fret actifs')}</span>
             </div>
           </CardContent>
         </Card>
@@ -172,7 +180,7 @@ export default function ExecutiveDashboard() {
         {/* Card 2: Net Profit */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">صافي الأرباح</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('صافي الأرباح', 'Résultat net')}</span>
             <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
             </div>
@@ -182,7 +190,7 @@ export default function ExecutiveDashboard() {
               {formatCurrency(kpis.netProfit, 'MAD')}
             </div>
             <div className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-bold mt-1">
-              <span>هامش الربح: {kpis.profitMargin}%</span>
+              <span>{t('هامش الربح:', 'Marge nette :')} {kpis.profitMargin}%</span>
             </div>
           </CardContent>
         </Card>
@@ -190,7 +198,7 @@ export default function ExecutiveDashboard() {
         {/* Card 3: MAD Liquidity */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">السيولة النقدية (MAD)</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('السيولة النقدية (MAD)', 'Trésorerie locale (MAD)')}</span>
             <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
               <Landmark className="w-4 h-4" />
             </div>
@@ -199,14 +207,14 @@ export default function ExecutiveDashboard() {
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-foreground">
               {formatCurrency(totalLiquidityMAD, 'MAD')}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">البنوك والخزينة المحلية</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{t('البنوك والخزينة المحلية', 'Comptes bancaires & caisse')}</p>
           </CardContent>
         </Card>
 
         {/* Card 4: EUR Liquidity */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">السيولة الدولية (EUR)</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('السيولة الدولية (EUR)', 'Trésorerie devises (EUR)')}</span>
             <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Wallet className="w-4 h-4" />
             </div>
@@ -215,14 +223,14 @@ export default function ExecutiveDashboard() {
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-indigo-600 dark:text-indigo-400">
               {formatCurrency(totalLiquidityEUR, 'EUR')}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">حسابات أوروبا والعبور</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{t('حسابات أوروبا والعبور', 'Comptes européens & transit')}</p>
           </CardContent>
         </Card>
 
         {/* Card 5: Unpaid Invoices */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">ديون غير محصلة</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('ديون غير محصلة', 'Créances clients')}</span>
             <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <Receipt className="w-4 h-4" />
             </div>
@@ -231,14 +239,14 @@ export default function ExecutiveDashboard() {
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
               {formatCurrency(kpis.totalUnpaidInvoices, 'MAD')}
             </div>
-            <p className="text-[11px] text-rose-600/80 dark:text-rose-400/80 mt-1 font-medium">فواتير بانتظار السداد</p>
+            <p className="text-[11px] text-rose-600/80 dark:text-rose-400/80 mt-1 font-medium">{t('فواتير بانتظار السداد', 'Factures en attente')}</p>
           </CardContent>
         </Card>
 
         {/* Card 6: Fleet Utilization */}
         <Card className="rounded-2xl border-border/70 bg-card shadow-xs hover:shadow-md transition-all">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">تشغيل الأسطول</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('تشغيل الأسطول', 'Taux d’utilisation')}</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <Truck className="w-4 h-4" />
             </div>
@@ -254,7 +262,7 @@ export default function ExecutiveDashboard() {
               />
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
-              {kpis.activeTrucksCount} من {kpis.totalTrucksCount} شاحنات نشطة
+              {kpis.activeTrucksCount} {t('من', 'sur')} {kpis.totalTrucksCount} {t('شاحنات نشطة', 'véhicules actifs')}
             </p>
           </CardContent>
         </Card>
@@ -268,10 +276,10 @@ export default function ExecutiveDashboard() {
             <div>
               <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
                 <Activity className="w-5 h-5 text-primary" />
-                مقارنة الإيرادات مقابل المصروفات شهرياً
+                {t('مقارنة الإيرادات مقابل المصروفات شهرياً', 'Évolution Mensuelle : Revenus vs Dépenses')}
               </CardTitle>
               <CardDescription className="text-xs mt-0.5">
-                تطور التدفقات المالية الشهرية وصافي الأرباح
+                {t('تطور التدفقات المالية الشهرية وصافي الأرباح', 'Comparatif des recettes, charges d’exploitation et bénéfice net')}
               </CardDescription>
             </div>
 
@@ -282,7 +290,7 @@ export default function ExecutiveDashboard() {
                   chartView === 'bar' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                أعمدة
+                {t('أعمدة', 'Barres')}
               </button>
               <button
                 onClick={() => setChartView('area')}
@@ -290,7 +298,7 @@ export default function ExecutiveDashboard() {
                   chartView === 'area' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                مساحي
+                {t('مساحي', 'Aires')}
               </button>
             </div>
           </CardHeader>
@@ -310,9 +318,9 @@ export default function ExecutiveDashboard() {
                     <Tooltip
                       formatter={(value, name) => [
                         formatCurrency(Number(value), 'MAD'),
-                        name === 'revenue' ? 'الإيرادات' : name === 'expenses' ? 'المصروفات' : 'صافي الربح',
+                        name === 'revenue' ? t('الإيرادات', 'Revenus') : name === 'expenses' ? t('المصروفات', 'Dépenses') : t('صافي الربح', 'Bénéfice Net'),
                       ]}
-                      labelFormatter={(label) => `شهر ${label}`}
+                      labelFormatter={(label) => `${t('شهر', 'Mois')} ${label}`}
                       contentStyle={{
                         backgroundColor: 'var(--card)',
                         borderColor: 'var(--border)',
@@ -324,7 +332,7 @@ export default function ExecutiveDashboard() {
                     <Legend
                       formatter={(value) => (
                         <span className="text-xs font-semibold text-foreground">
-                          {value === 'revenue' ? 'الإيرادات' : value === 'expenses' ? 'المصروفات التشغيلية' : 'صافي الربح'}
+                          {value === 'revenue' ? t('الإيرادات', 'Revenus') : value === 'expenses' ? t('المصروفات التشغيلية', 'Charges') : t('صافي الربح', 'Bénéfice Net')}
                         </span>
                       )}
                     />
@@ -359,9 +367,9 @@ export default function ExecutiveDashboard() {
                     <Tooltip
                       formatter={(value, name) => [
                         formatCurrency(Number(value), 'MAD'),
-                        name === 'revenue' ? 'الإيرادات' : name === 'expenses' ? 'المصروفات' : 'صافي الربح',
+                        name === 'revenue' ? t('الإيرادات', 'Revenus') : name === 'expenses' ? t('المصروفات', 'Dépenses') : t('صافي الربح', 'Bénéfice Net'),
                       ]}
-                      labelFormatter={(label) => `شهر ${label}`}
+                      labelFormatter={(label) => `${t('شهر', 'Mois')} ${label}`}
                       contentStyle={{
                         backgroundColor: 'var(--card)',
                         borderColor: 'var(--border)',
@@ -372,7 +380,7 @@ export default function ExecutiveDashboard() {
                     <Legend
                       formatter={(value) => (
                         <span className="text-xs font-semibold text-foreground">
-                          {value === 'revenue' ? 'الإيرادات' : value === 'expenses' ? 'المصروفات' : 'صافي الربح'}
+                          {value === 'revenue' ? t('الإيرادات', 'Revenus') : value === 'expenses' ? t('المصروفات', 'Dépenses') : t('صافي الربح', 'Bénéfice Net')}
                         </span>
                       )}
                     />
@@ -391,10 +399,10 @@ export default function ExecutiveDashboard() {
           <CardHeader className="p-5 pb-3 border-b border-border/40">
             <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
               <Truck className="w-5 h-5 text-blue-500" />
-              توزيع حالة الأسطول
+              {t('توزيع حالة الأسطول', 'Statut de la Flotte')}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              نسبة الجاهزية والتشغيل الميداني للشاحنات
+              {t('نسبة الجاهزية والتشغيل الميداني للشاحنات', 'Disponibilité et déploiement opérationnel')}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5 flex-1 flex flex-col justify-center">
@@ -415,7 +423,7 @@ export default function ExecutiveDashboard() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value, name) => [`${value} شاحنة`, name]}
+                    formatter={(value, name) => [`${value} ${t('شاحنة', 'véhicules')}`, name]}
                     contentStyle={{
                       backgroundColor: 'var(--card)',
                       borderColor: 'var(--border)',
@@ -427,7 +435,9 @@ export default function ExecutiveDashboard() {
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-2xl font-black font-mono text-foreground">{kpis.totalTrucksCount}</span>
-                <span className="text-[10px] text-muted-foreground uppercase font-semibold">إجمالي الشاحنات</span>
+                <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  {t('إجمالي الشاحنات', 'Total Véhicules')}
+                </span>
               </div>
             </div>
 
@@ -454,10 +464,10 @@ export default function ExecutiveDashboard() {
           <CardHeader className="p-5 pb-3 border-b border-border/40">
             <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
               <Fuel className="w-5 h-5 text-amber-500" />
-              هيكل وتوزيع المصروفات التشغيلية
+              {t('هيكل وتوزيع المصروفات التشغيلية', 'Structure des Charges d’Exploitation')}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              توزيع تكاليف الوقود، العبّارات، الرواتب، والصيانة
+              {t('توزيع تكاليف الوقود، العبّارات، الرواتب، والصيانة', 'Répartition : carburant, traversées maritimes, salaires et entretien')}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5">
@@ -493,7 +503,9 @@ export default function ExecutiveDashboard() {
 
               <div className="space-y-2 text-xs">
                 {kpis.expensesBreakdown.map((item) => {
-                  const percent = kpis.totalExpenses > 0 ? Math.round((item.value / kpis.totalExpenses) * 100) : 0;
+                  const percent = new Decimal(kpis.totalExpenses || 0).gt(0)
+                    ? new Decimal(item.value || 0).dividedBy(new Decimal(kpis.totalExpenses)).times(100).round().toNumber()
+                    : 0;
                   return (
                     <div key={item.name} className="flex items-center justify-between p-2 rounded-xl bg-muted/30 border border-border/40">
                       <div className="flex items-center gap-2">
@@ -518,10 +530,10 @@ export default function ExecutiveDashboard() {
             <div>
               <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
                 <ShieldAlert className="w-5 h-5 text-rose-500" />
-                مركز التنبيهات والقرارات الحرجة
+                {t('مركز التنبيهات والقرارات الحرجة', 'Centre d’Alertes & Vigilance')}
               </CardTitle>
               <CardDescription className="text-xs mt-0.5">
-                تنبيهات الوثائق المنتهية والفواتير المتأخرة المستحقة
+                {t('تنبيهات الوثائق المنتهية والفواتير المتأخرة المستحقة', 'Échéances critiques : documents arrivant à expiration et factures en souffrance')}
               </CardDescription>
             </div>
 
@@ -532,7 +544,7 @@ export default function ExecutiveDashboard() {
                   alertFilter === 'all' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                الكل ({kpis.criticalAlerts.length})
+                {t('الكل', 'Tous')} ({kpis.criticalAlerts.length})
               </button>
               <button
                 onClick={() => setAlertFilter('expired_document')}
@@ -540,7 +552,7 @@ export default function ExecutiveDashboard() {
                   alertFilter === 'expired_document' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                وثائق
+                {t('وثائق', 'Documents')}
               </button>
               <button
                 onClick={() => setAlertFilter('late_invoice')}
@@ -548,7 +560,7 @@ export default function ExecutiveDashboard() {
                   alertFilter === 'late_invoice' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                فواتير
+                {t('فواتير', 'Factures')}
               </button>
             </div>
           </CardHeader>
@@ -556,8 +568,12 @@ export default function ExecutiveDashboard() {
             {filteredAlerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                <p className="text-xs font-semibold text-foreground">لا توجد تنبيهات حرجة في هذا القسم</p>
-                <p className="text-[11px] text-muted-foreground">جميع الوثائق والفواتير مطابقة وتحت السيطرة</p>
+                <p className="text-xs font-semibold text-foreground">
+                  {t('لا توجد تنبيهات حرجة في هذا القسم', 'Aucune alerte critique dans cette section')}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('جميع الوثائق والفواتير مطابقة وتحت السيطرة', 'Tous les documents et paiements sont conformes')}
+                </p>
               </div>
             ) : (
               filteredAlerts.map((alert) => (
@@ -579,7 +595,7 @@ export default function ExecutiveDashboard() {
                             : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
                         }`}
                       >
-                        {alert.type === 'expired_document' ? 'وثيقة رسمية' : 'فاتورة معلقة'}
+                        {alert.type === 'expired_document' ? t('وثيقة رسمية', 'Document légal') : t('فاتورة معلقة', 'Facture en retard')}
                       </span>
                     </div>
                     <p className="text-muted-foreground text-[11px]">{alert.description}</p>
@@ -588,8 +604,8 @@ export default function ExecutiveDashboard() {
                   {alert.actionUrl && (
                     <Link href={alert.actionUrl}>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px] rounded-lg shrink-0 text-primary hover:bg-primary/10">
-                        معاينة
-                        <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
+                        {t('معاينة', 'Consulter')}
+                        <ArrowUpRight className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'mr-1' : 'ml-1'}`} />
                       </Button>
                     </Link>
                   )}
@@ -606,34 +622,34 @@ export default function ExecutiveDashboard() {
           <div>
             <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
               <TrendingUp className="w-5 h-5 text-emerald-500" />
-              مصفوفة ربحية وعائد الاستثمار لكل شاحنة (Fleet ROI Matrix)
+              {t('مصفوفة ربحية وعائد الاستثمار لكل شاحنة (Fleet ROI Matrix)', 'Matrice de Rentabilité & ROI par Véhicule')}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              مقارنة الإيرادات، الوقود، الصيانة، وصافي العائد على مستوى كل شاحنة
+              {t('مقارنة الإيرادات، الوقود، الصيانة، وصافي العائد على مستوى كل شاحنة', 'Comparatif : revenus, gazole, entretien et rendement net par unité')}
             </CardDescription>
           </div>
 
           <Link href="/fleet">
             <Button variant="outline" size="sm" className="rounded-xl h-8 text-xs">
-              <Car className="w-3.5 h-3.5 ml-1.5" />
-              إدارة الأسطول
+              <Car className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+              <span>{t('إدارة الأسطول', 'Flotte')}</span>
             </Button>
           </Link>
         </CardHeader>
 
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
+            <table className={`w-full text-xs ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
               <thead className="bg-muted/60 text-muted-foreground uppercase border-b border-border text-[11px]">
                 <tr>
-                  <th className="px-4 py-3">الشاحنة</th>
-                  <th className="px-4 py-3">السائق المسند</th>
-                  <th className="px-4 py-3 text-center">عدد الرحلات</th>
-                  <th className="px-4 py-3">إجمالي الإيرادات</th>
-                  <th className="px-4 py-3">مصاريف الوقود</th>
-                  <th className="px-4 py-3">الصيانة والإصلاح</th>
-                  <th className="px-4 py-3">صافي الربح</th>
-                  <th className="px-4 py-3 text-center">عائد الاستثمار (ROI)</th>
+                  <th className="px-4 py-3">{t('الشاحنة', 'Véhicule')}</th>
+                  <th className="px-4 py-3">{t('السائق المسند', 'Chauffeur')}</th>
+                  <th className="px-4 py-3 text-center">{t('عدد الرحلات', 'Nb Voyages')}</th>
+                  <th className="px-4 py-3">{t('إجمالي الإيرادات', 'Revenus Totaux')}</th>
+                  <th className="px-4 py-3">{t('مصاريف الوقود', 'Carburant')}</th>
+                  <th className="px-4 py-3">{t('الصيانة والإصلاح', 'Entretien')}</th>
+                  <th className="px-4 py-3">{t('صافي الربح', 'Résultat Net')}</th>
+                  <th className="px-4 py-3 text-center">{t('عائد الاستثمار (ROI)', 'ROI')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -648,7 +664,7 @@ export default function ExecutiveDashboard() {
                     <td className="px-4 py-3.5 text-foreground font-medium">{truck.driverName}</td>
                     <td className="px-4 py-3.5 text-center font-mono font-bold text-foreground">
                       <span className="px-2 py-0.5 rounded-md bg-muted border border-border text-[11px]">
-                        {truck.tripsCount} رحلات
+                        {truck.tripsCount} {t('رحلات', 'voyages')}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 font-mono font-bold text-emerald-600 dark:text-emerald-400">

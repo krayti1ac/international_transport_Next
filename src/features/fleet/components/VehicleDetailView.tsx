@@ -11,7 +11,11 @@ import { useToast } from '@/hooks/use-toast';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { DocumentUploadModal } from '@/features/fleet/components/DocumentUploadModal';
 import { QuickRenewDialog } from '@/features/fleet/components/QuickRenewDialog';
-import { DOCUMENT_TYPE_LABELS } from '@/features/fleet/services/fleet-documents.constants';
+import {
+  DOCUMENT_TYPE_LABELS,
+  getDocumentTypeLabel,
+  getDocStatusDetails,
+} from '@/features/fleet/services/fleet-documents.constants';
 import type { Truck, Trailer, Driver, FleetDocument, TripOrder } from '@/types/database';
 import {
   ArrowRight, FileText, Wrench, Truck as TruckIcon,
@@ -97,9 +101,12 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
         const { data } = await supabase
           .from('truck_maintenance')
           .select('*')
-          .eq('truck_id', vehicleId)
-          .order('date', { ascending: false });
-        maintRecords = data || [];
+          .eq('truck_id', vehicleId);
+        maintRecords = (data || []).sort(
+          (a: { maintenance_date?: string; date?: string; created_at?: string }, b: { maintenance_date?: string; date?: string; created_at?: string }) =>
+            new Date(b.maintenance_date || b.date || b.created_at || 0).getTime() -
+            new Date(a.maintenance_date || a.date || a.created_at || 0).getTime()
+        );
       }
       const { data: repairs } = await supabase
         .from('repair_invoices')
@@ -326,48 +333,51 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {documents.map((doc) => {
-                    const label =
-                      DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
-                    const status = getDocStatusInfo(doc.expiry_date);
+                    const label = getDocumentTypeLabel(doc, 'ar');
+                    const statusDetails = getDocStatusDetails(doc.expiry_date, 'ar');
                     return (
                       <div
                         key={doc.id}
-                        className="p-4 rounded-xl border bg-card flex flex-col justify-between gap-3"
+                        className={`p-4 rounded-xl border flex flex-col justify-between gap-3 shadow-2xs transition-all ${statusDetails.cardClass}`}
                       >
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="font-bold text-sm text-foreground">{label}</h4>
-                            <p className="text-xs text-muted-foreground font-mono mt-1">
-                              Ref: {doc.document_number || 'N/A'}
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                              رقم: {doc.document_number || '—'}
+                            </p>
+                            <p className={`text-xs mt-1 ${statusDetails.textClass}`}>
+                              {statusDetails.durationText}
                             </p>
                           </div>
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${status.badgeClass}`}
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusDetails.badgeClass}`}
                           >
-                            {status.label}
+                            {statusDetails.badgeLabel}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between pt-2 border-t text-xs">
-                          <span className="font-mono">
+                        <div className="flex items-center justify-between pt-2 border-t border-black/5 dark:border-white/5 text-xs">
+                          <span className="font-mono text-muted-foreground text-[11px]">
                             {doc.expiry_date
-                              ? new Date(doc.expiry_date).toLocaleDateString('en-GB')
-                              : '-'}
+                              ? `تاريخ الانتهاء: ${doc.expiry_date}`
+                              : 'بدون تاريخ انتهاء'}
                           </span>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1.5 items-center">
                             {doc.file_url && (
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 px-2"
+                                className="h-7 px-2 text-xs"
                                 onClick={() => window.open(doc.file_url, '_blank')}
                               >
-                                <ExternalLink className="w-3.5 h-3.5" />
+                                <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                                عرض
                               </Button>
                             )}
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 px-2"
+                              className="h-7 px-2.5 text-xs font-semibold rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800/50 transition-colors"
                               onClick={() => {
                                 setSelectedDocForRenew(doc);
                                 setIsRenewOpen(true);

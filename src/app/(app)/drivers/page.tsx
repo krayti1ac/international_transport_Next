@@ -27,12 +27,14 @@ import {
 import { FleetFormModal } from '@/components/fleet-form-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
 type StatusFilter = 'all' | 'active' | 'in_trip' | 'vacation' | 'inactive';
 type VisaFilter = 'all' | 'valid' | 'expiring_soon' | 'expired_or_none';
 
 export default function DriversPage() {
+  const { t, dir } = useLanguage();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [trailers, setTrailers] = useState<Trailer[]>([]);
@@ -132,11 +134,11 @@ export default function DriversPage() {
       }
 
       if (error) throw error;
-      toast({ title: data.id ? 'تم تحديث بيانات السائق بنجاح' : 'تمت إضافة السائق بنجاح' });
+      toast({ title: data.id ? t('تم تحديث بيانات السائق بنجاح', 'Chauffeur mis à jour avec succès') : t('تمت إضافة السائق بنجاح', 'Chauffeur ajouté avec succès') });
       fetchData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء حفظ بيانات السائق',
+        title: t('خطأ أثناء حفظ بيانات السائق', 'Erreur lors de l\'enregistrement du chauffeur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -144,16 +146,16 @@ export default function DriversPage() {
   };
 
   const handleDeleteDriver = async (id: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا السائق؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذا السائق؟', 'Êtes-vous sûr de vouloir supprimer ce chauffeur ?'))) return;
 
     try {
       const { error } = await supabase.from('drivers').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'تم حذف السائق بنجاح' });
+      toast({ title: t('تم حذف السائق بنجاح', 'Chauffeur supprimé avec succès') });
       fetchData();
     } catch (error: any) {
       toast({
-        title: 'خطأ أثناء حذف السائق',
+        title: t('خطأ أثناء حذف السائق', 'Erreur lors de la suppression du chauffeur'),
         description: error.message,
         variant: 'destructive',
       });
@@ -178,15 +180,15 @@ export default function DriversPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'active':
-        return 'جاهز ومتاح';
+        return t('جاهز ومتاح', 'Disponible');
       case 'in_trip':
-        return 'في رحلة دولية';
+        return t('في رحلة دولية', 'En mission');
       case 'vacation':
-        return 'في إجازة';
+        return t('في إجازة', 'En congé');
       case 'inactive':
-        return 'متوقف';
+        return t('متوقف', 'Inactif');
       default:
-        return status || 'غير محدد';
+        return status || t('غير محدد', 'Non défini');
     }
   };
 
@@ -195,7 +197,7 @@ export default function DriversPage() {
     if (!driver.visa_expiry_date) {
       return {
         status: 'none',
-        label: 'بدون تأشيرة دولية',
+        label: t('بدون تأشيرة دولية', 'Sans visa international'),
         badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
         daysLeft: null,
       };
@@ -209,21 +211,21 @@ export default function DriversPage() {
     if (diffDays < 0) {
       return {
         status: 'expired',
-        label: 'التأشيرة منتهية الصلاحية',
+        label: t('التأشيرة منتهية الصلاحية', 'Visa expiré'),
         badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25',
         daysLeft: diffDays,
       };
     } else if (diffDays <= 30) {
       return {
         status: 'expiring_soon',
-        label: `تنتهي خلال ${diffDays} يوم`,
+        label: t(`تنتهي خلال ${diffDays} يوم`, `Expire dans ${diffDays} j`),
         badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25',
         daysLeft: diffDays,
       };
     } else {
       return {
         status: 'valid',
-        label: `فيزا سارية (${diffDays} يوم)`,
+        label: t(`فيزا سارية (${diffDays} يوم)`, `Visa valide (${diffDays} j)`),
         badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25',
         daysLeft: diffDays,
       };
@@ -267,19 +269,19 @@ export default function DriversPage() {
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span>إدارة الكوادر البشرية والأسطول</span>
+            <span>{t('إدارة الكوادر البشرية والأسطول', 'Gestion des ressources humaines et de la flotte')}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
-            إدارة وبيانات السائقين
+            {t('إدارة وبيانات السائقين', 'Gestion des chauffeurs')}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            متابعة شاملة لملفات السائقين الدوليين، رخص القيادة، تتبع صلاحية التأشيرات (Visa Schengen)، وتعيين الشاحنات.
+            {t('متابعة شاملة لملفات السائقين الدوليين، رخص القيادة، تتبع صلاحية التأشيرات (Visa Schengen)، وتعيين الشاحنات.', 'Suivi complet des chauffeurs internationaux, permis, visas Schengen et affectation des camions.')}
           </p>
         </div>
 
@@ -290,8 +292,8 @@ export default function DriversPage() {
           }}
           className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
         >
-          <Plus className="w-4 h-4 ml-2" />
-          إضافة سائق جديد
+          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+          {t('إضافة سائق جديد', 'Ajouter un chauffeur')}
         </Button>
       </div>
 
@@ -300,11 +302,11 @@ export default function DriversPage() {
         {/* Total Drivers */}
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">إجمالي السائقين</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('إجمالي السائقين', 'Total Chauffeurs')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
-              {totalDrivers} <span className="text-xs text-muted-foreground font-normal">كابتن</span>
+              {totalDrivers} <span className="text-xs text-muted-foreground font-normal">{t('كابتن', 'chauffeurs')}</span>
             </div>
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">طاقم النقل الدولي والمحلي</span>
+            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">{t('طاقم النقل الدولي والمحلي', 'Flotte internationale et locale')}</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
             <Users className="w-5 h-5" />
@@ -314,11 +316,11 @@ export default function DriversPage() {
         {/* Available / Active Drivers */}
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">السائقين المتاحين</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('السائقين المتاحين', 'Chauffeurs Disponibles')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
               {activeDrivers} <span className="text-xs text-muted-foreground font-normal">/ {totalDrivers}</span>
             </div>
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">جاهزية تامة للانطلاق</span>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">{t('جاهزية تامة للانطلاق', 'Prêts pour le départ')}</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
             <UserCheck className="w-5 h-5" />
@@ -328,11 +330,11 @@ export default function DriversPage() {
         {/* On Trip Drivers */}
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">في رحلات نشطة</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('في رحلات نشطة', 'En Missions Actives')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
-              {inTripDrivers} <span className="text-xs text-muted-foreground font-normal">كابتن</span>
+              {inTripDrivers} <span className="text-xs text-muted-foreground font-normal">{t('كابتن', 'chauffeurs')}</span>
             </div>
-            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">في مسارات الشحن حالياً</span>
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">{t('في مسارات الشحن حالياً', 'Actuellement sur la route')}</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <Route className="w-5 h-5" />
@@ -342,17 +344,17 @@ export default function DriversPage() {
         {/* Visa Tracker */}
         <div className="bg-card border border-border/80 p-4 rounded-2xl flex items-center justify-between shadow-xs">
           <div>
-            <span className="text-xs font-bold text-muted-foreground uppercase">تأشيرات شنغن سارية</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{t('تأشيرات شنغن سارية', 'Visas Schengen Valides')}</span>
             <div className="text-2xl font-extrabold font-mono text-foreground mt-1">
               {validVisaDrivers} <span className="text-xs text-muted-foreground font-normal">/ {totalDrivers}</span>
             </div>
             {expiringSoonCount > 0 ? (
               <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
-                {expiringSoonCount} تنتهي قريباً
+                {t(`${expiringSoonCount} تنتهي قريباً`, `${expiringSoonCount} expirent bientôt`)}
               </span>
             ) : (
-              <span className="text-[11px] text-teal-600 dark:text-teal-400 font-medium">كافة التأشيرات محدثة</span>
+              <span className="text-[11px] text-teal-600 dark:text-teal-400 font-medium">{t('كافة التأشيرات محدثة', 'Tous les visas à jour')}</span>
             )}
           </div>
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
@@ -374,7 +376,7 @@ export default function DriversPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              الكل ({drivers.length})
+              {t('الكل', 'Tous')} ({drivers.length})
             </button>
             <button
               onClick={() => setStatusFilter('active')}
@@ -384,7 +386,7 @@ export default function DriversPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              متاح للعمل ({activeDrivers})
+              {t('متاح للعمل', 'Disponible')} ({activeDrivers})
             </button>
             <button
               onClick={() => setStatusFilter('in_trip')}
@@ -394,7 +396,7 @@ export default function DriversPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              في رحلة ({inTripDrivers})
+              {t('في رحلة', 'En mission')} ({inTripDrivers})
             </button>
             <button
               onClick={() => setStatusFilter('vacation')}
@@ -404,7 +406,7 @@ export default function DriversPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              في إجازة ({drivers.filter((d) => d.status === 'vacation').length})
+              {t('في إجازة', 'En congé')} ({drivers.filter((d) => d.status === 'vacation').length})
             </button>
             <button
               onClick={() => setStatusFilter('inactive')}
@@ -414,7 +416,7 @@ export default function DriversPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              متوقف ({drivers.filter((d) => d.status === 'inactive').length})
+              {t('متوقف', 'Inactif')} ({drivers.filter((d) => d.status === 'inactive').length})
             </button>
           </div>
 
@@ -423,12 +425,12 @@ export default function DriversPage() {
             <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
 
             <div className="relative flex-1">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
               <Input
-                placeholder="بحث باسم السائق، الهاتف، الرخصة، أو الفيزا..."
+                placeholder={t('بحث باسم السائق، الهاتف، الرخصة، أو الفيزا...', 'Rechercher par nom, tél, permis, visa...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-9 h-9 text-xs rounded-xl bg-card border-border/80"
+                className={`${dir === 'rtl' ? 'pr-9' : 'pl-9'} h-9 text-xs rounded-xl bg-card border-border/80`}
               />
             </div>
           </div>
@@ -438,7 +440,7 @@ export default function DriversPage() {
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40 text-xs">
           <span className="text-muted-foreground font-medium flex items-center gap-1 shrink-0">
             <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
-            فلترة التأشيرات:
+            {t('فلترة التأشيرات:', 'Filtrer par visa :')}
           </span>
           <button
             onClick={() => setVisaFilter('all')}
@@ -448,7 +450,7 @@ export default function DriversPage() {
                 : 'text-muted-foreground border-transparent hover:bg-muted'
             }`}
           >
-            كافة السائقين
+            {t('كافة السائقين', 'Tous les chauffeurs')}
           </button>
           <button
             onClick={() => setVisaFilter('valid')}
@@ -458,7 +460,7 @@ export default function DriversPage() {
                 : 'text-muted-foreground border-transparent hover:bg-muted'
             }`}
           >
-            تأشيرة سارية ({drivers.filter((d) => getVisaDetails(d).status === 'valid').length})
+            {t('تأشيرة سارية', 'Visa valide')} ({drivers.filter((d) => getVisaDetails(d).status === 'valid').length})
           </button>
           <button
             onClick={() => setVisaFilter('expiring_soon')}
@@ -468,7 +470,7 @@ export default function DriversPage() {
                 : 'text-muted-foreground border-transparent hover:bg-muted'
             }`}
           >
-            تنتهي قريباً ({expiringSoonCount})
+            {t('تنتهي قريباً', 'Expire bientôt')} ({expiringSoonCount})
           </button>
           <button
             onClick={() => setVisaFilter('expired_or_none')}
@@ -478,7 +480,7 @@ export default function DriversPage() {
                 : 'text-muted-foreground border-transparent hover:bg-muted'
             }`}
           >
-            بدون فيزا أو منتهية ({drivers.filter((d) => ['expired', 'none'].includes(getVisaDetails(d).status)).length})
+            {t('بدون فيزا أو منتهية', 'Sans visa ou expiré')} ({drivers.filter((d) => ['expired', 'none'].includes(getVisaDetails(d).status)).length})
           </button>
         </div>
       </div>
@@ -486,13 +488,13 @@ export default function DriversPage() {
       {/* Main Content */}
       {loading ? (
         <div className="text-center py-16 bg-card rounded-2xl border border-border">
-          <p className="text-xs text-muted-foreground">جاري تحميل بيانات السائقين...</p>
+          <p className="text-xs text-muted-foreground">{t('جاري تحميل بيانات السائقين...', 'Chargement des données des chauffeurs...')}</p>
         </div>
       ) : filteredDrivers.length === 0 ? (
         <div className="text-center py-16 bg-card rounded-2xl border border-border">
           <User className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-sm font-semibold text-foreground">لا يوجد سائقين مطابقين للبحث</p>
-          <p className="text-xs text-muted-foreground mt-1">جرّب تغيير عبارة البحث أو الفلتر المحدد أعلاه.</p>
+          <p className="text-sm font-semibold text-foreground">{t('لا يوجد سائقين مطابقين للبحث', 'Aucun chauffeur correspondant')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('جرّب تغيير عبارة البحث أو الفلتر المحدد أعلاه.', 'Essayez de modifier votre recherche ou vos filtres.')}</p>
         </div>
       ) : cardLayout === 'grid' ? (
         /* Grid Mode */
@@ -533,7 +535,7 @@ export default function DriversPage() {
                     <div className="flex justify-between items-center py-1 border-b border-border/30">
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                        الهاتف:
+                        {t('الهاتف:', 'Tél :')}
                       </span>
                       {driver.phone ? (
                         <span
@@ -558,18 +560,18 @@ export default function DriversPage() {
                     <div className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
                       <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">
                         <ShieldCheck className="w-3.5 h-3.5 text-muted-foreground" />
-                        صلاحية التأشيرة:
+                        {t('صلاحية التأشيرة:', 'Validité Visa :')}
                       </span>
-                      <div className="text-left">
+                      <div className="text-start">
                         {driver.visa_expiry_date ? (
                           <div className="flex flex-col items-end">
                             <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${visa.badgeClass}`}>
                               {visa.label}
                             </span>
-                            <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">تنتهي: {driver.visa_expiry_date}</span>
+                            <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">{t('تنتهي: ', 'Expire : ')}{driver.visa_expiry_date}</span>
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-[11px]">لا توجد تأشيرة مسجلة</span>
+                          <span className="text-muted-foreground text-[11px]">{t('لا توجد تأشيرة مسجلة', 'Aucun visa')}</span>
                         )}
                       </div>
                     </div>
@@ -578,9 +580,9 @@ export default function DriversPage() {
                     <div className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
                       <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">
                         <TruckIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                        الشاحنة المخصصة:
+                        {t('الشاحنة المخصصة:', 'Camion assigné :')}
                       </span>
-                      <span className="font-mono text-foreground text-left">
+                      <span className="font-mono text-foreground text-start">
                         {assignedTruck ? (
                           <span className="inline-flex items-center gap-1.5">
                             <MatriculeBadge plate={assignedTruck.plate_number} variant="badge" size="xs" />
@@ -590,7 +592,7 @@ export default function DriversPage() {
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-[11px]">
-                            {driver.default_truck_name || 'غير مسند'}
+                            {driver.default_truck_name || t('غير مسند', 'Non assigné')}
                           </span>
                         )}
                       </span>
@@ -600,9 +602,9 @@ export default function DriversPage() {
                     <div className="flex justify-between items-center py-1 border-b border-border/30 gap-2">
                       <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">
                         <Container className="w-3.5 h-3.5 text-muted-foreground" />
-                        المقطورة المرتبطة:
+                        {t('المقطورة المرتبطة:', 'Remorque liée :')}
                       </span>
-                      <span className="font-mono text-foreground text-left">
+                      <span className="font-mono text-foreground text-start">
                         {assignedTrailer ? (
                           <span className="inline-flex items-center gap-1.5">
                             <MatriculeBadge plate={assignedTrailer.plate_number} variant="badge" size="xs" />
@@ -612,7 +614,7 @@ export default function DriversPage() {
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-[11px]">
-                            بدون مقطورة مرتبطة
+                            {t('بدون مقطورة مرتبطة', 'Sans remorque')}
                           </span>
                         )}
                       </span>
@@ -633,8 +635,8 @@ export default function DriversPage() {
                       setIsModalOpen(true);
                     }}
                   >
-                    <Edit2 className="w-3.5 h-3.5 ml-1" />
-                    تعديل البيانات
+                    <Edit2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                    {t('تعديل البيانات', 'Modifier')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -705,7 +707,7 @@ export default function DriversPage() {
 
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
-                      <span className="text-muted-foreground text-[11px]">صلاحية التأشيرة:</span>
+                      <span className="text-muted-foreground text-[11px]">{t('صلاحية التأشيرة:', 'Validité Visa :')}</span>
                       {driver.visa_expiry_date ? (
                         <span className="inline-flex items-center gap-1.5">
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${visa.badgeClass}`}>
@@ -714,33 +716,33 @@ export default function DriversPage() {
                           <span className="font-mono text-[10px] text-muted-foreground">({driver.visa_expiry_date})</span>
                         </span>
                       ) : (
-                        <span className="text-muted-foreground text-[11px]">لا توجد تأشيرة مسجلة</span>
+                        <span className="text-muted-foreground text-[11px]">{t('لا توجد تأشيرة مسجلة', 'Aucun visa')}</span>
                       )}
                     </div>
 
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                       <TruckIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground text-[11px]">الشاحنة:</span>
+                      <span className="text-muted-foreground text-[11px]">{t('الشاحنة:', 'Camion :')}</span>
                       {assignedTruck ? (
                         <span className="inline-flex items-center gap-1.5">
                           <MatriculeBadge plate={assignedTruck.plate_number} variant="badge" size="xs" />
                           {assignedTruck.model && <span className="text-[11px] text-muted-foreground">({assignedTruck.model})</span>}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground text-[11px]">{driver.default_truck_name || 'غير مسند'}</span>
+                        <span className="text-muted-foreground text-[11px]">{driver.default_truck_name || t('غير مسند', 'Non assigné')}</span>
                       )}
                     </div>
 
                     <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                       <Container className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground text-[11px]">المقطورة:</span>
+                      <span className="text-muted-foreground text-[11px]">{t('المقطورة:', 'Remorque :')}</span>
                       {assignedTrailer ? (
                         <span className="inline-flex items-center gap-1.5">
                           <MatriculeBadge plate={assignedTrailer.plate_number} variant="badge" size="xs" />
                           {assignedTrailer.model && <span className="text-[11px] text-muted-foreground">({assignedTrailer.model})</span>}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground text-[11px]">بدون مقطورة مرتبطة</span>
+                        <span className="text-muted-foreground text-[11px]">{t('بدون مقطورة مرتبطة', 'Sans remorque')}</span>
                       )}
                     </div>
                   </div>
@@ -762,8 +764,8 @@ export default function DriversPage() {
                           setIsModalOpen(true);
                         }}
                       >
-                        <Edit2 className="w-3.5 h-3.5 ml-1" />
-                        تعديل
+                        <Edit2 className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                        {t('تعديل', 'Modifier')}
                       </Button>
                       <Button
                         variant="ghost"

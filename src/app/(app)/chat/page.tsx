@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import type { ChatMessage, User } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Send, MessageSquare } from 'lucide-react';
+import { useLanguage } from '@/components/language-provider';
 
 export default function ChatPage() {
+  const { t, dir, locale } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function ChatPage() {
       setMessages(data || []);
     } catch (error: any) {
       toast({
-        title: 'خطأ في تحميل المحادثات',
+        title: t('خطأ في تحميل المحادثات', 'Erreur de chargement des messages'),
         description: error.message,
         variant: 'destructive',
       });
@@ -95,7 +97,7 @@ export default function ChatPage() {
       setNewMessage('');
     } catch (error: any) {
       toast({
-        title: 'خطأ في إرسال الرسالة',
+        title: t('خطأ في إرسال الرسالة', "Erreur d'envoi du message"),
         description: error.message,
         variant: 'destructive',
       });
@@ -103,29 +105,33 @@ export default function ChatPage() {
   };
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' });
+    return new Date(timestamp).toLocaleTimeString(locale === 'ar' ? 'ar-MA' : 'fr-FR', { hour: '2-digit', minute: '2-digit' });
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">جاري تحميل المحادثات...</p>
+        <p className="text-muted-foreground">{t('جاري تحميل المحادثات...', 'Chargement des conversations...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">المحادثات الداخلية</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">التواصل الفوري والداخلي بين الإدارة والسائقين</p>
+        <h1 className="text-2xl font-bold font-amiri text-foreground">
+          {t('المحادثات الداخلية', 'Messagerie Interne')}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {t('التواصل الفوري والداخلي بين الإدارة والسائقين', "Communication directe entre l'administration et les conducteurs")}
+        </p>
       </div>
 
       <Card className="h-[600px] flex flex-col shadow-md border-border">
         <CardHeader className="border-b border-border pb-3">
           <CardTitle className="font-amiri flex items-center gap-2 text-foreground">
             <MessageSquare className="w-5 h-5 text-primary" />
-            محادثة الفريق المباشرة
+            {t('محادثة الفريق المباشرة', "Canal direct de l'équipe")}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden pt-4">
@@ -135,8 +141,10 @@ export default function ChatPage() {
                 <div className="w-12 h-12 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center mb-2">
                   <MessageSquare className="w-6 h-6" />
                 </div>
-                <p className="text-foreground font-medium">لا توجد رسائل بعد</p>
-                <p className="text-xs text-muted-foreground mt-1">ابدأ المحادثة مع فريق العمل الآن</p>
+                <p className="text-foreground font-medium">{t('لا توجد رسائل بعد', 'Aucun message pour le moment')}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('ابدأ المحادثة مع فريق العمل الآن', "Commencez la conversation avec l'équipe dès maintenant")}
+                </p>
               </div>
             ) : (
               messages.map((msg) => {
@@ -168,12 +176,12 @@ export default function ChatPage() {
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="اكتب رسالتك هنا..."
+              placeholder={t('اكتب رسالتك هنا...', 'Écrivez votre message ici...')}
               className="flex-1"
             />
             <Button type="submit" disabled={!newMessage.trim()} className="px-5">
-              <Send className="w-4 h-4 ml-1.5" />
-              إرسال
+              <Send className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+              {t('إرسال', 'Envoyer')}
             </Button>
           </form>
         </CardContent>

@@ -72,11 +72,10 @@ export async function processOfflineQueue(
 
       const { error } = await supabase.from('truck_maintenance').insert({
         truck_id: item.truck_id,
-        type: 'fuel',
+        expense_type: 'fuel',
         amount: item.amount,
-        currency: item.currency,
-        date: item.date,
-        notes: finalNotes,
+        maintenance_date: item.date || new Date().toISOString(),
+        description: finalNotes,
         payment_method: 'cash',
       });
 

@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, User, Truck, Share2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import { cn } from '@/lib/utils';
 import { DOCUMENT_TYPE_LABELS } from '@/features/fleet/services/fleet-documents.constants';
+import { useLanguage } from '@/components/language-provider';
 
 type DriverRow = {
   id: number;
@@ -27,19 +28,6 @@ type FleetDocRow = {
 type TruckRow = { id: number; plate_number: string };
 type TrailerRow = { id: number; plate_number: string };
 
-function diffLabel(expiryDate?: string | null): { label: string; tone: 'expired' | 'today' | 'soon' | 'safe' } {
-  if (!expiryDate) return { label: 'غير معروف', tone: 'safe' };
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const expiry = new Date(expiryDate);
-  expiry.setHours(0, 0, 0, 0);
-  const days = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return { label: `انتهت منذ ${Math.abs(days)} يوم`, tone: 'expired' };
-  if (days === 0) return { label: 'تنتهي اليوم', tone: 'today' };
-  if (days <= 30) return { label: `متبقي ${days} يوم`, tone: 'soon' };
-  return { label: `متبقي ${days} يوم`, tone: 'safe' };
-}
-
 const TONE_STYLES: Record<'expired' | 'today' | 'soon' | 'safe', string> = {
   expired: 'bg-rose-500/15 text-rose-600 border-rose-500/30',
   today: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
@@ -47,12 +35,8 @@ const TONE_STYLES: Record<'expired' | 'today' | 'soon' | 'safe', string> = {
   safe: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25',
 };
 
-const ENTITY_LABEL: Record<'truck' | 'trailer', string> = {
-  truck: 'شاحنة',
-  trailer: 'مقطورة',
-};
-
 export function ExpirationAlertsView() {
+  const { t, dir, locale } = useLanguage();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
@@ -61,6 +45,19 @@ export function ExpirationAlertsView() {
   const [truckMap, setTruckMap] = useState<Record<number, string>>({});
   const [trailerMap, setTrailerMap] = useState<Record<number, string>>({});
   const [activeTab, setActiveTab] = useState<'visas' | 'trucks' | 'trailers'>('visas');
+
+  const diffLabel = (expiryDate?: string | null): { label: string; tone: 'expired' | 'today' | 'soon' | 'safe' } => {
+    if (!expiryDate) return { label: t('غير معروف', 'Inconnu'), tone: 'safe' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+    const days = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 0) return { label: t(`انتهت منذ ${Math.abs(days)} يوم`, `Expiré depuis ${Math.abs(days)} j`), tone: 'expired' };
+    if (days === 0) return { label: t('تنتهي اليوم', "Expire aujourd'hui"), tone: 'today' };
+    if (days <= 30) return { label: t(`متبقي ${days} يوم`, `${days} jours restants`), tone: 'soon' };
+    return { label: t(`متبقي ${days} يوم`, `${days} jours restants`), tone: 'safe' };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -157,25 +154,25 @@ export function ExpirationAlertsView() {
   );
 
   const tabs: Array<{ key: 'visas' | 'trucks' | 'trailers'; label: string; count: number }> = [
-    { key: 'visas', label: 'تأشيرات السائقين', count: drivers.length },
-    { key: 'trucks', label: 'وثائق الشاحنات', count: truckDocs.length },
-    { key: 'trailers', label: 'وثائق المقطورات', count: trailerDocs.length },
+    { key: 'visas', label: t('تأشيرات السائقين', 'Visas des chauffeurs'), count: drivers.length },
+    { key: 'trucks', label: t('وثائق الشاحنات', 'Documents camions'), count: truckDocs.length },
+    { key: 'trailers', label: t('وثائق المقطورات', 'Documents remorques'), count: trailerDocs.length },
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto" dir="rtl">
+    <div className="space-y-6 max-w-5xl mx-auto" dir={dir}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight className={`w-5 h-5 ${dir === 'rtl' ? '' : 'rotate-180'}`} />
           </Button>
           <div>
             <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
               <AlertTriangle className="w-6 h-6 text-amber-500" />
-              تنبيهات الانتهاء ({total})
+              {t('تنبيهات الانتهاء', "Alertes d'expiration")} ({total})
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              التأشيرات والوثائق القريبة من الانتهاء أو المنتهية خلال 30 يوماً
+              {t('التأشيرات والوثائق القريبة من الانتهاء أو المنتهية خلال 30 يوماً', 'Visas et documents arrivant à expiration ou expirés dans les 30 jours')}
             </p>
           </div>
         </div>
@@ -183,29 +180,29 @@ export function ExpirationAlertsView() {
 
       <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
         <div className="flex items-center gap-1 px-2 pt-2 border-b border-border/60 bg-muted/30">
-          {tabs.map((t) => {
-            const isActive = activeTab === t.key;
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key;
             return (
               <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  'relative px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors',
+                  'relative px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors flex items-center gap-2',
                   isActive
                     ? 'text-foreground bg-background border-x border-t border-border/60 -mb-px'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
                 )}
               >
-                {t.label}
+                <span>{tab.label}</span>
                 <span
                   className={cn(
-                    'mr-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold border',
+                    'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold border',
                     isActive
                       ? 'bg-primary/15 border-primary/30 text-primary'
                       : 'bg-muted border-border text-muted-foreground'
                   )}
                 >
-                  {t.count}
+                  {tab.count}
                 </span>
               </button>
             );
@@ -215,25 +212,31 @@ export function ExpirationAlertsView() {
         <div className="p-2 sm:p-4 min-h-[320px]">
           {loading ? (
             <div className="py-16 text-center text-muted-foreground animate-pulse font-mono text-sm">
-              جاري تحميل التنبيهات...
+              {t('جاري تحميل التنبيهات...', 'Chargement des alertes...')}
             </div>
           ) : total === 0 ? (
             <div className="py-16 text-center text-muted-foreground">
-              لا توجد تنبيهات حالياً — جميع التأشيرات والوثائق سارية.
+              {t('لا توجد تنبيهات حالياً — جميع التأشيرات والوثائق سارية.', 'Aucune alerte — tous les visas et documents sont valides.')}
             </div>
           ) : activeTab === 'visas' ? (
-            <VisaList drivers={drivers} />
+            <VisaList drivers={drivers} diffLabel={diffLabel} t={t} />
           ) : activeTab === 'trucks' ? (
             <FleetDocList
               docs={truckDocs}
               entityType="truck"
               plateMap={truckMap}
+              diffLabel={diffLabel}
+              t={t}
+              locale={locale}
             />
           ) : (
             <FleetDocList
               docs={trailerDocs}
               entityType="trailer"
               plateMap={trailerMap}
+              diffLabel={diffLabel}
+              t={t}
+              locale={locale}
             />
           )}
         </div>
@@ -242,10 +245,18 @@ export function ExpirationAlertsView() {
   );
 }
 
-function VisaList({ drivers }: { drivers: DriverRow[] }) {
+function VisaList({
+  drivers,
+  diffLabel,
+  t,
+}: {
+  drivers: DriverRow[];
+  diffLabel: (d?: string | null) => { label: string; tone: 'expired' | 'today' | 'soon' | 'safe' };
+  t: (ar: string, fr: string) => string;
+}) {
   if (drivers.length === 0) {
     return (
-      <div className="py-12 text-center text-muted-foreground">لا توجد تأشيرات منتهية أو قريبة الانتهاء.</div>
+      <div className="py-12 text-center text-muted-foreground">{t('لا توجد تأشيرات منتهية أو قريبة الانتهاء.', 'Aucun visa expiré ou proche de l’expiration.')}</div>
     );
   }
   return (
@@ -254,13 +265,13 @@ function VisaList({ drivers }: { drivers: DriverRow[] }) {
         const { label, tone } = diffLabel(d.visa_expiry_date);
         return (
           <li key={d.id} className="flex items-center gap-3 py-3 px-2 hover:bg-muted/30 rounded-lg">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <User className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-foreground truncate">{d.name || 'بدون اسم'}</div>
+              <div className="text-sm font-semibold text-foreground truncate">{d.name || t('بدون اسم', 'Sans nom')}</div>
               <div className="text-[11px] text-muted-foreground font-mono">
-                {d.visa_expiry_date ? `تاريخ الانتهاء: ${d.visa_expiry_date}` : '—'}
+                {d.visa_expiry_date ? `${t('تاريخ الانتهاء: ', 'Date d’expiration : ')}${d.visa_expiry_date}` : '—'}
               </div>
             </div>
             <span className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold border', TONE_STYLES[tone])}>
@@ -277,15 +288,23 @@ function FleetDocList({
   docs,
   entityType,
   plateMap,
+  diffLabel,
+  t,
+  locale,
 }: {
   docs: FleetDocRow[];
   entityType: 'truck' | 'trailer';
   plateMap: Record<number, string>;
+  diffLabel: (d?: string | null) => { label: string; tone: 'expired' | 'today' | 'soon' | 'safe' };
+  t: (ar: string, fr: string) => string;
+  locale: string;
 }) {
+  const entityLabel = entityType === 'truck' ? t('الشاحنات', 'camions') : t('المقطورات', 'remorques');
+
   if (docs.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground">
-        لا توجد وثائق منتهية أو قريبة الانتهاء لـ{ENTITY_LABEL[entityType]}ات.
+        {t(`لا توجد وثائق منتهية أو قريبة الانتهاء لـ${entityLabel}.`, `Aucun document expiré ou proche de l'expiration pour les ${entityLabel}.`)}
       </div>
     );
   }
@@ -293,16 +312,16 @@ function FleetDocList({
     <ul className="divide-y divide-border/60">
       {docs.map((doc) => {
         const { label, tone } = diffLabel(doc.expiry_date);
-        const plate = plateMap[doc.entity_id] || 'مركبة غير معروفة';
+        const plate = plateMap[doc.entity_id] || t('مركبة غير معروفة', 'Véhicule inconnu');
         const rawType = (doc.doc_type || doc.document_type || '').trim();
         const categoryName =
-          (rawType && DOCUMENT_TYPE_LABELS[rawType]?.label_ar) ||
+          (rawType && (locale === 'fr' ? DOCUMENT_TYPE_LABELS[rawType]?.label_fr : DOCUMENT_TYPE_LABELS[rawType]?.label_ar)) ||
           rawType ||
-          'وثيقة';
+          t('وثيقة', 'Document');
         const Icon = entityType === 'truck' ? Truck : Share2;
         return (
           <li key={doc.id} className="flex items-center gap-3 py-3 px-2 hover:bg-muted/30 rounded-lg">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Icon className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
@@ -310,12 +329,12 @@ function FleetDocList({
                 <span>{plate} - {categoryName}</span>
                 {doc.document_number && (
                   <span className="text-[11px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">
-                    رقم: {doc.document_number}
+                    {t('رقم: ', 'N° : ')}{doc.document_number}
                   </span>
                 )}
               </div>
               <div className="text-[11px] text-muted-foreground font-mono">
-                {doc.expiry_date ? `تاريخ الانتهاء: ${doc.expiry_date}` : '—'}
+                {doc.expiry_date ? `${t('تاريخ الانتهاء: ', 'Date d’expiration : ')}${doc.expiry_date}` : '—'}
               </div>
             </div>
             <span className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold border', TONE_STYLES[tone])}>

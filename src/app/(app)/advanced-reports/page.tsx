@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Decimal from 'decimal.js';
 import { createClient } from '@/lib/supabase/client';
+import { useLanguage } from '@/components/language-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, Truck, Users, TrendingUp, Calendar } from 'lucide-react';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 interface ReportStats {
   totalRevenue: number;
@@ -22,6 +26,7 @@ interface ReportStats {
 const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export default function AdvancedReportsPage() {
+  const { t, dir, locale } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [stats, setStats] = useState<ReportStats>({
@@ -71,21 +76,26 @@ export default function AdvancedReportsPage() {
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
 
-      // حساب الإحصائيات
+      // حساب الإحصائيات بواسطة Decimal.js
       const invoices = invoicesData || [];
       const trips = tripsData || [];
 
-      const totalRevenue = invoices
+      let revSum = new Decimal(0);
+      invoices
         .filter((i: any) => i.status === 'paid')
-        .reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+        .forEach((i: any) => {
+          revSum = revSum.plus(new Decimal(i.total_amount || 0));
+        });
+      const totalRevenue = revSum.toNumber();
 
       const paidInvoices = invoices.filter((i: any) => i.status === 'paid').length;
 
-      // تجميع الإيرادات الشهرية
-      const monthlyData: { [key: string]: number } = {};
+      // تجميع الإيرادات الشهرية بواسطة Decimal.js
+      const monthlyData: { [key: string]: InstanceType<typeof Decimal> } = {};
       invoices.forEach((inv: any) => {
         const monthKey = inv.created_at?.slice(0, 7) || '';
-        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (Number(inv.total_amount) || 0);
+        if (!monthlyData[monthKey]) monthlyData[monthKey] = new Decimal(0);
+        monthlyData[monthKey] = monthlyData[monthKey].plus(new Decimal(inv.total_amount || 0));
       });
 
       // تجميع حالات الرحلات
@@ -106,14 +116,14 @@ export default function AdvancedReportsPage() {
         totalClients: clientsCount || 0,
         paidInvoices,
         totalInvoices: invoices.length,
-        monthlyRevenue: Object.entries(monthlyData).map(([month, revenue]) => ({ month, revenue })),
+        monthlyRevenue: Object.entries(monthlyData).map(([m, rev]) => ({ month: m, revenue: rev.toNumber() })),
         tripStatus: Object.entries(tripStatusCount).map(([name, value]) => ({ name, value })),
         invoiceStatus: Object.entries(invoiceStatusCount).map(([name, value]) => ({ name, value })),
         topClients: [],
       });
     } catch (error: any) {
       toast({
-        title: 'خطأ في جلب التقارير',
+        title: t('خطأ في جلب التقارير', 'Erreur lors du chargement des rapports'),
         description: error.message,
         variant: 'destructive',
       });
@@ -124,14 +134,14 @@ export default function AdvancedReportsPage() {
 
   const getStatusText = (status: string) => {
     const map: { [key: string]: string } = {
-      planned: 'مخطط لها',
-      in_progress: 'قيد التنفيذ',
-      completed: 'مكتملة',
-      cancelled: 'ملغاة',
-      paid: 'مدفوعة',
-      unpaid: 'غير مدفوعة',
-      partially_paid: 'مدفوعة جزئياً',
-      overdue: 'متأخرة',
+      planned: t('مخطط لها', 'Planifié'),
+      in_progress: t('قيد التنفيذ', 'En cours'),
+      completed: t('مكتملة', 'Terminé'),
+      cancelled: t('ملغاة', 'Annulé'),
+      paid: t('مدفوعة', 'Payée'),
+      unpaid: t('غير مدفوعة', 'Impayée'),
+      partially_paid: t('مدفوعة جزئياً', 'Partiellement payée'),
+      overdue: t('متأخرة', 'En retard'),
     };
     return map[status] || status;
   };
@@ -139,17 +149,25 @@ export default function AdvancedReportsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">جاري تحميل التقارير...</p>
+        <p className="text-muted-foreground">{t('جاري تحميل التقارير...', 'Chargement des rapports en cours...')}</p>
       </div>
     );
   }
 
+  const collectionPercent = stats.totalInvoices
+    ? new Decimal(stats.paidInvoices).dividedBy(stats.totalInvoices).times(100).toFixed(1)
+    : '0';
+
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">التقارير المتقدمة</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">تحليل شامل للأداء المالي والعمليات</p>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('التقارير المتقدمة', 'Rapports Avancés')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('تحليل شامل للأداء المالي والعمليات', 'Analyse approfondie des performances financières et opérations')}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -167,29 +185,41 @@ export default function AdvancedReportsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي الإيرادات</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('إجمالي الإيرادات', 'Revenu Total')}
+            </CardTitle>
             <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-foreground">{stats.totalRevenue.toLocaleString('ar-MA')} درهم</div>
-            <p className="text-xs text-muted-foreground mt-1">من الفواتير المدفوعة</p>
+            <div className="text-2xl font-bold font-mono text-foreground">
+              {stats.totalRevenue.toLocaleString(locale === 'ar' ? 'ar-MA' : 'fr-FR')} {t('درهم', 'MAD')}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('من الفواتير المدفوعة', 'Sur factures encaissées')}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">الرحلات</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('الرحلات', 'Trajets')}
+            </CardTitle>
             <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">{stats.totalTrips}</div>
-            <p className="text-xs text-muted-foreground mt-1">خلال هذا الشهر</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('خلال هذا الشهر', 'Durant ce mois')}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">الفواتير المدفوعة</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('الفواتير المدفوعة', 'Factures Payées')}
+            </CardTitle>
             <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </CardHeader>
           <CardContent>
@@ -197,19 +227,23 @@ export default function AdvancedReportsPage() {
               {stats.paidInvoices} / {stats.totalInvoices}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              نسبة التحصيل: {stats.totalInvoices ? ((stats.paidInvoices / stats.totalInvoices) * 100).toFixed(1) : 0}%
+              {t('نسبة التحصيل:', 'Taux de recouvrement:')} {collectionPercent}%
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">العملاء النشطون</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('العملاء النشطون', 'Clients Actifs')}
+            </CardTitle>
             <Users className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-foreground">{stats.totalClients}</div>
-            <p className="text-xs text-muted-foreground mt-1">عميل نشط</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('عميل نشط', 'client actif')}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -218,7 +252,9 @@ export default function AdvancedReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri text-foreground">الإيرادات الشهرية</CardTitle>
+            <CardTitle className="font-amiri text-foreground">
+              {t('الإيرادات الشهرية', 'Revenus Mensuels')}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -227,7 +263,7 @@ export default function AdvancedReportsPage() {
                 <XAxis dataKey="month" stroke="var(--muted-foreground)" />
                 <YAxis stroke="var(--muted-foreground)" />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }} />
-                <Bar dataKey="revenue" fill="#2563eb" name="الإيرادات" />
+                <Bar dataKey="revenue" fill="#2563eb" name={t('الإيرادات', 'Revenus')} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -235,7 +271,9 @@ export default function AdvancedReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri text-foreground">حالة الرحلات</CardTitle>
+            <CardTitle className="font-amiri text-foreground">
+              {t('حالة الرحلات', 'Statut des Trajets')}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -261,7 +299,9 @@ export default function AdvancedReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri text-foreground">حالة الفواتير</CardTitle>
+            <CardTitle className="font-amiri text-foreground">
+              {t('حالة الفواتير', 'Statut des Factures')}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>

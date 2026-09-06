@@ -3,13 +3,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-export type Locale = 'ar' | 'fr';
+export type Locale = 'ar' | 'fr' | 'en';
 
 interface LanguageContextType {
   locale: Locale;
   dir: 'rtl' | 'ltr';
   setLocale: (newLocale: Locale, userKey?: string) => Promise<void>;
-  t: (ar: string, fr: string) => string;
+  t: (ar: string, fr: string, en?: string) => string;
   getUserPreferredLanguage: (userKey: string) => Locale | null;
 }
 
@@ -28,7 +28,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined' || !userKey) return null;
     try {
       const stored = localStorage.getItem(`user_lang_${userKey.trim().toLowerCase()}`);
-      if (stored === 'ar' || stored === 'fr') {
+      if (stored === 'ar' || stored === 'fr' || stored === 'en') {
         return stored as Locale;
       }
     } catch (e) {}
@@ -50,7 +50,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       // 2. If not found, check global app_locale or cookie
       if (!initialLocale) {
         const storedGlobal = localStorage.getItem('app_locale') as Locale | null;
-        if (storedGlobal === 'ar' || storedGlobal === 'fr') {
+        if (storedGlobal === 'ar' || storedGlobal === 'fr' || storedGlobal === 'en') {
           initialLocale = storedGlobal;
         }
       }
@@ -113,8 +113,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const t = useCallback((ar: string, fr: string): string => {
-    return locale === 'fr' ? fr : ar;
+  const t = useCallback((ar: string, fr: string, en?: string): string => {
+    if (locale === 'fr') return fr;
+    if (locale === 'en') return en ?? ar;
+    return ar;
   }, [locale]);
 
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
@@ -133,9 +135,10 @@ export function useLanguage() {
       locale: 'ar' as Locale,
       dir: 'rtl' as const,
       setLocale: async () => {},
-      t: (ar: string, _fr: string) => ar,
+      t: (ar: string, _fr: string, _en?: string) => ar,
       getUserPreferredLanguage: () => null,
     };
   }
   return context;
 }
+

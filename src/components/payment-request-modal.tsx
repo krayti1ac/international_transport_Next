@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Decimal from 'decimal.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,9 @@ import {
 import type { Invoice, Client, BankAccount } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 import { DEFAULT_CLIENTS, DEFAULT_BANK_ACCOUNTS, fallbackArray } from '@/lib/default-data';
+import { useLanguage } from '@/components/language-provider';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 interface PaymentRequestModalProps {
   isOpen: boolean;
@@ -43,6 +47,7 @@ export function PaymentRequestModal({
   onSaved,
   onOpenFIFOPayment,
 }: PaymentRequestModalProps) {
+  const { t, dir, locale } = useLanguage();
   const availableClients = fallbackArray(clients, DEFAULT_CLIENTS);
   const availableBanks = fallbackArray(bankAccounts, DEFAULT_BANK_ACCOUNTS);
 
@@ -156,7 +161,7 @@ export function PaymentRequestModal({
 
   const handleSavePaymentRequest = async () => {
     if (!selectedClientId) {
-      toast({ title: 'يرجى اختيار العميل أولاً', variant: 'destructive' });
+      toast({ title: t('يرجى اختيار العميل أولاً', "Veuillez d'abord sélectionner le client"), variant: 'destructive' });
       return;
     }
 
@@ -176,15 +181,15 @@ export function PaymentRequestModal({
       }
 
       toast({
-        title: '✅ تم حفظ وتثبيت طلب الدفع بنجاح',
-        description: `تم ربط المرجع ${requestRef} بالملف المحاسبي.`,
+        title: t('✅ تم حفظ وتثبيت طلب الدفع بنجاح', '✅ Demande de paiement enregistrée avec succès'),
+        description: t(`تم ربط المرجع ${requestRef} بالملف المحاسبي.`, `Référence ${requestRef} liée au compte.`),
       });
 
       if (onSaved) onSaved();
     } catch (err: any) {
       toast({
-        title: 'خطأ أثناء الحفظ',
-        description: err?.message || 'تعذر حفظ طلب الدفع',
+        title: t('خطأ أثناء الحفظ', "Erreur lors de l'enregistrement"),
+        description: err?.message || t('تعذر حفظ طلب الدفع', "Impossible d'enregistrer la demande"),
         variant: 'destructive',
       });
     } finally {
@@ -195,18 +200,22 @@ export function PaymentRequestModal({
   const handleWhatsAppShare = () => {
     if (!currentClient?.phone) {
       toast({
-        title: 'رقم هاتف العميل غير مسجل',
-        description: 'يرجى التأكد من إضافة رقم هاتف للعميل في بطاقة بياناته.',
+        title: t('رقم هاتف العميل غير مسجل', 'Numéro de téléphone client non enregistré'),
+        description: t('يرجى التأكد من إضافة رقم هاتف للعميل في بطاقة بياناته.', 'Veuillez ajouter un numéro de téléphone dans la fiche client.'),
         variant: 'destructive',
       });
       return;
     }
 
     const cleanPhone = currentClient.phone.replace(/[^0-9]/g, '');
-    const clientName = currentClient.name || 'العميل المحترم';
-    const invText = currentInvoice?.invoice_number ? `بخصوص الفاتورة: ${currentInvoice.invoice_number}` : '';
+    const clientName = currentClient.name || (locale === 'fr' ? 'Cher Client' : 'العميل المحترم');
+    const invText = currentInvoice?.invoice_number 
+      ? (locale === 'fr' ? `Concernant la facture: ${currentInvoice.invoice_number}` : `بخصوص الفاتورة: ${currentInvoice.invoice_number}`) 
+      : '';
 
-    const message = `السلام عليكم ورحمة الله،\nالسادة المحترمون: *${clientName}*\n\nنحيطكم علماً بصدور *طلب الدفع (Demande de Paiement)* رقم: *${requestRef}*\n${invText}\n*المبلغ المستحق:* ${parseFloat(amount).toLocaleString()} ${currency}\n*تاريخ الاستحقاق:* ${dueDate}\n\n*بيانات التحويل البنكي:*\n${customBankInfo}\n\nيرجى التكرم بتنفيذ التحويل وإشعارنا برقم الإشعار البنكي.\nشاكرين حسن تعاونكم،\nشركة النقل الدولي السريع.`;
+    const message = locale === 'fr'
+      ? `Bonjour,\nChers partenaires : *${clientName}*\n\nNous vous informons de l'émission de la *Demande de Paiement* n° : *${requestRef}*\n${invText}\n*Montant exigible :* ${new Decimal(amount || 0).toNumber().toLocaleString()} ${currency}\n*Date d'échéance :* ${dueDate}\n\n*Coordonnées bancaires pour virement :*\n${customBankInfo}\n\nMerci de procéder au virement et de nous transmettre le bordereau.\nCordialement,\nTrans Bodanon.`
+      : `السلام عليكم ورحمة الله،\nالسادة المحترمون: *${clientName}*\n\nنحيطكم علماً بصدور *طلب الدفع (Demande de Paiement)* رقم: *${requestRef}*\n${invText}\n*المبلغ المستحق:* ${new Decimal(amount || 0).toNumber().toLocaleString()} ${currency}\n*تاريخ الاستحقاق:* ${dueDate}\n\n*بيانات التحويل البنكي:*\n${customBankInfo}\n\nيرجى التكرم بتنفيذ التحويل وإشعارنا برقم الإشعار البنكي.\nشاكرين حسن تعاونكم،\nشركة النقل الدولي السريع.`;
 
     const encoded = encodeURIComponent(message);
     window.open(`https://wa.me/${cleanPhone}?text=${encoded}`, '_blank');
@@ -215,7 +224,7 @@ export function PaymentRequestModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
-      dir="rtl"
+      dir={dir}
     >
       <Card className="w-full max-w-3xl my-6 shadow-2xl border-border bg-card overflow-hidden">
         {/* Header */}
@@ -226,10 +235,13 @@ export function PaymentRequestModal({
             </div>
             <div>
               <CardTitle className="font-amiri text-xl text-foreground">
-                إنشاء وتصدير طلب الدفع (Demande de Paiement)
+                {t('إنشاء وتصدير طلب الدفع (Demande de Paiement)', 'Création et export de demande de paiement')}
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                إصدار وثيقة المطالبة المالية الرسمية، ربطها بالحساب البنكي، وتوجيه إشعار للعميل.
+                {t(
+                  'إصدار وثيقة المطالبة المالية الرسمية، ربطها بالحساب البنكي، وتوجيه إشعار للعميل.',
+                  'Émission du document officiel de paiement, coordonnées bancaires et notification client.'
+                )}
               </p>
             </div>
           </div>
@@ -246,14 +258,14 @@ export function PaymentRequestModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Client selection */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">العميل المستهدف *</label>
+                  <label className="text-xs font-bold text-foreground">{t('العميل المستهدف *', 'Client ciblé *')}</label>
                   <select
                     value={selectedClientId}
                     onChange={(e) => handleClientChange(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-xl text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     required
                   >
-                    <option value="">-- اختر العميل --</option>
+                    <option value="">{`-- ${t('اختر العميل', 'Sélectionner le client')} --`}</option>
                     {availableClients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} {c.city ? `(${c.city})` : ''} - {c.currency || 'MAD'}
@@ -264,16 +276,16 @@ export function PaymentRequestModal({
 
                 {/* Invoice selection */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">ربط بفاتورة مستحقة (اختياري)</label>
+                  <label className="text-xs font-bold text-foreground">{t('ربط بفاتورة مستحقة (اختياري)', 'Associer à une facture (Optionnel)')}</label>
                   <select
                     value={selectedInvoiceId}
                     onChange={(e) => handleInvoiceChange(e.target.value)}
                     className="w-full h-10 px-3 py-2 border border-input bg-card rounded-xl text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                   >
-                    <option value="">-- طلب دفع عام أو مستقل --</option>
+                    <option value="">{`-- ${t('طلب دفع عام أو مستقل', 'Demande générale ou indépendante')} --`}</option>
                     {clientInvoices.map((inv) => (
                       <option key={inv.id} value={inv.id}>
-                        {inv.invoice_number || `فاتورة #${inv.id}`} - {inv.total_amount} {inv.currency} ({inv.status})
+                        {inv.invoice_number || `${t('فاتورة', 'Facture')} #${inv.id}`} - {inv.total_amount} {inv.currency} ({inv.status})
                       </option>
                     ))}
                   </select>
@@ -283,7 +295,7 @@ export function PaymentRequestModal({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Reference */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">رقم مرجع طلب الدفع (Ref) *</label>
+                  <label className="text-xs font-bold text-foreground">{t('رقم مرجع طلب الدفع (Ref) *', 'N° Réf Demande *')}</label>
                   <Input
                     value={requestRef}
                     onChange={(e) => setRequestRef(e.target.value)}
@@ -295,7 +307,7 @@ export function PaymentRequestModal({
 
                 {/* Amount */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">المبلغ المطلوب سداده *</label>
+                  <label className="text-xs font-bold text-foreground">{t('المبلغ المطلوب سداده *', 'Montant à payer *')}</label>
                   <div className="flex gap-1.5">
                     <Input
                       type="number"
@@ -319,7 +331,7 @@ export function PaymentRequestModal({
 
                 {/* Due Date */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">تاريخ الاستحقاق *</label>
+                  <label className="text-xs font-bold text-foreground">{t('تاريخ الاستحقاق *', "Date d'échéance *")}</label>
                   <Input
                     type="date"
                     value={dueDate}
@@ -335,14 +347,14 @@ export function PaymentRequestModal({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                     <Building className="w-3.5 h-3.5 text-primary" />
-                    بيانات الحساب البنكي لاستقبال التحويل
+                    {t('بيانات الحساب البنكي لاستقبال التحويل', 'Coordonnées bancaires pour virement')}
                   </span>
                   <select
                     value={selectedBankId}
                     onChange={(e) => handleBankChange(e.target.value)}
                     className="text-xs h-8 px-2.5 border border-input bg-card rounded-lg font-medium"
                   >
-                    <option value="">-- اختيار حساب بنكي مسجل --</option>
+                    <option value="">{`-- ${t('اختيار حساب بنكي مسجل', 'Sélectionner une banque')} --`}</option>
                     {availableBanks.map((b) => (
                       <option key={b.id} value={b.id}>
                         {b.bank_name || b.name} ({b.currency})
@@ -353,7 +365,7 @@ export function PaymentRequestModal({
                 <Input
                   value={customBankInfo}
                   onChange={(e) => setCustomBankInfo(e.target.value)}
-                  placeholder="اسم البنك ورقم الحساب (RIB)..."
+                  placeholder={t('اسم البنك ورقم الحساب (RIB)...', 'Nom de banque et RIB...')}
                   className="h-9 text-xs font-mono bg-card rounded-xl"
                   dir="ltr"
                 />
@@ -361,11 +373,11 @@ export function PaymentRequestModal({
 
               {/* Notes */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">ملاحظات وتعليمات السداد</label>
+                <label className="text-xs font-bold text-foreground">{t('ملاحظات وتعليمات السداد', 'Notes & Instructions')}</label>
                 <Input
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="تعليمات أو شروط إضافية للعميل..."
+                  placeholder={t('تعليمات أو شروط إضافية للعميل...', 'Instructions complémentaires...')}
                   className="h-10 text-xs rounded-xl bg-card"
                 />
               </div>
@@ -379,8 +391,8 @@ export function PaymentRequestModal({
                     disabled={saving}
                     className="h-10 px-4 rounded-xl text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
                   >
-                    <Save className="w-4 h-4 ml-1.5" />
-                    {saving ? 'جاري الحفظ...' : 'حفظ وتثبيت المرجع'}
+                    <Save className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                    {saving ? t('جاري الحفظ...', 'Enregistrement...') : t('حفظ وتثبيت المرجع', 'Enregistrer')}
                   </Button>
 
                   <Button
@@ -389,8 +401,8 @@ export function PaymentRequestModal({
                     onClick={() => setIsPrintMode(true)}
                     className="h-10 px-4 rounded-xl text-xs font-semibold bg-card border-border shadow-2xs"
                   >
-                    <Printer className="w-4 h-4 ml-1.5 text-primary" />
-                    معاينة وطباعة الوثيقة
+                    <Printer className={`w-4 h-4 text-primary ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                    {t('معاينة وطباعة الوثيقة', 'Aperçu & Imprimer')}
                   </Button>
 
                   <Button
@@ -399,8 +411,8 @@ export function PaymentRequestModal({
                     onClick={handleWhatsAppShare}
                     className="h-10 px-4 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
                   >
-                    <MessageCircle className="w-4 h-4 ml-1.5" />
-                    إرسال إشعار واتساب
+                    <MessageCircle className={`w-4 h-4 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                    {t('إرسال إشعار واتساب', 'WhatsApp')}
                   </Button>
                 </div>
 
@@ -414,8 +426,8 @@ export function PaymentRequestModal({
                     }}
                     className="text-xs text-muted-foreground hover:text-foreground h-10 px-3 rounded-xl"
                   >
-                    <ArrowRightLeft className="w-4 h-4 ml-1.5 text-emerald-600" />
-                    تسجيل دفعة سداد (FIFO)
+                    <ArrowRightLeft className={`w-4 h-4 text-emerald-600 ${dir === 'rtl' ? 'ml-1.5' : 'mr-1.5'}`} />
+                    {t('تسجيل دفعة سداد (FIFO)', 'Encaisser (FIFO)')}
                   </Button>
                 )}
               </div>
@@ -425,7 +437,7 @@ export function PaymentRequestModal({
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-border">
                 <span className="text-xs font-semibold text-muted-foreground">
-                  معاينة وثيقة طلب الدفع الرسمية القابلة للطباعة
+                  {t('معاينة وثيقة طلب الدفع الرسمية القابلة للطباعة', 'Aperçu officiel imprimable')}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -434,7 +446,7 @@ export function PaymentRequestModal({
                     className="h-8 text-xs rounded-xl font-semibold gap-1.5"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    طباعة الآن
+                    {t('طباعة الآن', 'Imprimer')}
                   </Button>
                   <Button
                     size="sm"
@@ -442,7 +454,7 @@ export function PaymentRequestModal({
                     onClick={() => setIsPrintMode(false)}
                     className="h-8 text-xs rounded-xl"
                   >
-                    العودة للنموذج
+                    {t('العودة للنموذج', 'Retour')}
                   </Button>
                 </div>
               </div>
@@ -507,7 +519,7 @@ export function PaymentRequestModal({
                       </td>
                       <td className="p-3 text-center font-mono">{requestRef}</td>
                       <td className="p-3 text-left font-mono font-extrabold text-sm text-slate-900">
-                        {parseFloat(amount).toLocaleString()} {currency}
+                        {new Decimal(amount || 0).toNumber().toLocaleString()} {currency}
                       </td>
                     </tr>
                   </tbody>

@@ -31,6 +31,7 @@ import {
 } from '@/features/fleet/services/fleet-documents.actions';
 import { useToast } from '@/hooks/use-toast';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
 
 interface FleetDocumentsListProps {
   documents: FleetDocument[];
@@ -47,6 +48,7 @@ export function FleetDocumentsList({
   onViewHistory,
   onRefresh,
 }: FleetDocumentsListProps) {
+  const { locale, dir, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState<'all' | 'truck' | 'trailer'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'warning' | 'expired' | 'archived'>('all');
@@ -95,45 +97,47 @@ export function FleetDocumentsList({
       const res = await archiveFleetDocument(doc.id, !doc.is_archived);
       if (!res.success) throw new Error(res.error);
       toast({
-        title: doc.is_archived ? 'تم استعادة الوثيقة إلى الأسطول النشط' : 'تم نقل الوثيقة للأرشيف',
+        title: doc.is_archived
+          ? t('تم استعادة الوثيقة إلى الأسطول النشط', 'Document restauré dans la flotte active')
+          : t('تم نقل الوثيقة للأرشيف', 'Document archivé avec succès'),
       });
       onRefresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل في تغيير حالة الأرشفة';
-      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
+      const msg = err instanceof Error ? err.message : t('فشل في تغيير حالة الأرشفة', "Échec de modification de l'archivage");
+      toast({ title: t('خطأ', 'Erreur'), description: msg, variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleDelete = async (docId: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذه الوثيقة نهائياً وسجلها؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذه الوثيقة نهائياً وسجلها؟', 'Êtes-vous sûr de vouloir supprimer définitivement ce document et son historique ?'))) return;
     setActionLoading(docId);
     try {
       const res = await deleteFleetDocument(docId);
       if (!res.success) throw new Error(res.error);
-      toast({ title: 'تم حذف الوثيقة بنجاح' });
+      toast({ title: t('تم حذف الوثيقة بنجاح', 'Document supprimé avec succès') });
       onRefresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل في حذف الوثيقة';
-      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
+      const msg = err instanceof Error ? err.message : t('فشل في حذف الوثيقة', 'Échec de suppression du document');
+      toast({ title: t('خطأ', 'Erreur'), description: msg, variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
   };
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-between bg-card border border-border/70 p-3 rounded-2xl shadow-xs">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className={`w-4 h-4 absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground`} />
           <Input
             type="text"
-            placeholder="بحث بالترقيم، نوع الوثيقة، أو الملاحظات..."
+            placeholder={t('بحث بالترقيم، نوع الوثيقة، أو الملاحظات...', 'Rechercher par matricule, type ou note...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-9 rounded-xl text-xs bg-muted/20"
+            className={`${dir === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'} rounded-xl text-xs bg-muted/20`}
           />
         </div>
 
@@ -151,7 +155,7 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              النشطة ({documents.filter((d) => !d.is_archived).length})
+              {t('النشطة', 'Actifs')} ({documents.filter((d) => !d.is_archived).length})
             </button>
             <button
               onClick={() => setStatusFilter('expired')}
@@ -161,7 +165,7 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              المنتهية ({documents.filter((d) => !d.is_archived && d.status_computed === 'expired').length})
+              {t('المنتهية', 'Expirés')} ({documents.filter((d) => !d.is_archived && d.status_computed === 'expired').length})
             </button>
             <button
               onClick={() => setStatusFilter('warning')}
@@ -171,8 +175,7 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              تنتهي قريباً (
-              {documents.filter((d) => !d.is_archived && d.status_computed === 'warning').length})
+              {t('تنتهي قريباً', 'Expire bientôt')} ({documents.filter((d) => !d.is_archived && d.status_computed === 'warning').length})
             </button>
             <button
               onClick={() => setStatusFilter('archived')}
@@ -182,7 +185,7 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              الأرشيف ({documents.filter((d) => d.is_archived).length})
+              {t('الأرشيف', 'Archives')} ({documents.filter((d) => d.is_archived).length})
             </button>
           </div>
         </div>
@@ -192,14 +195,18 @@ export function FleetDocumentsList({
       {loading ? (
         <div className="text-center py-16">
           <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-          <p className="text-xs text-muted-foreground">جاري تحميل قائمة الوثائق...</p>
+          <p className="text-xs text-muted-foreground">
+            {t('جاري تحميل قائمة الوثائق...', 'Chargement des documents...')}
+          </p>
         </div>
       ) : filteredDocs.length === 0 ? (
         <div className="text-center py-16 bg-card border border-border/80 rounded-2xl">
           <FileText className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
-          <p className="text-sm font-semibold text-foreground">لا توجد وثائق مطابقة للبحث</p>
+          <p className="text-sm font-semibold text-foreground">
+            {t('لا توجد وثائق مطابقة للبحث', 'Aucun document trouvé')}
+          </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            تأكد من شروط الفلترة أو قم بإضافة وثائق جديدة.
+            {t('تأكد من شروط الفلترة أو قم بإضافة وثائق جديدة.', 'Vérifiez les filtres ou ajoutez de nouveaux documents.')}
           </p>
         </div>
       ) : cardLayout === 'grid' ? (
@@ -207,14 +214,19 @@ export function FleetDocumentsList({
           {filteredDocs.map((doc) => {
             const isTruck = doc.entity_type === 'truck';
             const plate =
-              doc.truck?.plate_number || doc.trailer?.plate_number || `مركبة #${doc.entity_id}`;
+              doc.truck?.plate_number || doc.trailer?.plate_number || `${t('مركبة', 'Véhicule')} #${doc.entity_id}`;
             const vehicleModel = doc.truck?.model || doc.trailer?.model || '';
             const docLabel =
-              DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
-            const docLabelFr = DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
+              locale === 'fr'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
+                : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
+            const docLabelAlt =
+              locale === 'fr'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
+                : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
             const expiryDateFormatted = doc.expiry_date
               ? new Date(doc.expiry_date).toLocaleDateString('fr-MA')
-              : 'بدون تاريخ';
+              : (locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
 
             return (
               <Card
@@ -239,7 +251,7 @@ export function FleetDocumentsList({
                           <MatriculeBadge plate={plate} variant="badge" size="xs" />
                         </div>
                         <span className="text-[11px] text-muted-foreground">
-                          {isTruck ? 'شاحنة' : 'مقطورة'} {vehicleModel ? `• ${vehicleModel}` : ''}
+                          {isTruck ? t('شاحنة', 'Camion') : t('مقطورة', 'Remorque')} {vehicleModel ? `• ${vehicleModel}` : ''}
                         </span>
                       </div>
                     </div>
@@ -247,22 +259,22 @@ export function FleetDocumentsList({
                     {/* Status Badge */}
                     {doc.is_archived ? (
                       <Badge variant="secondary" className="text-[10px]">
-                        مؤرشفة
+                        {t('مؤرشفة', 'Archivé')}
                       </Badge>
                     ) : doc.status_computed === 'expired' ? (
                       <Badge variant="destructive" className="text-[10px] gap-1">
                         <XCircle className="w-3 h-3" />
-                        منتهية
+                        {t('منتهية', 'Expiré')}
                       </Badge>
                     ) : doc.status_computed === 'warning' ? (
                       <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3" />
-                        تنتهي قريباً
+                        {t('تنتهي قريباً', 'Expire bientôt')}
                       </span>
                     ) : (
                       <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 gap-1">
                         <ShieldCheck className="w-3 h-3" />
-                        سارية
+                        {t('سارية', 'Valide')}
                       </Badge>
                     )}
                   </div>
@@ -270,12 +282,12 @@ export function FleetDocumentsList({
                   {/* Document Title */}
                   <div>
                     <h3 className="text-sm font-bold font-amiri text-foreground">{docLabel}</h3>
-                    {docLabelFr && (
-                      <p className="text-[11px] text-muted-foreground font-mono">{docLabelFr}</p>
+                    {docLabelAlt && (
+                      <p className="text-[11px] text-muted-foreground font-mono">{docLabelAlt}</p>
                     )}
                     {doc.document_number && (
                       <span className="text-[11px] text-muted-foreground font-mono block mt-0.5">
-                        رقم العقد: {doc.document_number}
+                        {t('رقم العقد: ', 'N° contrat : ')}{doc.document_number}
                       </span>
                     )}
                   </div>
@@ -283,7 +295,7 @@ export function FleetDocumentsList({
                   {/* Expiry & Cost Information */}
                   <div className="grid grid-cols-2 gap-2 text-xs bg-muted/20 p-2.5 rounded-xl border border-border/50">
                     <div>
-                      <span className="text-[10px] text-muted-foreground block">تاريخ الانتهاء</span>
+                      <span className="text-[10px] text-muted-foreground block">{t('تاريخ الانتهاء', "Date d'expiration")}</span>
                       <span className="font-mono font-bold text-foreground">{expiryDateFormatted}</span>
                       {!doc.is_archived && doc.days_until_expiry !== undefined && (
                         <span
@@ -296,14 +308,14 @@ export function FleetDocumentsList({
                           }`}
                         >
                           {doc.days_until_expiry < 0
-                            ? `منتهية منذ ${Math.abs(doc.days_until_expiry)} يوم`
-                            : `متبقي ${doc.days_until_expiry} يوم`}
+                            ? (locale === 'fr' ? `Expiré depuis ${Math.abs(doc.days_until_expiry)} j` : `منتهية منذ ${Math.abs(doc.days_until_expiry)} يوم`)
+                            : (locale === 'fr' ? `Dans ${doc.days_until_expiry} j` : `متبقي ${doc.days_until_expiry} يوم`)}
                         </span>
                       )}
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-muted-foreground block">التكلفة المسجلة</span>
+                      <span className="text-[10px] text-muted-foreground block">{t('التكلفة المسجلة', 'Coût enregistré')}</span>
                       <span className="font-mono font-bold text-foreground">
                         {doc.cost ? `${doc.cost.toLocaleString()} ${doc.currency || 'MAD'}` : '—'}
                       </span>
@@ -326,15 +338,15 @@ export function FleetDocumentsList({
                       onClick={() => onRenewDocument(doc, plate)}
                       className="rounded-xl h-8 px-2.5 text-xs font-semibold text-foreground hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/40"
                     >
-                      <RefreshCw className="w-3.5 h-3.5 ml-1 text-emerald-500" />
-                      تجديد سريع
+                      <RefreshCw className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'} text-emerald-500`} />
+                      {t('تجديد سريع', 'Renouveler')}
                     </Button>
 
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => onViewHistory(doc)}
-                      title="سجل التجديدات"
+                      title={t('سجل التجديدات', 'Historique')}
                       className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                     >
                       <Clock className="w-3.5 h-3.5" />
@@ -345,7 +357,7 @@ export function FleetDocumentsList({
                         asChild
                         variant="ghost"
                         size="icon"
-                        title="معاينة الملف"
+                        title={t('معاينة الملف', 'Voir le fichier')}
                         className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                       >
                         <a href={doc.file_url} target="_blank" rel="noreferrer">
@@ -361,7 +373,7 @@ export function FleetDocumentsList({
                       size="icon"
                       onClick={() => handleArchiveToggle(doc)}
                       disabled={actionLoading === doc.id}
-                      title={doc.is_archived ? 'استعادة من الأرشيف' : 'نقل للأرشيف'}
+                      title={doc.is_archived ? t('استعادة من الأرشيف', 'Restaurer') : t('نقل للأرشيف', 'Archiver')}
                       className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                     >
                       {doc.is_archived ? (
@@ -376,7 +388,7 @@ export function FleetDocumentsList({
                       size="icon"
                       onClick={() => handleDelete(doc.id)}
                       disabled={actionLoading === doc.id}
-                      title="حذف الوثيقة"
+                      title={t('حذف الوثيقة', 'Supprimer')}
                       className="rounded-xl h-8 w-8 text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -393,14 +405,19 @@ export function FleetDocumentsList({
           {filteredDocs.map((doc) => {
             const isTruck = doc.entity_type === 'truck';
             const plate =
-              doc.truck?.plate_number || doc.trailer?.plate_number || `مركبة #${doc.entity_id}`;
+              doc.truck?.plate_number || doc.trailer?.plate_number || `${t('مركبة', 'Véhicule')} #${doc.entity_id}`;
             const vehicleModel = doc.truck?.model || doc.trailer?.model || '';
             const docLabel =
-              DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
-            const docLabelFr = DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
+              locale === 'fr'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
+                : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
+            const docLabelAlt =
+              locale === 'fr'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
+                : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
             const expiryDateFormatted = doc.expiry_date
               ? new Date(doc.expiry_date).toLocaleDateString('fr-MA')
-              : 'بدون تاريخ';
+              : (locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
 
             return (
               <Card
@@ -408,7 +425,7 @@ export function FleetDocumentsList({
                 className="rounded-2xl border border-border/80 shadow-xs hover:shadow-md transition-all overflow-hidden bg-card"
               >
                 <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-                  {/* Right: Vehicle Plate & Document Info */}
+                  {/* Vehicle Plate & Document Info */}
                   <div className="flex items-center gap-3 min-w-[240px]">
                     <div
                       className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -423,13 +440,13 @@ export function FleetDocumentsList({
                       <div className="flex items-center gap-2 mb-0.5">
                         <MatriculeBadge plate={plate} variant="badge" size="xs" />
                         <span className="text-[11px] text-muted-foreground">
-                          {isTruck ? 'شاحنة' : 'مقطورة'} {vehicleModel ? `• ${vehicleModel}` : ''}
+                          {isTruck ? t('شاحنة', 'Camion') : t('مقطورة', 'Remorque')} {vehicleModel ? `• ${vehicleModel}` : ''}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-bold font-amiri text-foreground">{docLabel}</h3>
-                        {docLabelFr && (
-                          <span className="text-[10px] text-muted-foreground font-mono">({docLabelFr})</span>
+                        {docLabelAlt && (
+                          <span className="text-[10px] text-muted-foreground font-mono">({docLabelAlt})</span>
                         )}
                         {doc.document_number && (
                           <span className="text-[10px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">
@@ -443,7 +460,7 @@ export function FleetDocumentsList({
                   {/* Middle: Expiry & Cost Information */}
                   <div className="flex flex-wrap items-center gap-3 text-xs">
                     <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40">
-                      <span className="text-[11px] text-muted-foreground">تاريخ الانتهاء:</span>
+                      <span className="text-[11px] text-muted-foreground">{t('تاريخ الانتهاء:', "Expiration :")}</span>
                       <span className="font-mono font-bold text-foreground">{expiryDateFormatted}</span>
                       {!doc.is_archived && doc.days_until_expiry !== undefined && (
                         <span
@@ -456,14 +473,14 @@ export function FleetDocumentsList({
                           }`}
                         >
                           {doc.days_until_expiry < 0
-                            ? `منتهية منذ ${Math.abs(doc.days_until_expiry)} يوم`
-                            : `متبقي ${doc.days_until_expiry} يوم`}
+                            ? (locale === 'fr' ? `Expiré depuis ${Math.abs(doc.days_until_expiry)} j` : `منتهية منذ ${Math.abs(doc.days_until_expiry)} يوم`)
+                            : (locale === 'fr' ? `Dans ${doc.days_until_expiry} j` : `متبقي ${doc.days_until_expiry} يوم`)}
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1.5 bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40">
-                      <span className="text-[11px] text-muted-foreground">التكلفة:</span>
+                      <span className="text-[11px] text-muted-foreground">{t('التكلفة:', 'Coût :')}</span>
                       <span className="font-mono font-bold text-foreground">
                         {doc.cost ? `${doc.cost.toLocaleString()} ${doc.currency || 'MAD'}` : '—'}
                       </span>
@@ -476,27 +493,27 @@ export function FleetDocumentsList({
                     )}
                   </div>
 
-                  {/* Left: Status & Actions */}
+                  {/* Status & Actions */}
                   <div className="flex items-center justify-between lg:justify-end gap-2.5 border-t lg:border-t-0 pt-2.5 lg:pt-0 border-border/40">
                     {/* Status Badge */}
                     {doc.is_archived ? (
                       <Badge variant="secondary" className="text-[10px]">
-                        مؤرشفة
+                        {t('مؤرشفة', 'Archivé')}
                       </Badge>
                     ) : doc.status_computed === 'expired' ? (
                       <Badge variant="destructive" className="text-[10px] gap-1">
                         <XCircle className="w-3 h-3" />
-                        منتهية
+                        {t('منتهية', 'Expiré')}
                       </Badge>
                     ) : doc.status_computed === 'warning' ? (
                       <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3" />
-                        تنتهي قريباً
+                        {t('تنتهي قريباً', 'Expire bientôt')}
                       </span>
                     ) : (
                       <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 gap-1">
                         <ShieldCheck className="w-3 h-3" />
-                        سارية
+                        {t('سارية', 'Valide')}
                       </Badge>
                     )}
 
@@ -507,15 +524,15 @@ export function FleetDocumentsList({
                         onClick={() => onRenewDocument(doc, plate)}
                         className="rounded-xl h-8 px-2.5 text-xs font-semibold text-foreground hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/40"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 ml-1 text-emerald-500" />
-                        تجديد سريع
+                        <RefreshCw className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'} text-emerald-500`} />
+                        {t('تجديد سريع', 'Renouveler')}
                       </Button>
 
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => onViewHistory(doc)}
-                        title="سجل التجديدات"
+                        title={t('سجل التجديدات', 'Historique')}
                         className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                       >
                         <Clock className="w-3.5 h-3.5" />
@@ -526,7 +543,7 @@ export function FleetDocumentsList({
                           asChild
                           variant="ghost"
                           size="icon"
-                          title="معاينة الملف"
+                          title={t('معاينة الملف', 'Voir le fichier')}
                           className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                         >
                           <a href={doc.file_url} target="_blank" rel="noreferrer">
@@ -540,7 +557,7 @@ export function FleetDocumentsList({
                         size="icon"
                         onClick={() => handleArchiveToggle(doc)}
                         disabled={actionLoading === doc.id}
-                        title={doc.is_archived ? 'استعادة من الأرشيف' : 'نقل للأرشيف'}
+                        title={doc.is_archived ? t('استعادة من الأرشيف', 'Restaurer') : t('نقل للأرشيف', 'Archiver')}
                         className="rounded-xl h-8 w-8 text-muted-foreground hover:text-foreground"
                       >
                         {doc.is_archived ? (
@@ -555,7 +572,7 @@ export function FleetDocumentsList({
                         size="icon"
                         onClick={() => handleDelete(doc.id)}
                         disabled={actionLoading === doc.id}
-                        title="حذف الوثيقة"
+                        title={t('حذف الوثيقة', 'Supprimer')}
                         className="rounded-xl h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

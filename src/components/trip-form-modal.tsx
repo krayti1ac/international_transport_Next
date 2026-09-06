@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Layers } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
+import { useLanguage } from '@/components/language-provider';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
@@ -57,6 +58,7 @@ export function TripFormModal({
     [availableRoutes]
   );
 
+  const { dir, t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'fleet'>('export');
 
@@ -93,6 +95,22 @@ export function TripFormModal({
     unloading_latitude: undefined,
     unloading_longitude: undefined,
   });
+
+  // Deduplicate drivers by name to avoid repeated entries in the dropdown,
+  // prioritizing currently selected driver if active.
+  const uniqueDrivers = useMemo(() => {
+    const map = new Map<string, Driver>();
+    for (const driver of availableDrivers) {
+      const nameKey = driver.name?.trim().toLowerCase();
+      if (!nameKey) continue;
+      if (!map.has(nameKey) || driver.id === formData.driver_id) {
+        map.set(nameKey, driver);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' })
+    );
+  }, [availableDrivers, formData.driver_id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -229,7 +247,7 @@ export function TripFormModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
-      dir="rtl"
+      dir={dir}
       onClick={onClose}
     >
       <Card
@@ -240,10 +258,10 @@ export function TripFormModal({
           <div>
             <CardTitle className="font-amiri text-xl flex items-center gap-2 text-foreground">
               <Navigation className="w-5 h-5 text-primary" />
-              {initialData ? 'تعديل دورة الرحلة الدولية' : 'تسجيل رحلة دولية (ذهاب + عودة)'}
+              {initialData ? t('تعديل دورة الرحلة الدولية', 'Modifier le cycle de voyage international') : t('تسجيل رحلة دولية (ذهاب + عودة)', 'Nouveau voyage international (Aller + Retour)')}
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              إدارة رحلة التصدير (Aller) ورحلة الاستيراد (Retour) في نفس الدورة
+              {t('إدارة رحلة التصدير (Aller) ورحلة الاستيراد (Retour) في نفس الدورة', 'Gestion de l\'exportation (Aller) et de l\'importation (Retour) dans la même rotation')}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -263,7 +281,7 @@ export function TripFormModal({
             }`}
           >
             <PlaneTakeoff className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            1. رحلة الذهاب (تصدير - Aller)
+            {t('1. رحلة الذهاب (تصدير - Aller)', '1. Trajet Aller (Export)')}
           </button>
           <button
             type="button"
@@ -275,7 +293,7 @@ export function TripFormModal({
             }`}
           >
             <PlaneLanding className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            2. رحلة العودة (استيراد - Retour)
+            {t('2. رحلة العودة (استيراد - Retour)', '2. Trajet Retour (Import)')}
           </button>
           <button
             type="button"
@@ -287,7 +305,7 @@ export function TripFormModal({
             }`}
           >
             <TruckIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            3. السائق والأسطول والحالة
+            {t('3. السائق والأسطول والحالة', '3. Chauffeur, Flotte & Statut')}
           </button>
         </div>
 
@@ -299,20 +317,20 @@ export function TripFormModal({
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200">
                   <span className="font-semibold flex items-center gap-1.5">
                     <PlaneTakeoff className="w-4 h-4 text-emerald-600" />
-                    بيانات الشحنة المصدرة من المغرب إلى أوروبا (Export Leg)
+                    {t('بيانات الشحنة المصدرة من المغرب إلى أوروبا (Export Leg)', 'Cargaison exportée Maroc → Europe (Aller)')}
                   </span>
                   <span className="font-mono font-bold">
-                    سعر الذهاب: {(formData.price_export || 0).toLocaleString()} MAD
+                    {t('سعر الذهاب:', 'Prix Aller :')} {(formData.price_export || 0).toLocaleString()} MAD
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground flex items-center justify-between">
-                      <span>عميل التصدير (رحلات الذهاب) *</span>
+                      <span>{t('عميل التصدير (رحلات الذهاب) *', 'Client Export (Aller) *')}</span>
                       <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                         <PlaneTakeoff className="w-3 h-3" />
-                        عملاء الذهاب فقط
+                        {t('عملاء الذهاب فقط', 'Clients Aller uniquement')}
                       </span>
                     </label>
                     <select
@@ -327,7 +345,7 @@ export function TripFormModal({
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
-                      <option value="">-- اختر عميل رحلة الذهاب --</option>
+                      <option value="">{t('-- اختر عميل رحلة الذهاب --', '-- Sélectionner le client Aller --')}</option>
                       {exportClients.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} {c.city ? `- (${c.city})` : ''}
@@ -337,17 +355,17 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">مسار الذهاب (Route Aller) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('مسار الذهاب (Route Aller) *', 'Itinéraire Aller (Route Aller) *')}</label>
                     <select
                       value={formData.route_export || ''}
                       onChange={(e) => setFormData({ ...formData, route_export: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
-                      <option value="">-- اختر مسار الذهاب --</option>
+                      <option value="">{t('-- اختر مسار الذهاب --', '-- Sélectionner l\'itinéraire Aller --')}</option>
                       {outboundRoutes.map((r) => (
                         <option key={r.id} value={`${r.origin} → ${r.destination}`}>
-                          {r.name} {r.distance_km ? `(${r.distance_km} كم)` : ''}
+                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''}
                         </option>
                       ))}
                     </select>
@@ -356,7 +374,7 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم CMR التصدير (CMR Aller) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم CMR التصدير (CMR Aller) *', 'N° CMR Aller *')}</label>
                     <Input
                       value={formData.cmr_export_number || ''}
                       onChange={(e) => setFormData({ ...formData, cmr_export_number: e.target.value })}
@@ -367,7 +385,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ الانطلاق (Départ) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ الانطلاق (Départ) *', 'Date départ (Départ) *')}</label>
                     <Input
                       type="date"
                       value={formData.departure_date || ''}
@@ -378,7 +396,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ تفريغ التصدير (Déchargement)</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ تفريغ التصدير (Déchargement)', 'Date déchargement Aller')}</label>
                     <Input
                       type="date"
                       value={formData.unloading_date_export || ''}
@@ -390,7 +408,7 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">سعر شحن الذهاب (MAD/EUR) *</label>
+                    <label className="text-sm font-medium text-foreground">{t('سعر شحن الذهاب (MAD/EUR) *', 'Prix fret Aller (MAD/EUR) *')}</label>
                     <Input
                       type="number"
                       step="0.01"
@@ -403,7 +421,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">شركة العبّارة للذهاب (Bateau Aller)</label>
+                    <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للذهاب (Bateau Aller)', 'Compagnie maritime Aller')}</label>
                     <Input
                       value={formData.ferry_company || ''}
                       onChange={(e) => setFormData({ ...formData, ferry_company: e.target.value })}
@@ -412,7 +430,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم حجز باخرة الذهاب (Localizador)</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة الذهاب (Localizador)', 'N° réservation ferry Aller')}</label>
                     <Input
                       value={formData.ferry_localizador || ''}
                       onChange={(e) => setFormData({ ...formData, ferry_localizador: e.target.value })}
@@ -424,53 +442,53 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">وصف بضاعة التصدير (Marchandise)</label>
+                    <label className="text-sm font-medium text-foreground">{t('وصف بضاعة التصدير (Marchandise)', 'Description marchandise Aller')}</label>
                     <Input
                       value={formData.goods_description_export || ''}
                       onChange={(e) => setFormData({ ...formData, goods_description_export: e.target.value })}
-                      placeholder="خضروات، فواكه، نسيج، قطع غيار..."
+                      placeholder={t('خضروات، فواكه، نسيج، قطع غيار...', 'Légumes, fruits, textile, pièces...')}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الوزن التقريبي (طن)</label>
+                    <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
                     <Input
                       type="number"
                       step="0.1"
                       value={formData.weight_export || ''}
                       onChange={(e) => setFormData({ ...formData, weight_export: parseFloat(e.target.value) || undefined })}
-                      placeholder="مثال: 22.5"
+                      placeholder={t('مثال: 22.5', 'Ex: 22.5')}
                       dir="ltr"
                     />
                   </div>
                 </div>
 
                 <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2">📍 منطقة الشحن (GPS)</p>
+                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2">📍 {t('منطقة الشحن (GPS)', 'Lieu de chargement (GPS)')}</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-1">خط العرض</label>
+                      <label className="block text-xs text-muted-foreground mb-1">{t('خط العرض', 'Latitude')}</label>
                       <Input
                         type="number"
                         step="any"
                         value={formData.shipping_latitude ?? ''}
                         onChange={(e) => setFormData({ ...formData, shipping_latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="منطقة الشحن"
+                        placeholder={t('منطقة الشحن', 'Lieu de chargement')}
                         dir="ltr"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-1">خط الطول</label>
+                      <label className="block text-xs text-muted-foreground mb-1">{t('خط الطول', 'Longitude')}</label>
                       <Input
                         type="number"
                         step="any"
                         value={formData.shipping_longitude ?? ''}
                         onChange={(e) => setFormData({ ...formData, shipping_longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="منطقة الشحن"
+                        placeholder={t('منطقة الشحن', 'Lieu de chargement')}
                         dir="ltr"
                       />
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
                 </div>
               </div>
             )}
@@ -481,20 +499,20 @@ export function TripFormModal({
                 <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center justify-between text-xs text-blue-900 dark:text-blue-200">
                   <span className="font-semibold flex items-center gap-1.5">
                     <PlaneLanding className="w-4 h-4 text-blue-600" />
-                    بيانات الشحنة المستوردة من أوروبا إلى المغرب (Import Leg)
+                    {t('بيانات الشحنة المستوردة من أوروبا إلى المغرب (Import Leg)', 'Cargaison importée Europe → Maroc (Retour)')}
                   </span>
                   <span className="font-mono font-bold">
-                    سعر العودة: {(formData.price_import || 0).toLocaleString()} MAD
+                    {t('سعر العودة:', 'Prix Retour :')} {(formData.price_import || 0).toLocaleString()} MAD
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground flex items-center justify-between">
-                      <span>عميل الاستيراد (رحلات العودة)</span>
+                      <span>{t('عميل الاستيراد (رحلات العودة)', 'Client Import (Retour)')}</span>
                       <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
                         <PlaneLanding className="w-3 h-3" />
-                        عملاء العودة فقط
+                        {t('عملاء العودة فقط', 'Clients Retour uniquement')}
                       </span>
                     </label>
                     <select
@@ -508,7 +526,7 @@ export function TripFormModal({
                       }}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- اختر عميل رحلة العودة (إن وُجد) --</option>
+                      <option value="">{t('-- اختر عميل رحلة العودة (إن وُجد) --', '-- Sélectionner le client Retour (si applicable) --')}</option>
                       {importClients.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} {c.city ? `- (${c.city})` : ''}
@@ -518,16 +536,16 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">مسار العودة (Route Retour)</label>
+                    <label className="text-sm font-medium text-foreground">{t('مسار العودة (Route Retour)', 'Itinéraire Retour (Route Retour)')}</label>
                     <select
                       value={formData.route_import || ''}
                       onChange={(e) => setFormData({ ...formData, route_import: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- اختر مسار العودة --</option>
+                      <option value="">{t('-- اختر مسار العودة --', '-- Sélectionner l\'itinéraire Retour --')}</option>
                       {returnRoutes.map((r) => (
                         <option key={r.id} value={`${r.origin} → ${r.destination}`}>
-                          {r.name} {r.distance_km ? `(${r.distance_km} كم)` : ''}
+                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''}
                         </option>
                       ))}
                     </select>
@@ -536,7 +554,7 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم CMR الاستيراد (CMR Retour)</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم CMR الاستيراد (CMR Retour)', 'N° CMR Retour')}</label>
                     <Input
                       value={formData.cmr_import_number || ''}
                       onChange={(e) => setFormData({ ...formData, cmr_import_number: e.target.value })}
@@ -546,7 +564,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ الشحن بأوروبا (Chargement)</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ الشحن بأوروبا (Chargement)', 'Date chargement Europe')}</label>
                     <Input
                       type="date"
                       value={formData.loading_date_import || ''}
@@ -556,7 +574,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">تاريخ تفريغ العودة بالمغرب</label>
+                    <label className="text-sm font-medium text-foreground">{t('تاريخ تفريغ العودة بالمغرب', 'Date déchargement Maroc')}</label>
                     <Input
                       type="date"
                       value={formData.unloading_date_import || ''}
@@ -568,7 +586,7 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">سعر شحن العودة (MAD/EUR)</label>
+                    <label className="text-sm font-medium text-foreground">{t('سعر شحن العودة (MAD/EUR)', 'Prix fret Retour (MAD/EUR)')}</label>
                     <Input
                       type="number"
                       step="0.01"
@@ -580,7 +598,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">شركة العبّارة للعودة (Bateau Retour)</label>
+                    <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للعودة (Bateau Retour)', 'Compagnie maritime Retour')}</label>
                     <Input
                       value={formData.ferry_company_import || ''}
                       onChange={(e) => setFormData({ ...formData, ferry_company_import: e.target.value })}
@@ -589,7 +607,7 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">رقم حجز باخرة العودة (Localizador)</label>
+                    <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة العودة (Localizador)', 'N° réservation ferry Retour')}</label>
                     <Input
                       value={formData.ferry_localizador_import || ''}
                       onChange={(e) => setFormData({ ...formData, ferry_localizador_import: e.target.value })}
@@ -601,53 +619,53 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">وصف بضاعة الاستيراد</label>
+                    <label className="text-sm font-medium text-foreground">{t('وصف بضاعة الاستيراد', 'Description marchandise Retour')}</label>
                     <Input
                       value={formData.goods_description_import || ''}
                       onChange={(e) => setFormData({ ...formData, goods_description_import: e.target.value })}
-                      placeholder="مواد أولية، آلات صناعية، فارغة (Vide)..."
+                      placeholder={t('مواد أولية، آلات صناعية، فارغة (Vide)...', 'Matières premières, machines, vide...')}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">الوزن التقريبي (طن)</label>
+                    <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
                     <Input
                       type="number"
                       step="0.1"
                       value={formData.weight_import || ''}
                       onChange={(e) => setFormData({ ...formData, weight_import: parseFloat(e.target.value) || undefined })}
-                      placeholder="مثال: 18.0"
+                      placeholder={t('مثال: 18.0', 'Ex: 18.0')}
                       dir="ltr"
                     />
                   </div>
                 </div>
 
                 <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">📍 منطقة التفريغ (GPS)</p>
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">📍 {t('منطقة التفريغ (GPS)', 'Lieu de déchargement (GPS)')}</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-1">خط العرض</label>
+                      <label className="block text-xs text-muted-foreground mb-1">{t('خط العرض', 'Latitude')}</label>
                       <Input
                         type="number"
                         step="any"
                         value={formData.unloading_latitude ?? ''}
                         onChange={(e) => setFormData({ ...formData, unloading_latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="منطقة التفريغ"
+                        placeholder={t('منطقة التفريغ', 'Lieu de déchargement')}
                         dir="ltr"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-1">خط الطول</label>
+                      <label className="block text-xs text-muted-foreground mb-1">{t('خط الطول', 'Longitude')}</label>
                       <Input
                         type="number"
                         step="any"
                         value={formData.unloading_longitude ?? ''}
                         onChange={(e) => setFormData({ ...formData, unloading_longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="منطقة التفريغ"
+                        placeholder={t('منطقة التفريغ', 'Lieu de déchargement')}
                         dir="ltr"
                       />
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
                 </div>
               </div>
             )}
@@ -658,26 +676,26 @@ export function TripFormModal({
                 <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
                   <span className="font-semibold flex items-center gap-1.5">
                     <TruckIcon className="w-4 h-4 text-amber-600" />
-                    تعيين طاقم الرحلة والأسطول والحالة التشغيلية
+                    {t('تعيين طاقم الرحلة والأسطول والحالة التشغيلية', 'Affectation équipage, flotte et statut opérationnel')}
                   </span>
                   <span className="font-mono font-bold text-sm">
-                    إجمالي إيراد الدورة: {((formData.price_export || 0) + (formData.price_import || 0)).toLocaleString()} MAD
+                    {t('إجمالي إيراد الدورة:', 'Revenu total du cycle :')} {((formData.price_export || 0) + (formData.price_import || 0)).toLocaleString()} MAD
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">السائق المسؤول *</label>
+                    <label className="text-sm font-medium text-foreground">{t('السائق المسؤول *', 'Chauffeur responsable *')}</label>
                     <select
                       value={formData.driver_id || ''}
                       onChange={(e) => handleDriverChange(e.target.value)}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
-                      <option value="">-- اختر السائق --</option>
-                      {availableDrivers.map((driver) => (
+                      <option value="">{t('-- اختر السائق --', '-- Sélectionner le chauffeur --')}</option>
+                      {uniqueDrivers.map((driver) => (
                         <option key={driver.id} value={driver.id}>
-                          {driver.name} {driver.phone ? `(${driver.phone})` : ''}
+                          {driver.name}
                         </option>
                       ))}
                     </select>
@@ -686,7 +704,7 @@ export function TripFormModal({
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                       <TruckIcon className="w-4 h-4 text-blue-500" />
-                      الشاحنة المخصصة (Tracteur) *
+                      {t('الشاحنة المخصصة (Tracteur) *', 'Tracteur assigné *')}
                     </label>
                     <select
                       value={formData.truck_id || ''}
@@ -694,7 +712,7 @@ export function TripFormModal({
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
-                      <option value="">-- اختيار الشاحنة --</option>
+                      <option value="">{t('-- اختيار الشاحنة --', '-- Sélectionner le camion --')}</option>
                       {availableTrucks.map((truck) => (
                         <option key={truck.id} value={truck.id}>
                           {truck.plate_number} {truck.model ? `(${truck.model})` : ''}
@@ -706,14 +724,14 @@ export function TripFormModal({
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                       <TrailerIcon className="w-4 h-4 text-purple-500" />
-                      المقطورة (Remorque / Frigo)
+                      {t('المقطورة (Remorque / Frigo)', 'Remorque (Frigo / Bâchée)')}
                     </label>
                     <select
                       value={formData.trailer_id || ''}
                       onChange={(e) => setFormData({ ...formData, trailer_id: parseInt(e.target.value) || undefined })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="">-- اختيار المقطورة --</option>
+                      <option value="">{t('-- اختيار المقطورة --', '-- Sélectionner la remorque --')}</option>
                       {availableTrailers.map((trailer) => (
                         <option key={trailer.id} value={trailer.id}>
                           {trailer.plate_number} {trailer.model ? `(${trailer.model})` : ''}
@@ -725,30 +743,30 @@ export function TripFormModal({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">حالة مسار الرحلة</label>
+                    <label className="text-sm font-medium text-foreground">{t('حالة مسار الرحلة', 'Statut du voyage')}</label>
                     <select
                       value={formData.status || 'pending'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="pending">قيد التجهيز (Pending)</option>
-                      <option value="en_route_outbound">في طريق الذهاب (En route Aller / Export)</option>
-                      <option value="at_destination_export">وصل وجهة التصدير (At Export Destination)</option>
-                      <option value="en_route_inbound">في طريق العودة (En route Retour / Import)</option>
-                      <option value="at_customs">في جمرك الميناء (At Customs)</option>
-                      <option value="completed">مكتملة ومفرغة (Completed)</option>
+                      <option value="pending">{t('قيد التجهيز (Pending)', 'En préparation (Pending)')}</option>
+                      <option value="en_route_outbound">{t('في طريق الذهاب (En route Aller / Export)', 'En route Aller (Export)')}</option>
+                      <option value="at_destination_export">{t('وصل وجهة التصدير (At Export Destination)', 'Arrivé destination Export')}</option>
+                      <option value="en_route_inbound">{t('في طريق العودة (En route Retour / Import)', 'En route Retour (Import)')}</option>
+                      <option value="at_customs">{t('في جمرك الميناء (At Customs)', 'En douane portuaire')}</option>
+                      <option value="completed">{t('مكتملة ومفرغة (Completed)', 'Terminé & Déchargé')}</option>
                     </select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">نوع التسعير / العملة</label>
+                    <label className="text-sm font-medium text-foreground">{t('نوع التسعير / العملة', 'Devise')}</label>
                     <select
                       value={formData.price_type || 'MAD'}
                       onChange={(e) => setFormData({ ...formData, price_type: e.target.value })}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
-                      <option value="MAD">درهم مغربي (MAD)</option>
-                      <option value="EUR">يورو (EUR)</option>
+                      <option value="MAD">{t('درهم مغربي (MAD)', 'Dirham marocain (MAD)')}</option>
+                      <option value="EUR">{t('يورو (EUR)', 'Euro (EUR)')}</option>
                     </select>
                   </div>
                 </div>
@@ -758,21 +776,21 @@ export function TripFormModal({
             {/* Total summary banner */}
             <div className="p-3 bg-muted/50 rounded-xl border border-border flex items-center justify-between text-xs">
               <div className="flex items-center gap-4">
-                <span>🛫 ذهاب: <strong className="text-foreground">{(formData.price_export || 0).toLocaleString()}</strong></span>
-                <span>🛬 عودة: <strong className="text-foreground">{(formData.price_import || 0).toLocaleString()}</strong></span>
+                <span>🛫 {t('ذهاب:', 'Aller :')} <strong className="text-foreground">{(formData.price_export || 0).toLocaleString()}</strong></span>
+                <span>🛬 {t('عودة:', 'Retour :')} <strong className="text-foreground">{(formData.price_import || 0).toLocaleString()}</strong></span>
               </div>
               <div className="text-sm font-bold text-primary font-mono">
-                الإجمالي: {((formData.price_export || 0) + (formData.price_import || 0)).toLocaleString()} {formData.price_type || 'MAD'}
+                {t('الإجمالي:', 'Total :')} {((formData.price_export || 0) + (formData.price_import || 0)).toLocaleString()} {formData.price_type || 'MAD'}
               </div>
             </div>
 
             <div className="flex gap-2 pt-2 border-t border-border">
               <Button type="submit" disabled={loading} className="flex-1 flex items-center justify-center gap-2">
                 <Save className="w-4 h-4" />
-                {loading ? 'جاري الحفظ...' : initialData ? 'تحديث بيانات الرحلة' : 'حفظ وتأكيد الرحلة الدولية'}
+                {loading ? t('جاري الحفظ...', 'Enregistrement...') : initialData ? t('تحديث بيانات الرحلة', 'Mettre à jour le voyage') : t('حفظ وتأكيد الرحلة الدولية', 'Confirmer et créer le voyage')}
               </Button>
               <Button type="button" variant="outline" onClick={onClose}>
-                إلغاء
+                {t('إلغاء', 'Annuler')}
               </Button>
             </div>
           </form>

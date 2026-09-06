@@ -32,12 +32,15 @@ export interface FuelAnomaly {
   severity: 'high' | 'medium' | 'low';
 }
 
-export async function calculateFuelAnalytics(): Promise<{
+export interface FuelAnalyticsResponse {
   success: boolean;
   trucks?: TruckFuelStats[];
   anomalies?: FuelAnomaly[];
+  totalTrucks?: number;
   error?: string;
-}> {
+}
+
+export async function calculateFuelAnalytics(): Promise<FuelAnalyticsResponse> {
   try {
     const supabase = await createClient();
 
@@ -48,20 +51,33 @@ export async function calculateFuelAnalytics(): Promise<{
 
     if (trucksError) throw trucksError;
 
-    const { data: fuelReceipts, error: fuelError } = await supabase
+    // Resiliently fetch truck maintenance records without relying on 'type' or 'date' columns
+    const { data: maintenanceRows, error: fuelError } = await supabase
       .from('truck_maintenance')
-      .select('*')
-      .eq('type', 'fuel')
-      .order('truck_id')
-      .order('date');
+      .select('*');
 
     if (fuelError) throw fuelError;
 
+    // Filter fuel receipts in memory (supports expense_type, type, carburant, gasoil, etc.)
+    const fuelReceipts = (maintenanceRows || []).filter((receipt: any) => {
+      const expType = (receipt.expense_type || receipt.type || '').toString().toLowerCase();
+      return expType === 'fuel' || expType === 'carburant' || expType === 'gasoil';
+    });
+
+    // Sort receipts by truck_id, then by maintenance date
+    fuelReceipts.sort((a: any, b: any) => {
+      const truckDiff = (a.truck_id || 0) - (b.truck_id || 0);
+      if (truckDiff !== 0) return truckDiff;
+      const dateA = new Date(a.maintenance_date || a.date || a.created_at || 0).getTime();
+      const dateB = new Date(b.maintenance_date || b.date || b.created_at || 0).getTime();
+      return dateA - dateB;
+    });
+
     const { data: locations, error: locError } = await supabase
-      .from('truck_location_history')
+      .from('truck_locations')
       .select('*')
       .order('truck_id')
-      .order('timestamp');
+      .order('recorded_at');
 
     if (locError) throw locError;
 
@@ -70,11 +86,15 @@ export async function calculateFuelAnalytics(): Promise<{
       if (!locationsByTruck[loc.truck_id]) {
         locationsByTruck[loc.truck_id] = [];
       }
-      locationsByTruck[loc.truck_id].push(loc);
+      locationsByTruck[loc.truck_id].push({
+        ...loc,
+        timestamp: loc.timestamp || loc.recorded_at,
+        recorded_at: loc.recorded_at || loc.timestamp,
+      });
     }
 
     const receiptsByTruck: Record<number, TruckMaintenance[]> = {};
-    for (const receipt of fuelReceipts || []) {
+    for (const receipt of fuelReceipts) {
       if (!receiptsByTruck[receipt.truck_id]) {
         receiptsByTruck[receipt.truck_id] = [];
       }
@@ -98,69 +118,48 @@ export async function calculateFuelAnalytics(): Promise<{
         const liters = new Decimal(receipt.amount || 0);
         totalLiters = totalLiters.plus(liters);
 
-        const receiptDate = new Date(receipt.date);
-        const relevantLocations = truckLocations.filter(loc => {
-          const locDate = new Date(loc.timestamp);
-          const diffDays = (receiptDate.getTime() - locDate.getTime()) / (1000 * 60 * 60 * 24);
-          return diffDays >= -1 && diffDays <= 1;
-        });
+        const receiptDateStr = receipt.maintenance_date || receipt.date || receipt.created_at || '';
+        const receiptDate = new Date(receiptDateStr);
+        const receiptTime = receiptDate.getTime();
+        const hasValidDate = !isNaN(receiptTime);
 
-        if (relevantLocations.length >= 2) {
-          let tripDistance = new Decimal(0);
-          for (let j = 1; j < relevantLocations.length; j++) {
-            const prev = relevantLocations[j - 1];
-            const curr = relevantLocations[j];
-            const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-            tripDistance = tripDistance.plus(dist);
-          }
-          totalDistance = totalDistance.plus(tripDistance);
-        }
-      }
-
-      const distanceNum = totalDistance.toNumber();
-      const lPer100km = distanceNum > 0 ? (totalLiters.toNumber() / distanceNum) * 100 : 0;
-
-      let status: TruckFuelStats['status'] = 'normal';
-      if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 1.5) {
-        status = 'critical';
-      } else if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
-        status = 'warning';
-      }
-
-      truckStats.push({
-        truckId: truck.id,
-        truckName: `${truck.plate_number} (${truck.model})`,
-        totalLiters: parseFloat(totalLiters.toFixed(2)),
-        totalDistanceKm: parseFloat(totalDistance.toFixed(2)),
-        lPer100km: parseFloat(new Decimal(lPer100km).toFixed(2)),
-        receiptsCount: receipts.length,
-        status,
-      });
-
-      for (const receipt of receipts) {
-        const liters = new Decimal(receipt.amount || 0);
-        const receiptDate = new Date(receipt.date);
-        const relevantLocations = truckLocations.filter(loc => {
-          const locDate = new Date(loc.timestamp);
-          const diffDays = (receiptDate.getTime() - locDate.getTime()) / (1000 * 60 * 60 * 24);
-          return diffDays >= -1 && diffDays <= 1;
-        });
+        const relevantLocations = hasValidDate
+          ? truckLocations.filter((loc) => {
+              const locDate = new Date(loc.timestamp || loc.recorded_at || 0);
+              const locTime = locDate.getTime();
+              if (isNaN(locTime)) return false;
+              const diffDays = Math.abs(receiptTime - locTime) / (1000 * 60 * 60 * 24);
+              return diffDays <= 1;
+            })
+          : [];
 
         let distanceForReceipt = new Decimal(0);
         if (relevantLocations.length >= 2) {
           for (let j = 1; j < relevantLocations.length; j++) {
             const prev = relevantLocations[j - 1];
             const curr = relevantLocations[j];
-            const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-            distanceForReceipt = distanceForReceipt.plus(dist);
+            if (
+              typeof prev.latitude === 'number' &&
+              typeof prev.longitude === 'number' &&
+              typeof curr.latitude === 'number' &&
+              typeof curr.longitude === 'number'
+            ) {
+              const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+              if (!isNaN(dist) && isFinite(dist)) {
+                distanceForReceipt = distanceForReceipt.plus(new Decimal(dist));
+              }
+            }
           }
+          totalDistance = totalDistance.plus(distanceForReceipt);
         }
 
-        const distNum = distanceForReceipt.toNumber();
-        const receiptLPer100km = distNum > 0 ? (liters.toNumber() / distNum) * 100 : liters.toNumber();
+        // Decimal.js calculation for receipt fuel consumption
+        const receiptLPer100km = distanceForReceipt.greaterThan(0)
+          ? liters.dividedBy(distanceForReceipt).times(100).toNumber()
+          : 0;
 
-        if (receiptLPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
-          let severity: FuelAnomaly['severity'] = 'medium';
+        if (distanceForReceipt.greaterThan(0) && receiptLPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
+          let severity: FuelAnomaly['severity'] = 'low';
           if (receiptLPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 2) {
             severity = 'high';
           } else if (receiptLPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 1.5) {
@@ -172,26 +171,55 @@ export async function calculateFuelAnalytics(): Promise<{
           anomalies.push({
             id: receipt.id,
             truckId: truck.id,
-            truckName: `${truck.plate_number} (${truck.model})`,
-            date: receipt.date,
+            truckName: `${truck.plate_number}${truck.model ? ` (${truck.model})` : ''}`,
+            date: receiptDateStr,
             liters: parseFloat(liters.toFixed(2)),
             distanceKm: parseFloat(distanceForReceipt.toFixed(2)),
             lPer100km: parseFloat(new Decimal(receiptLPer100km).toFixed(2)),
-            location: receipt.notes || 'Unknown',
-            notes: ` consommation élevée détectée: ${new Decimal(receiptLPer100km).toFixed(2)} L/100km`,
+            location: receipt.description || receipt.notes || 'غير محدد',
+            notes: `استهلاك مرتفع غير معتاد: ${new Decimal(receiptLPer100km).toFixed(2)} لتر/100كم`,
             severity,
           });
         }
       }
+
+      // Decimal.js calculation for overall truck fuel consumption
+      const lPer100km = totalDistance.greaterThan(0)
+        ? totalLiters.dividedBy(totalDistance).times(100).toNumber()
+        : 0;
+
+      let status: TruckFuelStats['status'] = 'normal';
+      if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 1.5) {
+        status = 'critical';
+      } else if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
+        status = 'warning';
+      }
+
+      truckStats.push({
+        truckId: truck.id,
+        truckName: `${truck.plate_number}${truck.model ? ` (${truck.model})` : ''}`,
+        totalLiters: parseFloat(totalLiters.toFixed(2)),
+        totalDistanceKm: parseFloat(totalDistance.toFixed(2)),
+        lPer100km: parseFloat(new Decimal(lPer100km).toFixed(2)),
+        receiptsCount: receipts.length,
+        status,
+      });
     }
 
     return {
       success: true,
       trucks: truckStats,
       anomalies,
+      totalTrucks: (trucks || []).length,
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to calculate fuel analytics';
+    console.error('Fuel intelligence error:', err);
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : 'فشل في حساب تحليلات الوقود';
     return { success: false, error: message };
   }
 }
@@ -204,80 +232,122 @@ export async function detectFuelAnomalies(truckId?: number): Promise<{
   try {
     const supabase = await createClient();
 
-    let query = supabase
-      .from('truck_maintenance')
-      .select('*')
-      .eq('type', 'fuel')
-      .order('truck_id')
-      .order('date');
-
+    let query = supabase.from('truck_maintenance').select('*');
     if (truckId) {
       query = query.eq('truck_id', truckId);
     }
 
-    const { data: receipts, error } = await query;
-
+    const { data: maintenanceRows, error } = await query;
     if (error) throw error;
 
+    const receipts = (maintenanceRows || []).filter((receipt: any) => {
+      const expType = (receipt.expense_type || receipt.type || '').toString().toLowerCase();
+      return expType === 'fuel' || expType === 'carburant' || expType === 'gasoil';
+    });
+
+    receipts.sort((a: any, b: any) => {
+      const truckDiff = (a.truck_id || 0) - (b.truck_id || 0);
+      if (truckDiff !== 0) return truckDiff;
+      const dateA = new Date(a.maintenance_date || a.date || a.created_at || 0).getTime();
+      const dateB = new Date(b.maintenance_date || b.date || b.created_at || 0).getTime();
+      return dateA - dateB;
+    });
+
+    // Also fetch trucks to map real truck names
+    const { data: trucksData } = await supabase.from('trucks').select('id, plate_number, model');
+    const truckNameMap = new Map<number, string>();
+    for (const t of trucksData || []) {
+      truckNameMap.set(t.id, `${t.plate_number}${t.model ? ` (${t.model})` : ''}`);
+    }
+
     const { data: locations } = await supabase
-      .from('truck_location_history')
+      .from('truck_locations')
       .select('*')
       .order('truck_id')
-      .order('timestamp');
+      .order('recorded_at');
 
     const locationsByTruck: Record<number, TruckLocationHistory[]> = {};
     for (const loc of locations || []) {
       if (!locationsByTruck[loc.truck_id]) locationsByTruck[loc.truck_id] = [];
-      locationsByTruck[loc.truck_id].push(loc);
+      locationsByTruck[loc.truck_id].push({
+        ...loc,
+        timestamp: loc.timestamp || loc.recorded_at,
+        recorded_at: loc.recorded_at || loc.timestamp,
+      });
     }
 
     const anomalies: FuelAnomaly[] = [];
 
-    for (const receipt of receipts || []) {
+    for (const receipt of receipts) {
       const liters = new Decimal(receipt.amount || 0);
-      const receiptDate = new Date(receipt.date);
-      const relevantLocations = (locationsByTruck[receipt.truck_id] || []).filter(loc => {
-        const locDate = new Date(loc.timestamp);
-        const diffDays = (receiptDate.getTime() - locDate.getTime()) / (1000 * 60 * 60 * 24);
-        return diffDays >= -1 && diffDays <= 1;
-      });
+      const receiptDateStr = receipt.maintenance_date || receipt.date || receipt.created_at || '';
+      const receiptDate = new Date(receiptDateStr);
+      const receiptTime = receiptDate.getTime();
+      const hasValidDate = !isNaN(receiptTime);
+
+      const relevantLocations = hasValidDate
+        ? (locationsByTruck[receipt.truck_id] || []).filter((loc) => {
+            const locDate = new Date(loc.timestamp || loc.recorded_at || '');
+            const locTime = locDate.getTime();
+            if (isNaN(locTime)) return false;
+            const diffDays = Math.abs(receiptTime - locTime) / (1000 * 60 * 60 * 24);
+            return diffDays <= 1;
+          })
+        : [];
 
       let distance = new Decimal(0);
       if (relevantLocations.length >= 2) {
         for (let j = 1; j < relevantLocations.length; j++) {
           const prev = relevantLocations[j - 1];
           const curr = relevantLocations[j];
-          const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-          distance = distance.plus(dist);
+          if (
+            typeof prev.latitude === 'number' &&
+            typeof prev.longitude === 'number' &&
+            typeof curr.latitude === 'number' &&
+            typeof curr.longitude === 'number'
+          ) {
+            const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+            if (!isNaN(dist) && isFinite(dist)) {
+              distance = distance.plus(new Decimal(dist));
+            }
+          }
         }
       }
 
-      const distKm = distance.toNumber();
-      const lPer100km = distKm > 0 ? (liters.toNumber() / distKm) * 100 : liters.toNumber();
+      // Only evaluate anomalies if distance > 0 to avoid false positives on receipts without GPS data
+      if (distance.greaterThan(0)) {
+        const lPer100km = liters.dividedBy(distance).times(100).toNumber();
 
-      if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
-        let severity: FuelAnomaly['severity'] = 'medium';
-        if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 2) severity = 'high';
-        else if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 1.5) severity = 'high';
+        if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM) {
+          let severity: FuelAnomaly['severity'] = 'medium';
+          if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 2) severity = 'high';
+          else if (lPer100km > HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM * 1.5) severity = 'high';
 
-        anomalies.push({
-          id: receipt.id,
-          truckId: receipt.truck_id,
-          truckName: `Truck #${receipt.truck_id}`,
-          date: receipt.date,
-          liters: parseFloat(liters.toFixed(2)),
-          distanceKm: parseFloat(distance.toFixed(2)),
-          lPer100km: parseFloat(new Decimal(lPer100km).toFixed(2)),
-          location: receipt.notes || 'Unknown',
-          notes: `Potential leak or anomaly: ${new Decimal(lPer100km).toFixed(2)} L/100km exceeds threshold of ${HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM}`,
-          severity,
-        });
+          anomalies.push({
+            id: receipt.id,
+            truckId: receipt.truck_id,
+            truckName: truckNameMap.get(receipt.truck_id) || `شاحنة #${receipt.truck_id}`,
+            date: receiptDateStr,
+            liters: parseFloat(liters.toFixed(2)),
+            distanceKm: parseFloat(distance.toFixed(2)),
+            lPer100km: parseFloat(new Decimal(lPer100km).toFixed(2)),
+            location: receipt.description || receipt.notes || 'غير محدد',
+            notes: `شبهة تسريب أو استهلاك مفرط: ${new Decimal(lPer100km).toFixed(2)} لتر/100كم (الحد الأقصى: ${HIGH_CONSUMPTION_THRESHOLD_L_PER_100KM})`,
+            severity,
+          });
+        }
       }
     }
 
     return { success: true, anomalies };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to detect fuel anomalies';
+    console.error('Detect fuel anomalies error:', err);
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : 'فشل في كشف الشذوذ في الوقود';
     return { success: false, error: message };
   }
 }
