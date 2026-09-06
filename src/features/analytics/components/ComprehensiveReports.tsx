@@ -405,7 +405,6 @@ export default function ComprehensiveReports() {
   };
 
   return (
-  return (
     <div className="space-y-6 max-w-7xl mx-auto print:p-0 print:m-0" dir={dir}>
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-border/40 print:hidden">

@@ -39,7 +39,7 @@ export default function TreasuryDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {CASH_BOXES.map((box) => {
+        {CASH_BOXES.map((box: { code: string; labelAr: string; labelFr?: string; currency: string }) => {
           const balance = balances?.[box.code];
           const Icon =
             box.code === 'owner_cash'

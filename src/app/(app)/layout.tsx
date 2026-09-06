@@ -24,5 +24,5 @@ export default async function AppLayout({
     redirect('/login');
   }
 
-  return <DashboardClient user={userProfile}>{children}</DashboardClient>;
+  return <DashboardClient />;
 }

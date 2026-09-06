@@ -247,8 +247,8 @@ export default function ForexPage() {
 
   const handleManualRateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    let eurMadDec: Decimal;
-    let madEurDec: Decimal;
+    let eurMadDec: InstanceType<typeof Decimal>;
+    let madEurDec: InstanceType<typeof Decimal>;
 
     try {
       eurMadDec = new Decimal(manualRate.eur_to_mad);

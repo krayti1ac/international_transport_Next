@@ -329,7 +329,6 @@ function InvoicesPageContent() {
   });
 
   return (
-  return (
     <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-2 border-b border-border/40">
@@ -504,7 +503,7 @@ function InvoicesPageContent() {
               <div className="relative flex-1">
                 <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
                 <Input
-                  placeholder={t('بحث برقم الفاتورة أو المرجع أو العميل...', 'Recherche n° facture, réf ou client...')}
+                   placeholder={t('بحث برقم الفاتورة أو الحالة أو العميل...', 'Rechercher par n° de facture, statut ou client...', 'Search by invoice number, status, or client...')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className={`${dir === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'} h-9 text-xs rounded-xl bg-card border-border/80`}
@@ -577,7 +576,7 @@ function InvoicesPageContent() {
                           <div className="flex justify-between py-1 border-b border-border/30">
                             <span className="text-muted-foreground">{t('تاريخ الإصدار:', "Date d'émission :")}</span>
                             <span className="font-mono text-foreground">
-                              {new Date(invoice.issue_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
+                               {new Date(invoice.issue_date).toLocaleDateString(locale === 'ar' ? 'ar-MA' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                             </span>
                           </div>
                         )}
@@ -585,7 +584,7 @@ function InvoicesPageContent() {
                           <div className="flex justify-between py-1 border-b border-border/30">
                             <span className="text-muted-foreground">{t('تاريخ الاستحقاق:', "Date d'échéance :")}</span>
                             <span className="font-mono text-destructive font-medium">
-                              {new Date(invoice.due_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
+                               {new Date(invoice.due_date).toLocaleDateString(locale === 'ar' ? 'ar-MA' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                             </span>
                           </div>
                         )}
@@ -741,7 +740,7 @@ function InvoicesPageContent() {
                           <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                             <span className="font-mono text-foreground text-[11px]">
-                              {new Date(invoice.issue_date).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
+                               {new Date(invoice.issue_date).toLocaleDateString(locale === 'ar' ? 'ar-MA' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                             </span>
                           </div>
                         )}
@@ -773,7 +772,7 @@ function InvoicesPageContent() {
                             size="sm"
                             className="text-xs rounded-xl h-8 px-2.5"
                             onClick={() => setActiveInvoice(invoice)}
-                            title={t('معاينة وطباعة الفاتورة', 'Imprimer la facture')}
+                            title={t('معاينة وطباعة الفاتورة', 'Aperçu et impression', 'Preview & Print Invoice')}
                           >
                             <Printer className={`w-3.5 h-3.5 text-primary ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
                             {t('طباعة', 'Imprimer')}

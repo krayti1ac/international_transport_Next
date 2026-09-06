@@ -237,7 +237,7 @@ export function DashboardClient() {
                       color: 'var(--foreground)',
                       borderRadius: '8px',
                     }}
-                    formatter={(val: number) => [formatCurrency(val, 'MAD'), t('الإيراد', 'Revenu', 'Revenue')]}
+                     formatter={(val) => [formatCurrency(typeof val === 'number' ? val : 0, 'MAD'), t('الإيراد', 'Revenu', 'Revenue')]}
                   />
                   <Bar dataKey="revenue" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={45} />
                 </BarChart>

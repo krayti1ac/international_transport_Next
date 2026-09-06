@@ -58,7 +58,7 @@ export function UserManagementView() {
     email: '',
     role: 'secretary' as UserRole,
     password: '',
-    preferred_language: 'ar' as 'ar' | 'fr' | 'en',
+    preferred_language: 'ar' as 'ar' | 'fr',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -136,7 +136,7 @@ export function UserManagementView() {
       email: userToEdit.email || '',
       role: userToEdit.role || 'secretary',
       password: '',
-      preferred_language: userToEdit.preferred_language || 'ar',
+      preferred_language: (userToEdit.preferred_language === 'en' ? 'ar' : userToEdit.preferred_language) || 'ar',
     });
     setModalOpen(true);
   };
