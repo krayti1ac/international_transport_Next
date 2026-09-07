@@ -1,5 +1,27 @@
 BEGIN;
 
+CREATE TABLE IF NOT EXISTS public.fine_penalties (
+  id BIGSERIAL PRIMARY KEY,
+  driver_id BIGINT REFERENCES public.drivers(id) ON DELETE SET NULL,
+  driver_name TEXT NOT NULL DEFAULT '',
+  advance_id BIGINT REFERENCES public.advances(id) ON DELETE SET NULL,
+  trip_order_id BIGINT REFERENCES public.trip_orders(id) ON DELETE SET NULL,
+  amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+  currency TEXT NOT NULL DEFAULT 'MAD',
+  fine_type TEXT NOT NULL DEFAULT 'other',
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  deducted_from_settlement BOOLEAN NOT NULL DEFAULT FALSE,
+  deducted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fines_driver_deducted
+  ON public.fine_penalties (driver_id, deducted_from_settlement);
+
+CREATE INDEX IF NOT EXISTS idx_fines_trip_order
+  ON public.fine_penalties (trip_order_id);
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins full access on users') THEN
@@ -454,6 +476,35 @@ BEGIN
       );
   END IF;
 END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Management manage all fine_penalties') THEN
+    CREATE POLICY "Management manage all fine_penalties"
+      ON fine_penalties FOR ALL
+      USING (
+        EXISTS (
+          SELECT 1 FROM users
+          WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')
+        )
+      );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Drivers view their own fine_penalties') THEN
+    CREATE POLICY "Drivers view their own fine_penalties"
+      ON fine_penalties FOR SELECT
+      USING (
+        driver_id IN (
+          SELECT id FROM public.drivers WHERE user_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
+
+ALTER TABLE fine_penalties ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE drivers ENABLE ROW LEVEL SECURITY;

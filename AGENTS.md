@@ -28,3 +28,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Data Flow**: Server Actions (`*.actions.ts`) for mutations with Zod validation. React Query (`*.queries.ts`) for data fetching.
 - **Supabase**: `@/lib/supabase/server` on server; `@/lib/supabase/browser` on client. Never bypass RLS.
 - **i18n & RTL**: Arabic first (`dir="rtl"`, `src/i18n/messages/ar.json`), French (`src/i18n/messages/fr.json`).
+
+## 4. Applied Migrations
+- `supabase/migrations/20260906_fine_penalties_and_risk.sql` — Phase 9: Driver Fines & Risk Management (`fine_penalties` table, RLS policies, indexes).
