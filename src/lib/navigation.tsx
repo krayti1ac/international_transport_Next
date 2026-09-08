@@ -332,7 +332,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleFr: 'Gestion des entreprises',
         href: '/super-admin/companies',
         icon: <Building2 className="w-4 h-4" />,
-        roles: ['super_admin'],
+        roles: ['super_admin', 'admin'],
       },
     ],
   },
