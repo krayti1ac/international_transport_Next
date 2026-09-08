@@ -33,6 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_fleet_docs_expiry_active
   ON public.fleet_documents(expiry_date)
   WHERE is_archived = FALSE;
 
+CREATE INDEX IF NOT EXISTS idx_fleet_docs_expiry
+  ON public.fleet_documents(expiry_date, is_archived);
+
 -- Query 4: Renewals audit trail lookups
 CREATE INDEX IF NOT EXISTS idx_fleet_renewals_doc_type
   ON public.fleet_document_renewals(document_type);

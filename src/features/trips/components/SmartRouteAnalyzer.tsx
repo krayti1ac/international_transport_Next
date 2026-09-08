@@ -63,7 +63,7 @@ export function SmartRouteAnalyzer() {
       <CardHeader className="pb-3 border-b border-border/50">
         <CardTitle className="flex items-center gap-2 text-primary font-amiri text-lg">
           <Sparkles className="w-5 h-5 text-amber-500" />
-          {t('المستشار اللوجستي (AI Route Optimizer)', 'Optimiseur d’Itinéraire IA', 'AI Route Optimizer')}
+          {t('مُحسّن المسارات بالذكاء الاصطناعي', "Optimiseur d'itinéraire IA", 'AI Route Optimizer')}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
@@ -73,7 +73,7 @@ export function SmartRouteAnalyzer() {
               {t('مدينة الانطلاق', 'Ville de départ', 'Origin City')}
             </label>
             <Input
-              placeholder={t('مثال: طنجة أو Tanger', 'Ex: Tanger', 'e.g. Tangier')}
+              placeholder={t('مثال: طنجة', 'Ex: Tanger', 'e.g. Tangier')}
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
               onKeyDown={(e) => {
@@ -86,7 +86,7 @@ export function SmartRouteAnalyzer() {
               {t('الوجهة (المدينة)', 'Destination (Ville)', 'Destination (City)')}
             </label>
             <Input
-              placeholder={t('مثال: باريس أو Paris', 'Ex: Paris', 'e.g. Paris')}
+              placeholder={t('مثال: باريس', 'Ex: Paris', 'e.g. Paris')}
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               onKeyDown={(e) => {
@@ -133,6 +133,7 @@ export function SmartRouteAnalyzer() {
               <div>
                 <p className="text-xs text-muted-foreground">
                   {t('مسافة الرحلة الكلية', 'Distance totale du trajet', 'Total Route Distance')}
+                  {t('إجمالي مسافة الرحلة', 'Total Route Distance', 'Total Route Distance')}
                 </p>
                 <p className="font-bold font-mono mt-0.5 text-foreground">
                   {estimation.distanceKm?.toLocaleString()} km
@@ -151,12 +152,14 @@ export function SmartRouteAnalyzer() {
               <div>
                 <p className="text-xs text-muted-foreground">
                   {t('استهلاك الوقود التقديري', 'Consommation estimée carburant', 'Estimated Fuel Cost')}
+                  {t('تكلفة الوقود المقدرة', 'Estimated Fuel Cost', 'Estimated Fuel Cost')}
                 </p>
                 <p className="font-bold font-mono mt-0.5 text-foreground">
                   {estimation.estimatedFuelCost?.toLocaleString()} MAD
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1">
                   {t('رسوم الطرق:', 'Péages :', 'Tolls:')} {estimation.estimatedTollCost?.toLocaleString()} MAD
+                  {t('الرسوم:', 'Péages :', 'Tolls:')} {estimation.estimatedTollCost?.toLocaleString()} MAD
                 </p>
               </div>
             </div>
@@ -172,12 +175,14 @@ export function SmartRouteAnalyzer() {
               <div>
                 <p className="text-xs text-amber-600 font-bold">
                   {t('الحد الأدنى للربحية', 'Prix minimum rentable', 'Min Profitable Price')}
+                  {t('الحد الأدنى للربحية', 'Min Profitable Price', 'Min Profitable Price')}
                 </p>
                 <p className="font-bold font-mono mt-0.5 text-foreground text-lg">
                   {estimation.minProfitablePrice?.toLocaleString()} MAD
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1">
                   {t('يغطي التكاليف الأساسية بصعوبة', 'Couvre les coûts essentiels', 'Covers basic operating expenses')}
+                  {t('يغطي التكاليف التشغيلية الأساسية', 'Covers basic operating expenses', 'Covers basic operating expenses')}
                 </p>
               </div>
             </div>
@@ -193,6 +198,7 @@ export function SmartRouteAnalyzer() {
               <div>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
                   {t('السعر المثالي المقترح', 'Prix suggéré optimal', 'Suggested Optimal Price')}
+                  {t('السعر الأمثل المقترح', 'Suggested Optimal Price', 'Suggested Optimal Price')}
                 </p>
                 <p className="font-black font-mono mt-0.5 text-emerald-600 dark:text-emerald-400 text-xl">
                   {estimation.suggestedPrice?.toLocaleString()} MAD
