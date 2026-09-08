@@ -1,10 +1,20 @@
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 
-export type AuditAction = 'soft_delete' | 'update' | 'duplicate' | 'create' | 'auth_login' | 'role_change' | 'security_alert';
+export type AuditAction = 
+  | 'create' 
+  | 'update' 
+  | 'delete' 
+  | 'soft_delete' 
+  | 'duplicate'
+  | 'auth_login' 
+  | 'role_change' 
+  | 'security_alert' 
+  | 'fifo_payment';
 
-interface LogActionParams {
+export interface LogActionParams {
   entityType: string;
-  entityId: number;
+  entityId: string | number;
   actionType: AuditAction;
   reason?: string;
   oldData?: Record<string, unknown> | null;
@@ -13,36 +23,60 @@ interface LogActionParams {
   userAgent?: string;
 }
 
-export async function recordAuditLog({
-  entityType,
-  entityId,
-  actionType,
-  reason,
-  oldData,
-  newData,
-  ipAddress,
-  userAgent,
-}: LogActionParams): Promise<void> {
+/**
+ * تسجيل حركات التدقيق الأمني بشكل غير متزامن وآمن.
+ * لا تقوم هذه الدالة بإيقاف سير العمل الأساسي في حال فشل التسجيل (Non-blocking).
+ */
+export async function recordAuditLog(params: LogActionParams): Promise<void> {
   try {
     const supabase = await createClient();
+    
+    // محاولة جلب هوية المستخدم (ستكون system إذا تم الاستدعاء من Cron)
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'system';
 
-    const insertPayload: Record<string, unknown> = {
+    let ipAddress = params.ipAddress || 'Unknown IP';
+    let userAgent = params.userAgent || 'Unknown Agent';
+
+    // استخراج بيانات الشبكة مع حماية ضد استدعاءات الخلفية (Background Tasks)
+    try {
+      const headersList = await headers();
+      const forwardedFor = headersList.get('x-forwarded-for');
+      const realIp = headersList.get('x-real-ip');
+      
+      // أخذ الـ IP الحقيقي خاصة خلف خدمات مثل Vercel
+      if (!params.ipAddress) {
+        ipAddress = forwardedFor 
+          ? forwardedFor.split(',')[0].trim() 
+          : (realIp || 'Unknown IP');
+      }
+        
+      if (!params.userAgent) {
+        userAgent = headersList.get('user-agent') || 'Unknown Agent';
+      }
+    } catch {
+      // الارتداد الآمن في حال تم الاستدعاء خارج سياق HTTP (مثل المهام المجدولة Cron)
+      if (!params.ipAddress) ipAddress = 'Background Job / Cron';
+      if (!params.userAgent) userAgent = 'System Internal';
+    }
+
+    // إدراج السجل في قاعدة البيانات
+    const { error } = await supabase.from('audit_logs').insert({
       user_id: userId,
-      action: actionType,
-      entity_type: entityType,
-      entity_id: entityId,
-      old_values: oldData ? JSON.stringify(oldData) : undefined,
-      new_values: newData ? JSON.stringify(newData) : undefined,
-    };
+      action: params.actionType,
+      entity_type: params.entityType,
+      entity_id: params.entityId.toString(),
+      old_values: params.oldData ? JSON.stringify(params.oldData) : null,
+      new_values: params.newData ? JSON.stringify(params.newData) : null,
+      reason: params.reason || 'إجراء نظامي',
+      ip_address: ipAddress,
+      user_agent: userAgent,
+    });
 
-    if (reason !== undefined) insertPayload.reason = reason;
-    if (ipAddress) insertPayload.ip_address = ipAddress;
-    if (userAgent) insertPayload.user_agent = userAgent;
-
-    await supabase.from('audit_logs').insert(insertPayload);
+    if (error) {
+      console.error('[Audit DB Error] فشل إدراج السجل:', error.message);
+    }
   } catch (err) {
-    console.error('فشل تسجيل حركة التدقيق الأمني:', err);
+    console.error('[Audit System Error] خطأ غير متوقع في محرك التدقيق:', err);
   }
 }

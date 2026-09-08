@@ -155,10 +155,10 @@ export function validateICE(ice: string): { valid: boolean; message?: string } {
   if (!ice || ice.trim() === '') {
     return { valid: false, message: 'رقم ICE مطلوب' };
   }
-  const trimmed = ice.trim();
-  const cleaned = trimmed.replace(/\s/g, '');
-  if (!/^[A-Za-z0-9]{5,20}$/.test(cleaned)) {
-    return { valid: false, message: 'رقم ICE غير صحيح (يجب أن يكون بين 5 و 20 حرفاً/رقماً)' };
+  const cleaned = ice.trim().replace(/\s/g, '');
+  // المعرف الموحد للمقاولة بالمغرب (ICE) يتكون من 15 رقماً بالضبط بدون حروف أو مسافات
+  if (!/^\d{15}$/.test(cleaned)) {
+    return { valid: false, message: 'رقم ICE يجب أن يتكون من 15 رقماً بالضبط (مثال: 001928374000082)' };
   }
   return { valid: true };
 }

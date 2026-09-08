@@ -9,8 +9,10 @@ import { formatCurrency } from '@/lib/forex';
 import { useTrucks } from '@/lib/query/queries';
 import { Fuel, TrendingDown, AlertTriangle, CheckCircle, Search, Gauge, Wrench } from 'lucide-react';
 import Link from 'next/link';
+import { useLanguage } from '@/components/language-provider';
 
 export default function FleetFuelAnalyticsPage() {
+  const { t, dir } = useLanguage();
   const { data: trucks = [], isLoading } = useTrucks();
   const [search, setSearch] = useState('');
 
@@ -23,15 +25,18 @@ export default function FleetFuelAnalyticsPage() {
   }, [trucks, search]);
 
   return (
-    <div className="space-y-6 pb-12" dir="rtl">
+    <div className="space-y-6 pb-12" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <Fuel className="w-6 h-6 text-primary" />
-            تحليلات استهلاك الوقود وكفاءة الأسطول
+            {t('تحليلات استهلاك الوقود وكفاءة الأسطول', 'Analyses de la Consommation de Carburant et Efficacité')}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {'مراقبة معدلات الاستهلاك ($L/100\\text{ km}$)، رصد الشذوذ، وضبط كفاءة المحركات'}
+            {t(
+              'مراقبة معدلات الاستهلاك (L/100 km)، رصد الشذوذ، وضبط كفاءة المحركات',
+              'Suivi des taux de consommation (L/100 km), détection des anomalies et réglage des moteurs'
+            )}
           </p>
         </div>
       </div>
@@ -43,8 +48,8 @@ export default function FleetFuelAnalyticsPage() {
               <Gauge className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">المعيار النموذجي للأسطول</p>
-              <p className="text-lg font-bold font-mono text-foreground mt-0.5">32 - 35 L/100 km</p>
+              <p className="text-xs text-muted-foreground">{t('المعيار النموذجي للأسطول', 'Norme standard de la flotte')}</p>
+              <p className="text-lg font-bold font-mono text-foreground mt-0.5" dir="ltr">32 - 35 L/100 km</p>
             </div>
           </CardContent>
         </Card>
@@ -55,9 +60,9 @@ export default function FleetFuelAnalyticsPage() {
               <CheckCircle className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">الشاحنات في النطاق الاقتصادي</p>
+              <p className="text-xs text-muted-foreground">{t('الشاحنات في النطاق الاقتصادي', 'Camions en zone économique')}</p>
               <p className="text-lg font-bold font-mono text-emerald-600 mt-0.5">
-                {trucks.filter((t) => t.status === 'active').length} مركبات
+                {trucks.filter((t) => t.status === 'active').length} {t('مركبات', 'véhicules')}
               </p>
             </div>
           </CardContent>
@@ -69,9 +74,9 @@ export default function FleetFuelAnalyticsPage() {
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">مركبات تحتاج فحص حقن/فلاتر</p>
+              <p className="text-xs text-muted-foreground">{t('مركبات تحتاج فحص حقن/فلاتر', 'Véhicules nécessitant contrôle injecteurs/filtres')}</p>
               <p className="text-lg font-bold font-mono text-rose-600 mt-0.5">
-                {trucks.filter((t) => t.status === 'maintenance').length} مركبات
+                {trucks.filter((t) => t.status === 'maintenance').length} {t('مركبات', 'véhicules')}
               </p>
             </div>
           </CardContent>
@@ -83,7 +88,7 @@ export default function FleetFuelAnalyticsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث برقم اللوحة أو الموديل..."
+          placeholder={t('بحث برقم اللوحة أو الموديل...', 'Rechercher par immatriculation ou modèle...')}
           className="ps-9 h-10 rounded-xl"
         />
       </div>
@@ -92,24 +97,24 @@ export default function FleetFuelAnalyticsPage() {
         <CardHeader className="border-b border-border/70 py-3.5 px-5">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <Gauge className="w-4 h-4 text-primary" />
-            <span>مصفوفة مراقبة الشاحنات والتشخيص التنبؤي</span>
+            <span>{t('مصفوفة مراقبة الشاحنات والتشخيص التنبؤي', 'Matrice de surveillance et diagnostic prédictif')}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="py-12 text-center text-xs text-muted-foreground">جاري تحميل بيانات الأسطول...</div>
+            <div className="py-12 text-center text-xs text-muted-foreground">{t('جاري تحميل بيانات الأسطول...', 'Chargement des données de la flotte...')}</div>
           ) : filteredTrucks.length === 0 ? (
-            <div className="py-12 text-center text-xs text-muted-foreground">لا توجد شاحنات مطابقة للبحث.</div>
+            <div className="py-12 text-center text-xs text-muted-foreground">{t('لا توجد شاحنات مطابقة للبحث.', 'Aucun camion ne correspond à la recherche.')}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
-                    <th className="py-3 px-4 text-start font-semibold">الشاحنة</th>
-                    <th className="py-3 px-4 text-start font-semibold">الموديل</th>
-                    <th className="py-3 px-4 text-start font-semibold">حالة التشغيل</th>
-                    <th className="py-3 px-4 text-start font-semibold">المعدل الموصى به</th>
-                    <th className="py-3 px-4 text-end font-semibold">إجراءات التشخيص</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('الشاحنة', 'Camion')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('الموديل', 'Modèle')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('حالة التشغيل', 'Statut')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('المعدل الموصى به', 'Norme recommandée')}</th>
+                    <th className="py-3 px-4 text-end font-semibold">{t('إجراءات التشخيص', 'Actions de diagnostic')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -127,15 +132,15 @@ export default function FleetFuelAnalyticsPage() {
                               : 'bg-rose-500/15 text-rose-600 border-rose-500/30'
                           }`}
                         >
-                          {truck.status === 'active' ? 'نشطة في الخدمة' : 'في الصيانة'}
+                          {truck.status === 'active' ? t('نشطة في الخدمة', 'En service') : t('في الصيانة', 'En maintenance')}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-xs font-mono text-muted-foreground">34.0 L/100 km</td>
+                      <td className="py-3 px-4 text-xs font-mono text-muted-foreground" dir="ltr">34.0 L/100 km</td>
                       <td className="py-3 px-4 text-end">
                         <Link href={`/fleet/${truck.id}?type=truck`}>
                           <Button variant="outline" size="sm" className="h-8 text-xs rounded-xl gap-1.5">
                             <Wrench className="w-3.5 h-3.5" />
-                            <span>تقرير الصحة والصيانة</span>
+                            <span>{t('تقرير الصحة والصيانة', 'Rapport de maintenance')}</span>
                           </Button>
                         </Link>
                       </td>

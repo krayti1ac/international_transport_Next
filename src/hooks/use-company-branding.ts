@@ -2,25 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/components/auth-provider';
 
 export interface CompanyBranding {
   companyName: string;
   logoUrl: string | null;
+  ice?: string | null;
+  currency?: string;
+  companyId?: number | null;
 }
 
 const DEFAULTS: CompanyBranding = {
   companyName: 'ترانس بودانون',
   logoUrl: null,
+  ice: null,
+  currency: 'MAD',
+  companyId: 1,
 };
 
 export function useCompanyBranding(): CompanyBranding {
-  const [branding, setBranding] = useState<CompanyBranding>(DEFAULTS);
+  const { company, companyId, refreshCompany } = useAuth();
+  const [liveOverride, setLiveOverride] = useState<CompanyBranding | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
 
-    const load = async () => {
+    const loadFallback = async () => {
+      if (company) return;
       try {
         const { data, error } = await supabase
           .from('system_settings')
@@ -28,40 +37,48 @@ export function useCompanyBranding(): CompanyBranding {
           .eq('id', 1)
           .maybeSingle();
         if (cancelled) return;
-        if (error) {
-          console.warn('Could not load company branding:', error.message);
-          return;
+        if (!error && data) {
+          setLiveOverride({
+            companyName: data?.company_name?.trim() || DEFAULTS.companyName,
+            logoUrl: data?.logo_url || DEFAULTS.logoUrl,
+            ice: DEFAULTS.ice,
+            currency: DEFAULTS.currency,
+            companyId: 1,
+          });
         }
-        setBranding({
-          companyName: data?.company_name?.trim() || DEFAULTS.companyName,
-          logoUrl: data?.logo_url || null,
-        });
       } catch (err) {
-        console.warn('Company branding fetch failed:', err);
+        console.warn('Fallback branding fetch failed:', err);
       }
     };
 
-    load();
+    if (!company) {
+      loadFallback();
+    }
 
-    // React to live changes on the system_settings row
+    // Subscribe to realtime updates on current company row
+    const targetCompanyId = companyId || 1;
     const channel = supabase
-      .channel('system_settings_branding')
+      .channel(`company_branding_${targetCompanyId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'system_settings', filter: 'id=eq.1' },
+        { event: '*', schema: 'public', table: 'companies', filter: `id=eq.${targetCompanyId}` },
         (payload) => {
-          const next = (payload.new as any) || {};
-          setBranding({
-            companyName: next.company_name?.trim() || DEFAULTS.companyName,
-            logoUrl: next.logo_url || null,
+          const next = (payload.new as Record<string, unknown>) || {};
+          setLiveOverride({
+            companyName: (typeof next.name === 'string' && next.name.trim()) ? next.name.trim() : DEFAULTS.companyName,
+            logoUrl: typeof next.logo_url === 'string' ? next.logo_url : null,
+            ice: typeof next.ice === 'string' ? next.ice : null,
+            currency: typeof next.currency === 'string' ? next.currency : 'MAD',
+            companyId: typeof next.id === 'number' ? next.id : targetCompanyId,
           });
+          refreshCompany();
         }
       )
       .subscribe();
 
     // React to in-tab updates from the settings page
     const onLocalUpdate = () => {
-      load();
+      refreshCompany();
     };
     window.addEventListener('company-settings-updated', onLocalUpdate);
 
@@ -70,7 +87,21 @@ export function useCompanyBranding(): CompanyBranding {
       supabase.removeChannel(channel);
       window.removeEventListener('company-settings-updated', onLocalUpdate);
     };
-  }, []);
+  }, [company, companyId, refreshCompany]);
 
-  return branding;
+  if (liveOverride && liveOverride.companyId === (companyId || 1)) {
+    return liveOverride;
+  }
+
+  if (company) {
+    return {
+      companyName: company.name?.trim() || DEFAULTS.companyName,
+      logoUrl: company.logo_url || null,
+      ice: company.ice || null,
+      currency: company.currency || 'MAD',
+      companyId: company.id,
+    };
+  }
+
+  return liveOverride || DEFAULTS;
 }

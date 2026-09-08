@@ -141,3 +141,102 @@ export async function getExecutiveKpis(
     return { success: false, error: message };
   }
 }
+
+export interface ExecutiveMetrics {
+  totalRevenueMAD: number;
+  totalRevenueEUR: number;
+  outstandingDebtMAD: number;
+  outstandingDebtEUR: number;
+  fleetStatus: { active: number; in_transit: number; maintenance: number; inactive: number };
+  monthlyTrend: { name: string; revenue: number; expenses: number }[];
+}
+
+export async function getExecutiveMetrics(): Promise<ExecutiveMetrics> {
+  const supabase = await createClient();
+  const currentYear = new Date().getFullYear();
+
+  const monthlyData = Array.from({ length: 12 }, (_, i) => ({
+    name: new Date(currentYear, i).toLocaleString('ar-MA', { month: 'short' }),
+    revenue: 0,
+    expenses: 0,
+  }));
+
+  let totalRevenueMAD = new Decimal(0);
+  let totalRevenueEUR = new Decimal(0);
+  let outstandingDebtMAD = new Decimal(0);
+  let outstandingDebtEUR = new Decimal(0);
+
+  // 1. تحليل الفواتير (الإيرادات والديون)
+  const { data: invoices } = await supabase
+    .from('invoices')
+    .select('total_amount, paid_amount, currency, status, issue_date');
+
+  if (invoices) {
+    invoices.forEach((inv) => {
+      const total = new Decimal(inv.total_amount || 0);
+      const paid = new Decimal(inv.paid_amount || 0);
+      const debt = total.minus(paid);
+      const isEUR = inv.currency === 'EUR';
+
+      if (inv.status !== 'cancelled') {
+        if (isEUR) totalRevenueEUR = totalRevenueEUR.plus(total);
+        else totalRevenueMAD = totalRevenueMAD.plus(total);
+
+        if (inv.issue_date) {
+          const date = new Date(inv.issue_date);
+          if (date.getFullYear() === currentYear) {
+            // توحيد العملة في الرسم البياني لأغراض المقارنة (تقدير تقريبي 1 EUR = 10.8 MAD)
+            monthlyData[date.getMonth()].revenue += isEUR ? total.times(10.8).toNumber() : total.toNumber();
+          }
+        }
+      }
+
+      if (['unpaid', 'partially_paid', 'overdue'].includes(inv.status || '')) {
+        if (isEUR) outstandingDebtEUR = outstandingDebtEUR.plus(debt);
+        else outstandingDebtMAD = outstandingDebtMAD.plus(debt);
+      }
+    });
+  }
+
+  // 2. تحليل المصروفات التشغيلية
+  const { data: expenses } = await supabase
+    .from('treasury_transactions')
+    .select('amount, currency, created_at')
+    .eq('type', 'expense');
+
+  if (expenses) {
+    expenses.forEach((exp) => {
+      const date = new Date(exp.created_at);
+      if (date.getFullYear() === currentYear) {
+        const amount = new Decimal(exp.amount || 0).abs();
+        const amountInMAD = exp.currency === 'EUR' ? amount.times(10.8).toNumber() : amount.toNumber();
+        monthlyData[date.getMonth()].expenses += amountInMAD;
+      }
+    });
+  }
+
+  // 3. حالة الأسطول الحية
+  const { data: trucks } = await supabase.from('trucks').select('status');
+  const fleetStatus = { active: 0, in_transit: 0, maintenance: 0, inactive: 0 };
+
+  if (trucks) {
+    trucks.forEach((t) => {
+      const status = t.status as keyof typeof fleetStatus;
+      if (fleetStatus[status] !== undefined) fleetStatus[status]++;
+    });
+  }
+
+  return {
+    totalRevenueMAD: totalRevenueMAD.toNumber(),
+    totalRevenueEUR: totalRevenueEUR.toNumber(),
+    outstandingDebtMAD: outstandingDebtMAD.toNumber(),
+    outstandingDebtEUR: outstandingDebtEUR.toNumber(),
+    fleetStatus,
+    monthlyTrend: monthlyData.map((d) => ({
+      ...d,
+      revenue: Math.round(d.revenue),
+      expenses: Math.round(d.expenses),
+    })),
+  };
+}
+

@@ -31,3 +31,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## 4. Applied Migrations
 - `supabase/migrations/20260906_fine_penalties_and_risk.sql` — Phase 9: Driver Fines & Risk Management (`fine_penalties` table, RLS policies, indexes).
+- `supabase/migrations/20260908_driver_rls_and_storage_policies.sql` — Driver RLS & Storage Security (`storage.objects`, `trip_orders`, `truck_maintenance`, `advances`).
+- `supabase/migrations/20260908_fifo_payment_rpc.sql` — FIFO Payment Allocation Engine (`process_fifo_payment` RPC, `payment_invoice_allocations` table).
+- `supabase/migrations/20260909_multi_tenant_saas.sql` — Multi-Tenancy SaaS Architecture & Tenant Isolation (`companies` table, `company_id` columns, RLS policies, helper functions).
+

@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Plus,
-  DollarSign,
   User,
   CheckCircle2,
   MinusCircle,
@@ -22,9 +21,11 @@ import {
 import { formatCurrency } from '@/lib/forex';
 import { DriverFineModal } from '@/features/drivers/components/DriverFineModal';
 import { processDriverSettlementPayout } from '@/features/drivers/services/driver-fines.actions';
+import { useLanguage } from '@/components/language-provider';
 
 export default function DriverSettlementsPage() {
   const { toast } = useToast();
+  const { t, dir } = useLanguage();
   const supabase = useMemo(() => createClient(), []);
 
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -123,7 +124,11 @@ export default function DriverSettlementsPage() {
 
   const handleConfirmPayout = async () => {
     if (!selectedDriver) return;
-    if (!confirm(`تأكيد صرف الراتب الصافي بقيمة ${formatCurrency(financialBreakdown.net, 'MAD')} للسائق ${selectedDriver.name}؟`)) {
+    const confirmMsg = t(
+      `تأكيد صرف الراتب الصافي بقيمة ${formatCurrency(financialBreakdown.net, 'MAD')} للسائق ${selectedDriver.name}؟`,
+      `Confirmer le versement du salaire net de ${formatCurrency(financialBreakdown.net, 'MAD')} pour ${selectedDriver.name} ?`
+    );
+    if (!confirm(confirmMsg)) {
       return;
     }
 
@@ -142,12 +147,15 @@ export default function DriverSettlementsPage() {
 
       if (res.success) {
         toast({
-          title: '✅ تم اعتماد وصرف التسوية بنجاح',
-          description: `تم قيد الراتب في الخزينة واقتطاع ${pendingFines.length} مخالفات معلقة.`,
+          title: t('✅ تم اعتماد وصرف التسوية بنجاح', '✅ Règlement validé et versé avec succès'),
+          description: t(
+            `تم قيد الراتب في الخزينة واقتطاع ${pendingFines.length} مخالفات معلقة.`,
+            `Salaire comptabilisé et ${pendingFines.length} infractions déduites.`
+          ),
         });
         fetchData();
       } else {
-        toast({ title: 'خطأ', description: res.error, variant: 'destructive' });
+        toast({ title: t('خطأ', 'Erreur'), description: res.error, variant: 'destructive' });
       }
     } finally {
       setProcessingPayout(false);
@@ -155,15 +163,18 @@ export default function DriverSettlementsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12" dir="rtl">
+    <div className="space-y-6 pb-12" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <Calculator className="w-6 h-6 text-primary" />
-            إدارة المخاطر وتسويات رواتب السائقين
+            {t('إدارة المخاطر وتسويات رواتب السائقين', 'Gestion des risques & Règlements chauffeurs')}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            متابعة سجل المخالفات الميدانية، تقييم السلامة، واحتساب الأجور الصافية آلياً
+            {t(
+              'متابعة سجل المخالفات الميدانية، تقييم السلامة، واحتساب الأجور الصافية آلياً',
+              'Suivi des infractions, score de sécurité et calcul automatisé des salaires nets'
+            )}
           </p>
         </div>
 
@@ -173,7 +184,7 @@ export default function DriverSettlementsPage() {
             className="rounded-xl gap-2 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
           >
             <Plus className="w-4 h-4" />
-            <span>تسجيل مخالفة جديدة</span>
+            <span>{t('تسجيل مخالفة جديدة', 'Nouvelle infraction')}</span>
           </Button>
 
           <Button variant="outline" onClick={fetchData} disabled={loading} className="rounded-xl h-10 w-10 p-0">
@@ -216,7 +227,7 @@ export default function DriverSettlementsPage() {
               <CardHeader className="border-b border-border/70 py-3.5 px-4 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <Calculator className="w-4 h-4 text-primary" />
-                  <span>احتساب الأجر الصافي</span>
+                  <span>{t('احتساب الأجر الصافي', 'Calcul du salaire net')}</span>
                 </CardTitle>
                 <span
                   className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
@@ -225,13 +236,13 @@ export default function DriverSettlementsPage() {
                       : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
                   }`}
                 >
-                  مؤشر السلامة: {financialBreakdown.safetyScore}%
+                  {t('مؤشر السلامة:', 'Score sécurité :')} {financialBreakdown.safetyScore}%
                 </span>
               </CardHeader>
 
               <CardContent className="p-4 space-y-3.5 text-xs">
                 <div className="space-y-1">
-                  <label className="text-muted-foreground">الفترة المعتمدة:</label>
+                  <label className="text-muted-foreground">{t('الفترة المعتمدة:', 'Période retenue :')}</label>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
                       type="date"
@@ -252,14 +263,14 @@ export default function DriverSettlementsPage() {
 
                 <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">الراتب الأساسي:</span>
+                    <span className="text-muted-foreground">{t('الراتب الأساسي:', 'Salaire de base :')}</span>
                     <span className="font-mono font-bold text-foreground">
                       {formatCurrency(financialBreakdown.base, 'MAD')}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">مكافآت الرحلات والإنتاجية:</span>
+                    <span className="text-muted-foreground">{t('مكافآت الرحلات والإنتاجية:', 'Primes & Productivité :')}</span>
                     <Input
                       type="number"
                       value={bonusAmount}
@@ -272,7 +283,7 @@ export default function DriverSettlementsPage() {
                   <div className="flex justify-between items-center text-rose-600">
                     <span className="flex items-center gap-1">
                       <MinusCircle className="w-3.5 h-3.5" />
-                      إجمالي السلف المقتطعة:
+                      {t('إجمالي السلف المقتطعة:', 'Total avances déduites :')}
                     </span>
                     <span className="font-mono font-bold">
                       -{formatCurrency(financialBreakdown.advancesTotal, 'MAD')}
@@ -282,7 +293,7 @@ export default function DriverSettlementsPage() {
                   <div className="flex justify-between items-center text-rose-600">
                     <span className="flex items-center gap-1">
                       <MinusCircle className="w-3.5 h-3.5" />
-                      اقتطاع الغرامات المعلقة ({pendingFines.length}):
+                      {t(`اقتطاع الغرامات المعلقة (${pendingFines.length}):`, `Déduction amendes (${pendingFines.length}) :`)}
                     </span>
                     <span className="font-mono font-bold">
                       -{formatCurrency(financialBreakdown.finesTotal, 'MAD')}
@@ -290,7 +301,7 @@ export default function DriverSettlementsPage() {
                   </div>
 
                   <div className="flex justify-between items-center pt-2 border-t border-border/80 text-sm font-black">
-                    <span className="text-foreground">صافي المبلغ المستحق للصرف:</span>
+                    <span className="text-foreground">{t('صافي المبلغ المستحق للصرف:', 'Net à payer au chauffeur :')}</span>
                     <span className="font-mono text-emerald-600 text-base">
                       {formatCurrency(financialBreakdown.net, 'MAD')}
                     </span>
@@ -303,7 +314,7 @@ export default function DriverSettlementsPage() {
                   className="w-full h-10 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>اعتماد وصرف كشف الأجر</span>
+                  <span>{t('اعتماد وصرف كشف الأجر', 'Valider et décaisser le salaire')}</span>
                 </Button>
               </CardContent>
             </Card>
@@ -314,10 +325,10 @@ export default function DriverSettlementsPage() {
               <CardHeader className="border-b border-border/70 py-3.5 px-5 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-500" />
-                  <span>سجل مخالفات السائق ({selectedDriver.name})</span>
+                  <span>{t('سجل مخالفات السائق', 'Registre des infractions')} ({selectedDriver.name})</span>
                 </CardTitle>
                 <span className="text-xs text-muted-foreground font-mono">
-                  معلق: {formatCurrency(financialBreakdown.finesTotal, 'MAD')}
+                  {t('معلق:', 'En attente :')} {formatCurrency(financialBreakdown.finesTotal, 'MAD')}
                 </span>
               </CardHeader>
 
@@ -325,30 +336,30 @@ export default function DriverSettlementsPage() {
                 {driverFines.length === 0 ? (
                   <div className="py-12 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2">
                     <ShieldCheck className="w-8 h-8 text-emerald-500" />
-                    <span>سجل السائق نظيف تماماً من أي مخالفات أو غرامات مرورية.</span>
+                    <span>{t('سجل السائق نظيف تماماً من أي مخالفات أو غرامات مرورية.', 'Dossier du chauffeur exemplaire, aucune infraction.')}</span>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
-                          <th className="py-3 px-4 text-start font-semibold">المخالفة</th>
-                          <th className="py-3 px-4 text-start font-semibold">المبلغ</th>
-                          <th className="py-3 px-4 text-start font-semibold">الرحلة</th>
-                          <th className="py-3 px-4 text-start font-semibold">حالة الاقتطاع</th>
-                          <th className="py-3 px-4 text-start font-semibold">البيان</th>
-                          <th className="py-3 px-4 text-end font-semibold">التاريخ</th>
+                          <th className="py-3 px-4 text-start font-semibold">{t('المخالفة', 'Infraction')}</th>
+                          <th className="py-3 px-4 text-start font-semibold">{t('المبلغ', 'Montant')}</th>
+                          <th className="py-3 px-4 text-start font-semibold">{t('الرحلة', 'Trajet')}</th>
+                          <th className="py-3 px-4 text-start font-semibold">{t('حالة الاقتطاع', 'Statut')}</th>
+                          <th className="py-3 px-4 text-start font-semibold">{t('البيان', 'Description')}</th>
+                          <th className="py-3 px-4 text-end font-semibold">{t('التاريخ', 'Date')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/60 text-xs">
                         {driverFines.map((fine) => (
                           <tr key={fine.id} className="hover:bg-muted/30 transition-colors">
                             <td className="py-3 px-4 font-semibold text-foreground">{fine.fine_type}</td>
-                            <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                            <td className="py-3 px-4 font-mono font-bold text-rose-600" dir="ltr">
                               -{formatCurrency(fine.amount, fine.currency)}
                             </td>
                             <td className="py-3 px-4 font-mono text-muted-foreground">
-                              {fine.trip_order_id ? `#${fine.trip_order_id}` : 'عام'}
+                              {fine.trip_order_id ? `#${fine.trip_order_id}` : t('عام', 'Général')}
                             </td>
                             <td className="py-3 px-4">
                               <span
@@ -358,14 +369,14 @@ export default function DriverSettlementsPage() {
                                     : 'bg-rose-500/15 text-rose-600 border-rose-500/30'
                                 }`}
                               >
-                                {fine.deducted_from_settlement ? 'مقتطعة من الأجر' : 'قيد الخصم'}
+                                {fine.deducted_from_settlement ? t('مقتطعة من الأجر', 'Déduite') : t('قيد الخصم', 'En cours')}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-muted-foreground truncate max-w-xs">
                               {fine.description || '—'}
                             </td>
                             <td className="py-3 px-4 text-end text-muted-foreground font-mono whitespace-nowrap">
-                              {new Date(fine.created_at).toLocaleDateString('ar-MA')}
+                              {new Date(fine.created_at).toLocaleDateString(dir === 'rtl' ? 'ar-MA' : 'fr-FR')}
                             </td>
                           </tr>
                         ))}

@@ -8,6 +8,7 @@ import { X, Building2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { BankAccount } from '@/types/database';
+import { useLanguage } from '@/components/language-provider';
 
 interface AddBankAccountModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export function AddBankAccountModal({
   onClose,
   onSuccess,
 }: AddBankAccountModalProps) {
+  const { t, dir } = useLanguage();
   const [name, setName] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -48,7 +50,7 @@ export function AddBankAccountModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      toast({ title: 'يرجى إدخال مسمى الحساب', variant: 'destructive' });
+      toast({ title: t('يرجى إدخال مسمى الحساب', 'Veuillez saisir l\'intitulé du compte'), variant: 'destructive' });
       return;
     }
 
@@ -72,11 +74,11 @@ export function AddBankAccountModal({
         .single();
 
       if (error) {
-        throw new Error(error.message || error.details || 'فشل حفظ الحساب البنكي في قاعدة البيانات');
+        throw new Error(error.message || error.details || t('فشل حفظ الحساب البنكي في قاعدة البيانات', 'Échec de l\'enregistrement du compte bancaire'));
       }
 
       toast({
-        title: '✅ تم إضافة الحساب البنكي بنجاح',
+        title: t('✅ تم إضافة الحساب البنكي بنجاح', '✅ Compte bancaire ajouté avec succès'),
         description: `${name} (${currency})`,
       });
 
@@ -88,8 +90,8 @@ export function AddBankAccountModal({
       onClose();
     } catch (err: any) {
       toast({
-        title: 'خطأ أثناء الإضافة',
-        description: err.message || 'حدث خطأ غير متوقع',
+        title: t('خطأ أثناء الإضافة', 'Erreur lors de l\'ajout'),
+        description: err.message || t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue'),
         variant: 'destructive',
       });
     } finally {
@@ -98,12 +100,12 @@ export function AddBankAccountModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
-      <Card className="w-full max-w-md my-8 shadow-2xl border-border bg-card" dir="rtl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto" dir={dir}>
+      <Card className="w-full max-w-md my-8 shadow-2xl border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <CardTitle className="font-amiri text-lg flex items-center gap-2 text-foreground">
             <Building2 className="w-5 h-5 text-primary" />
-            إضافة حساب بنكي جديد
+            {t('إضافة حساب بنكي جديد', 'Ajouter un nouveau compte bancaire')}
           </CardTitle>
           <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-lg">
             <X className="w-4 h-4" />
@@ -113,12 +115,12 @@ export function AddBankAccountModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
-                اسم الحساب (لتمييزه في النظام) *
+                {t('اسم الحساب (لتمييزه في النظام) *', 'Intitulé du compte (pour l\'identification) *')}
               </label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: الحساب التجاري الرئيسي (الدرهم) أو حساب اليورو"
+                placeholder={t('مثال: الحساب التجاري الرئيسي (الدرهم) أو حساب اليورو', 'Ex: Compte courant principal MAD ou Compte EUR')}
                 required
                 className="text-xs rounded-xl"
               />
@@ -126,13 +128,13 @@ export function AddBankAccountModal({
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
-                اسم المؤسسة البنكية
+                {t('اسم المؤسسة البنكية', 'Nom de la banque')}
               </label>
               <Input
                 list="common-banks"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
-                placeholder="اختر أو اكتب اسم البنك (مثل التجاري وفا بنك)"
+                placeholder={t('اختر أو اكتب اسم البنك (مثل التجاري وفا بنك)', 'Sélectionnez ou saisissez le nom de la banque')}
                 className="text-xs rounded-xl"
               />
               <datalist id="common-banks">
@@ -144,20 +146,20 @@ export function AddBankAccountModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">عملة الحساب *</label>
+                <label className="text-xs font-semibold text-foreground">{t('عملة الحساب *', 'Devise du compte *')}</label>
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value as any)}
                   className="w-full h-9 px-3 border border-input rounded-xl bg-card text-foreground text-xs font-mono font-bold focus:ring-1 focus:ring-primary shadow-2xs"
                 >
-                  <option value="MAD">MAD (درهم مغربي)</option>
-                  <option value="EUR">EUR (يورو)</option>
-                  <option value="USD">USD (دولار)</option>
+                  <option value="MAD">MAD ({t('درهم مغربي', 'Dirham marocain')})</option>
+                  <option value="EUR">EUR ({t('يورو', 'Euro')})</option>
+                  <option value="USD">USD ({t('دولار', 'Dollar US')})</option>
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">الرصيد الافتتاحي</label>
+                <label className="text-xs font-semibold text-foreground">{t('الرصيد الافتتاحي', 'Solde initial')}</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -172,7 +174,7 @@ export function AddBankAccountModal({
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
-                رقم الحساب / RIB / IBAN (اختياري)
+                {t('رقم الحساب / RIB / IBAN (اختياري)', 'N° Compte / RIB / IBAN (facultatif)')}
               </label>
               <Input
                 value={accountNumber}
@@ -189,7 +191,7 @@ export function AddBankAccountModal({
                 disabled={isSubmitting}
                 className="flex-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl h-9 text-xs font-semibold shadow-xs"
               >
-                {isSubmitting ? 'جاري الحفظ...' : 'إضافة الحساب'}
+                {isSubmitting ? t('جاري الحفظ...', 'Enregistrement...') : t('إضافة الحساب', 'Ajouter le compte')}
               </Button>
               <Button
                 type="button"
@@ -197,7 +199,7 @@ export function AddBankAccountModal({
                 onClick={onClose}
                 className="rounded-xl h-9 text-xs"
               >
-                إلغاء
+                {t('إلغاء', 'Annuler')}
               </Button>
             </div>
           </form>

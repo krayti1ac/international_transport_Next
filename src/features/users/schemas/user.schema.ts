@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const userRoleSchema = z.enum(['admin', 'secretary', 'driver']);
+export const userRoleSchema = z.enum(['super_admin', 'admin', 'secretary', 'driver']);
 
 export const createUserSchema = z.object({
   name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),
@@ -8,6 +8,7 @@ export const createUserSchema = z.object({
   role: userRoleSchema,
   password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف'),
   preferred_language: z.enum(['ar', 'fr']).optional().default('ar'),
+  company_id: z.number().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -16,6 +17,7 @@ export const updateUserSchema = z.object({
   role: userRoleSchema,
   password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف').optional().or(z.literal('')),
   preferred_language: z.enum(['ar', 'fr']).optional(),
+  company_id: z.number().optional(),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;

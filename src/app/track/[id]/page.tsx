@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import type { TripOrder, Truck, TruckLocation, Client } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { MapPin, Truck as TruckIcon, Navigation, Calendar, CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
+import { MapPin, Truck as TruckIcon, Navigation, Calendar, Clock, ShieldCheck } from 'lucide-react';
+import { useLanguage } from '@/components/language-provider';
 
 const TrackingMap = dynamic(
   () => import('@/features/tracking/components/TrackingMap').then((mod) => ({ default: mod.TrackingMap })),
@@ -13,13 +14,14 @@ const TrackingMap = dynamic(
     ssr: false,
     loading: () => (
       <div className="h-[400px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-xl">
-        <p className="text-muted-foreground text-sm font-medium">جاري تحميل خريطة المسار...</p>
+        <p className="text-muted-foreground text-sm font-medium">Loading map...</p>
       </div>
     ),
   }
 );
 
 export default function PublicClientTrackingPage({ params }: { params: Promise<{ id: string }> }) {
+  const { t, dir, locale } = useLanguage();
   const resolvedParams = use(params);
   const tripId = parseInt(resolvedParams.id, 10);
 
@@ -66,15 +68,19 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
         if (tripData.truck_id && locsRes.data) {
           const locMap = new Map<number, TruckLocation[]>();
-          const normalized = locsRes.data.map((l) => ({
+          const normalized: TruckLocation[] = locsRes.data.map((l: any) => ({
             ...l,
-            timestamp: l.timestamp || l.recorded_at,
+            speed: l.speed ?? 0,
+            latitude: Number(l.latitude),
+            longitude: Number(l.longitude),
+            timestamp: l.recorded_at || l.timestamp,
             recorded_at: l.recorded_at || l.timestamp,
           }));
           locMap.set(tripData.truck_id, normalized);
           setLocations(locMap);
         }
-      } catch (err) {
+      } catch (e) {
+        console.error('Failed to load tracking data', e);
         setNotFound(true);
       } finally {
         setLoading(false);
@@ -100,17 +106,20 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           filter: `truck_id=eq.${trip.truck_id}`,
         },
         (payload) => {
-          const rawLoc = payload.new as TruckLocation;
-          const newLoc: TruckLocation = {
+          const rawLoc = payload.new as any;
+          const normalized: TruckLocation = {
             ...rawLoc,
-            timestamp: rawLoc.timestamp || rawLoc.recorded_at,
+            speed: rawLoc.speed ?? 0,
+            latitude: Number(rawLoc.latitude),
+            longitude: Number(rawLoc.longitude),
+            timestamp: rawLoc.recorded_at || rawLoc.timestamp,
             recorded_at: rawLoc.recorded_at || rawLoc.timestamp,
           };
           setLocations((prev) => {
-            const updated = new Map(prev);
-            const current = updated.get(trip.truck_id!) || [];
-            updated.set(trip.truck_id!, [newLoc, ...current]);
-            return updated;
+            const next = new Map(prev);
+            const list = next.get(trip.truck_id!) || [];
+            next.set(trip.truck_id!, [normalized, ...list.slice(0, 19)]);
+            return next;
           });
         }
       )
@@ -123,20 +132,20 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir="rtl">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir={dir}>
         <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin mb-4" />
-        <p className="text-foreground font-amiri text-lg">جاري تحديد موقع الشحنة مباشرة...</p>
+        <p className="text-foreground font-amiri text-lg">{t('جاري تحديد موقع الشحنة مباشرة...', 'Localisation de l\'expédition en cours...')}</p>
       </div>
     );
   }
 
   if (notFound || !trip) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir="rtl">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir={dir}>
         <Card className="max-w-md w-full text-center p-6 shadow-xl border-border">
           <MapPin className="w-12 h-12 mx-auto text-rose-500 mb-3" />
-          <CardTitle className="text-xl font-bold font-amiri mb-2">الشحنة غير موجودة</CardTitle>
-          <CardDescription>لم يتم العثور على رحلة مسجلة بهذا المعرّف، يرجى مراجعة الرابط والتأكد من رقمه.</CardDescription>
+          <CardTitle className="text-xl font-bold font-amiri mb-2">{t('الشحنة غير موجودة', 'Expédition introuvable')}</CardTitle>
+          <CardDescription>{t('لم يتم العثور على رحلة مسجلة بهذا المعرّف، يرجى مراجعة الرابط والتأكد من رقمه.', 'Aucun trajet trouvé pour cet identifiant. Veuillez vérifier le lien.')}</CardDescription>
         </Card>
       </div>
     );
@@ -145,10 +154,10 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
   const latestLoc = truck?.id ? locations.get(truck.id)?.[0] : null;
 
   const statusLabel = trip.status === 'completed'
-    ? 'تم التسليم بنجاح'
+    ? t('تم التسليم بنجاح', 'Livraison effectuée avec succès')
     : trip.status === 'in_transit'
-      ? 'الشحنة في الطريق'
-      : 'قيد التجهيز';
+      ? t('الشحنة في الطريق', 'En cours de transport')
+      : t('قيد التجهيز', 'En préparation');
 
   const statusClass = trip.status === 'completed'
     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
@@ -157,7 +166,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
       : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 dark:from-[#070a12] dark:to-[#090d16] p-4 md:p-8" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 dark:from-[#070a12] dark:to-[#090d16] p-4 md:p-8" dir={dir}>
       <div className="max-w-4xl mx-auto space-y-6">
 
         <div className="flex items-center justify-between bg-card p-6 rounded-2xl border border-border shadow-md">
@@ -168,11 +177,11 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
             <div>
               <h1 className="text-xl md:text-2xl font-black font-amiri text-foreground">{trip.route}</h1>
               <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-                وثيقة الشحن: <span className="font-mono font-bold text-foreground">{trip.cmr_number || `CMR-${trip.id}`}</span>
+                {t('وثيقة الشحن: ', 'Document de transport : ')}<span className="font-mono font-bold text-foreground">{trip.cmr_number || `CMR-${trip.id}`}</span>
               </p>
             </div>
           </div>
-          <div className="text-left">
+          <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass}`}>
               {statusLabel}
             </span>
@@ -185,7 +194,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
               <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
                 <Calendar className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs text-muted-foreground">تاريخ الانطلاق</p>
+                  <p className="text-xs text-muted-foreground">{t('تاريخ الانطلاق', 'Date de départ')}</p>
                   <p className="font-bold text-sm text-foreground mt-0.5">{trip.departure_date}</p>
                 </div>
               </div>
@@ -193,19 +202,19 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
               <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
                 <Navigation className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs text-muted-foreground">المعبر / العبّارة</p>
-                  <p className="font-bold text-sm text-foreground mt-0.5">{trip.ferry_company || 'طنجة المتوسط - الجزيرة الخضراء'}</p>
+                  <p className="text-xs text-muted-foreground">{t('المعبر / العبّارة', 'Traversée / Ferry')}</p>
+                  <p className="font-bold text-sm text-foreground mt-0.5">{trip.ferry_company || t('طنجة المتوسط - الجزيرة الخضراء', 'Tanger Med - Algésiras')}</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
                 <Clock className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs text-muted-foreground">آخر تحديث للموقع</p>
+                  <p className="text-xs text-muted-foreground">{t('آخر تحديث للموقع', 'Dernière mise à jour')}</p>
                   <p className="font-bold text-sm text-foreground mt-0.5">
                     {latestLoc
-                      ? new Date(latestLoc.recorded_at || latestLoc.timestamp || '').toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })
-                      : 'الآن'}
+                      ? new Date(latestLoc.recorded_at || latestLoc.timestamp || '').toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'ar-MA', { hour: '2-digit', minute: '2-digit' })
+                      : t('الآن', 'Maintenant')}
                   </p>
                 </div>
               </div>
@@ -217,7 +226,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           <CardHeader className="pb-3 border-b border-border">
             <CardTitle className="text-base font-amiri flex items-center gap-2 text-foreground">
               <MapPin className="w-5 h-5 text-primary" />
-              الموقع الجغرافي الحي للشاحنة
+              {t('الموقع الجغرافي الحي للشاحنة', 'Position GPS en temps réel du véhicule')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 h-[450px]">
@@ -232,7 +241,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
         <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5 pt-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>نظام النقل الدولي اللوجستي • التتبع المباشر مشفر ومؤمن</span>
+          <span>{t('نظام النقل الدولي اللوجستي • التتبع المباشر مشفر ومؤمن', 'Trans Bodanon TMS • Suivi GPS sécurisé et chiffré')}</span>
         </div>
 
       </div>

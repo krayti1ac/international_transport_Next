@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, RefreshCw, Copy, Check, Coins } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/components/language-provider';
 
 interface ForexConverterWidgetProps {
   currentRate: number;
@@ -19,6 +20,7 @@ export function ForexConverterWidget({
   onRefreshRate,
   isLoading,
 }: ForexConverterWidgetProps) {
+  const { t, dir } = useLanguage();
   const { toast } = useToast();
   const [amount, setAmount] = useState('1000');
   const [direction, setDirection] = useState<'EUR_TO_MAD' | 'MAD_TO_EUR'>('EUR_TO_MAD');
@@ -44,16 +46,16 @@ export function ForexConverterWidget({
   const handleCopy = () => {
     navigator.clipboard.writeText(convertedValue);
     setCopied(true);
-    toast({ title: 'تم نسخ المبلغ المحول' });
+    toast({ title: t('تم نسخ المبلغ المحول', 'Montant converti copié') });
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <Card className="border-border bg-card shadow-xs" dir="rtl">
+    <Card className="border-border bg-card shadow-xs" dir={dir}>
       <CardHeader className="border-b border-border/70 py-3.5 px-4 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-bold font-amiri flex items-center gap-2">
           <Coins className="w-4 h-4 text-primary" />
-          <span>محول العملات المباشر (EUR ↔ MAD)</span>
+          <span>{t('محول العملات المباشر (EUR ↔ MAD)', 'Convertisseur de Devises Direct (EUR ↔ MAD)')}</span>
         </CardTitle>
         {onRefreshRate && (
           <Button
@@ -62,7 +64,7 @@ export function ForexConverterWidget({
             onClick={onRefreshRate}
             disabled={isLoading}
             className="h-7 w-7 p-0 rounded-lg"
-            title="تحديث سعر الصرف"
+            title={t('تحديث سعر الصرف', 'Actualiser le taux')}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -71,8 +73,8 @@ export function ForexConverterWidget({
 
       <CardContent className="p-4 space-y-4">
         <div className="flex items-center justify-between text-xs bg-muted/40 p-2.5 rounded-xl border border-border/50">
-          <span className="text-muted-foreground">سعر الصرف المعتمد:</span>
-          <span className="font-mono font-bold text-foreground">
+          <span className="text-muted-foreground">{t('سعر الصرف المعتمد:', 'Taux de change appliqué :')}</span>
+          <span className="font-mono font-bold text-foreground" dir="ltr">
             1 EUR = {currentRate.toFixed(4)} MAD
           </span>
         </div>
@@ -80,7 +82,7 @@ export function ForexConverterWidget({
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-center">
           <div className="sm:col-span-2 space-y-1">
             <label className="text-xs text-muted-foreground">
-              {direction === 'EUR_TO_MAD' ? 'المبلغ باليورو (€)' : 'المبلغ بالدرهم (MAD)'}
+              {direction === 'EUR_TO_MAD' ? t('المبلغ باليورو (€)', 'Montant en Euros (€)') : t('المبلغ بالدرهم (MAD)', 'Montant en Dirhams (MAD)')}
             </label>
             <Input
               type="number"
@@ -98,7 +100,7 @@ export function ForexConverterWidget({
               size="icon"
               onClick={toggleDirection}
               className="rounded-full w-9 h-9"
-              title="عكس اتجاه التحويل"
+              title={t('عكس اتجاه التحويل', 'Inverser le sens de conversion')}
             >
               <ArrowRightLeft className="w-4 h-4 text-primary" />
             </Button>
@@ -106,7 +108,7 @@ export function ForexConverterWidget({
 
           <div className="sm:col-span-2 space-y-1">
             <label className="text-xs text-muted-foreground">
-              {direction === 'EUR_TO_MAD' ? 'الناتج بالدرهم (MAD)' : 'الناتج باليورو (€)'}
+              {direction === 'EUR_TO_MAD' ? t('الناتج بالدرهم (MAD)', 'Résultat en Dirhams (MAD)') : t('الناتج باليورو (€)', 'Résultat en Euros (€)')}
             </label>
             <div className="flex items-center gap-1.5">
               <Input

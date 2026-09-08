@@ -10,8 +10,10 @@ import { useToast } from '@/hooks/use-toast';
 import { MessageSquare, Send, Phone, Zap } from 'lucide-react';
 import { formatPhoneNumber } from '@/lib/whatsapp';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import { useLanguage } from '@/components/language-provider';
 
 export default function WhatsAppNotificationsPage() {
+  const { t, dir } = useLanguage();
   const [clients, setClients] = useState<Client[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -40,7 +42,7 @@ export default function WhatsAppNotificationsPage() {
       setInvoices(invoicesRes.data || []);
     } catch (error: any) {
       toast({
-        title: 'خطأ في تحميل البيانات',
+        title: t('خطأ في تحميل البيانات', 'Erreur de chargement des données'),
         description: error.message,
         variant: 'destructive',
       });
@@ -65,12 +67,12 @@ export default function WhatsAppNotificationsPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'تعذر الإرسال');
+      if (!res.ok) throw new Error(data.error || t('تعذر الإرسال', 'Échec de l’envoi'));
 
-      toast({ title: 'تم إرسال الرسالة آلياً عبر WhatsApp API' });
+      toast({ title: t('تم إرسال الرسالة آلياً عبر WhatsApp API', 'Message envoyé avec succès via WhatsApp API') });
     } catch (err: any) {
       toast({
-        title: 'فشل الإرسال الآلي (تم التبديل للفتح المباشر)',
+        title: t('فشل الإرسال الآلي (تم التبديل للفتح المباشر)', 'Échec envoi auto (basculement en direct)'),
         description: err.message,
         variant: 'destructive',
       });
@@ -81,23 +83,32 @@ export default function WhatsAppNotificationsPage() {
   };
 
   const sendTripDispatched = (client: Client) => {
-    const text = `مرحباً ${client.name}، نحيطكم علماً بأن شحنتكم قد انطلقت وهي الآن في مسارها الدولي المجدول.`;
+    const text = t(
+      `مرحباً ${client.name}، نحيطكم علماً بأن شحنتكم قد انطلقت وهي الآن في مسارها الدولي المجدول.`,
+      `Bonjour ${client.name}, votre cargaison est en route selon l'itinéraire prévu.`
+    );
     sendViaOfficialApi(client.phone, text, client.id);
   };
 
   const sendInvoiceReminder = (client: Client, invoice: Invoice) => {
-    const text = `مرحباً ${client.name}، تذكير بشأن الفاتورة رقم: ${invoice.invoice_number}\nالمبلغ المطلوب: ${invoice.total_amount} ${invoice.currency}\nيرجى التنسيق لإتمام التحويل.`;
+    const text = t(
+      `مرحباً ${client.name}، تذكير بشأن الفاتورة رقم: ${invoice.invoice_number}\nالمبلغ المطلوب: ${invoice.total_amount} ${invoice.currency}\nيرجى التنسيق لإتمام التحويل.`,
+      `Bonjour ${client.name}, rappel concernant la facture N°: ${invoice.invoice_number}\nMontant: ${invoice.total_amount} ${invoice.currency}\nMerci de procéder au règlement.`
+    );
     sendViaOfficialApi(client.phone, text, client.id);
   };
 
   const sendDeliveryConfirmation = (client: Client) => {
-    const text = `مرحباً ${client.name}، تم وصول الشاحنة وتسليم الشحنة بنجاح. شكراً لثقتكم.`;
+    const text = t(
+      `مرحباً ${client.name}، تم وصول الشاحنة وتسليم الشحنة بنجاح. شكراً لثقتكم.`,
+      `Bonjour ${client.name}, le camion est arrivé et la marchandise a été livrée avec succès. Merci pour votre confiance.`
+    );
     sendViaOfficialApi(client.phone, text, client.id);
   };
 
   const sendCustomMessage = () => {
     if (!selectedClient || !message.trim()) {
-      toast({ title: 'يرجى اختيار عميل وكتابة رسالة', variant: 'destructive' });
+      toast({ title: t('يرجى اختيار عميل وكتابة رسالة', 'Veuillez choisir un client et rédiger un message'), variant: 'destructive' });
       return;
     }
     sendViaOfficialApi(selectedClient.phone, message, selectedClient.id);
@@ -111,23 +122,23 @@ export default function WhatsAppNotificationsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-slate-500">جاري تحميل البيانات...</p>
+        <p className="text-slate-500">{t('جاري تحميل البيانات...', 'Chargement des données...')}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <h1 className="text-2xl font-bold font-amiri">إشعارات واتساب</h1>
+    <div className="space-y-6" dir={dir}>
+      <h1 className="text-2xl font-bold font-amiri">{t('إشعارات واتساب', 'Notifications WhatsApp')}</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri">إرسال إشعارات سريعة</CardTitle>
+            <CardTitle className="font-amiri">{t('إرسال إشعارات سريعة', 'Envoi de notifications rapides')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">اختر العميل</label>
+              <label className="text-sm font-medium">{t('اختر العميل', 'Sélectionner le client')}</label>
               <select
                 value={selectedClient?.id || ''}
                 onChange={(e) => {
@@ -136,7 +147,7 @@ export default function WhatsAppNotificationsPage() {
                 }}
                 className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="">-- اختر عميل --</option>
+                <option value="">{t('-- اختر عميل --', '-- Sélectionner un client --')}</option>
                 {clients.map(client => (
                   <option key={client.id} value={client.id}>{client.name} - {client.phone}</option>
                 ))}
@@ -157,8 +168,8 @@ export default function WhatsAppNotificationsPage() {
                     onClick={() => sendTripDispatched(selectedClient)}
                     className="w-full flex justify-between"
                   >
-                    <span>إشعار انطلاق الشحنة</span>
-                    <Zap className="w-4 h-4 text-emerald-600 ml-2" />
+                    <span>{t('إشعار انطلاق الشحنة', 'Notification départ expédition')}</span>
+                    <Zap className="w-4 h-4 text-emerald-600 ms-2" />
                   </Button>
 
                   <Button
@@ -167,8 +178,8 @@ export default function WhatsAppNotificationsPage() {
                     onClick={() => sendDeliveryConfirmation(selectedClient)}
                     className="w-full flex justify-between"
                   >
-                    <span>إشعار إتمام التسليم</span>
-                    <Zap className="w-4 h-4 text-emerald-600 ml-2" />
+                    <span>{t('إشعار إتمام التسليم', 'Notification livraison effectuée')}</span>
+                    <Zap className="w-4 h-4 text-emerald-600 ms-2" />
                   </Button>
 
                   {getClientUnpaidInvoices(selectedClient.id).length > 0 && (
@@ -178,8 +189,8 @@ export default function WhatsAppNotificationsPage() {
                       onClick={() => sendInvoiceReminder(selectedClient, getClientUnpaidInvoices(selectedClient.id)[0])}
                       className="w-full flex justify-between"
                     >
-                      <span>تذكير بفاتورة مستحقة</span>
-                      <Zap className="w-4 h-4 text-amber-600 ml-2" />
+                      <span>{t('تذكير بفاتورة مستحقة', 'Rappel facture impayée')}</span>
+                      <Zap className="w-4 h-4 text-amber-600 ms-2" />
                     </Button>
                   )}
                 </div>
@@ -190,11 +201,11 @@ export default function WhatsAppNotificationsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-amiri">رسالة مخصصة</CardTitle>
+            <CardTitle className="font-amiri">{t('رسالة مخصصة', 'Message personnalisé')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">العميل</label>
+              <label className="text-sm font-medium">{t('العميل', 'Client')}</label>
               <select
                 value={selectedClient?.id || ''}
                 onChange={(e) => {
@@ -203,7 +214,7 @@ export default function WhatsAppNotificationsPage() {
                 }}
                 className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="">-- اختر عميل --</option>
+                <option value="">{t('-- اختر عميل --', '-- Sélectionner un client --')}</option>
                 {clients.map(client => (
                   <option key={client.id} value={client.id}>{client.name}</option>
                 ))}
@@ -211,11 +222,11 @@ export default function WhatsAppNotificationsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">الرسالة</label>
+              <label className="text-sm font-medium">{t('الرسالة', 'Message')}</label>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="اكتب رسالتك هنا..."
+                placeholder={t('اكتب رسالتك هنا...', 'Écrivez votre message ici...')}
                 rows={4}
                 className="w-full px-3 py-2 border border-input bg-card text-foreground placeholder:text-muted-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs transition-colors"
               />
@@ -228,15 +239,15 @@ export default function WhatsAppNotificationsPage() {
                 className="flex-1 flex items-center justify-center gap-2"
               >
                 <Zap className="w-4 h-4" />
-                {isSendingApi ? 'جاري الإرسال...' : 'إرسال آلي رسمي (API)'}
+                {isSendingApi ? t('جاري الإرسال...', 'Envoi en cours...') : t('إرسال آلي عبر API', 'Envoi automatique API')}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => selectedClient && openWhatsAppLink(selectedClient.phone, message)}
                 disabled={!selectedClient || !message.trim()}
               >
-                <Send className="w-4 h-4 ml-2" />
-                فتح التطبيق
+                <Send className="w-4 h-4 ms-2" />
+                {t('فتح التطبيق', "Ouvrir l'application")}
               </Button>
             </div>
           </CardContent>
@@ -245,8 +256,14 @@ export default function WhatsAppNotificationsPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="font-amiri">قائمة العملاء</CardTitle>
-          <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} size="sm" />
+          <CardTitle className="font-amiri">{t('قائمة العملاء', 'Liste des clients')}</CardTitle>
+          <CardViewToggle
+            viewMode={cardLayout}
+            onChange={setCardLayout}
+            size="sm"
+            gridLabel={t('عرض كبطاقات', 'Vue cartes')}
+            listLabel={t('عرض كقائمة', 'Vue liste')}
+          />
         </CardHeader>
         <CardContent>
           {cardLayout === 'grid' ? (
@@ -263,8 +280,8 @@ export default function WhatsAppNotificationsPage() {
                       disabled={isSendingApi}
                       className="rounded-xl text-xs"
                     >
-                      <Send className="w-3 h-3 ml-1" />
-                      إشعار
+                      <Send className="w-3 h-3 ms-1" />
+                      {t('إشعار', 'Avis')}
                     </Button>
                     <Button
                       size="sm"
@@ -274,14 +291,14 @@ export default function WhatsAppNotificationsPage() {
                         if (unpaid.length > 0) {
                           sendInvoiceReminder(client, unpaid[0]);
                         } else {
-                          toast({ title: 'لا توجد فواتير مستحقة لهذا العميل' });
+                          toast({ title: t('لا توجد فواتير مستحقة لهذا العميل', 'Aucune facture impayée pour ce client') });
                         }
                       }}
                       disabled={isSendingApi}
                       className="rounded-xl text-xs"
                     >
-                      <MessageSquare className="w-3 h-3 ml-1" />
-                      تذكير
+                      <MessageSquare className="w-3 h-3 ms-1" />
+                      {t('تذكير', 'Rappel')}
                     </Button>
                   </div>
                 </div>
@@ -310,8 +327,8 @@ export default function WhatsAppNotificationsPage() {
                       disabled={isSendingApi}
                       className="rounded-xl text-xs h-8"
                     >
-                      <Send className="w-3 h-3 ml-1" />
-                      إرسال إشعار
+                      <Send className="w-3 h-3 ms-1" />
+                      {t('إرسال إشعار', 'Envoyer avis')}
                     </Button>
                     <Button
                       size="sm"
@@ -321,14 +338,14 @@ export default function WhatsAppNotificationsPage() {
                         if (unpaid.length > 0) {
                           sendInvoiceReminder(client, unpaid[0]);
                         } else {
-                          toast({ title: 'لا توجد فواتير مستحقة لهذا العميل' });
+                          toast({ title: t('لا توجد فواتير مستحقة لهذا العميل', 'Aucune facture impayée pour ce client') });
                         }
                       }}
                       disabled={isSendingApi}
                       className="rounded-xl text-xs h-8"
                     >
-                      <MessageSquare className="w-3 h-3 ml-1" />
-                      إرسال تذكير
+                      <MessageSquare className="w-3 h-3 ms-1" />
+                      {t('إرسال تذكير', 'Envoyer rappel')}
                     </Button>
                   </div>
                 </div>

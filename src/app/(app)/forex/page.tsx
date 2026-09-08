@@ -19,8 +19,10 @@ import {
 import { ForexConverterWidget } from '@/features/treasury/components/ForexConverterWidget';
 import { syncDailyForexRate } from '@/features/treasury/services/forex.actions';
 import type { BankAccount, CashBox, ForexRate, ForexGainLossEntry } from '@/types/database';
+import { useLanguage } from '@/components/language-provider';
 
 export default function ForexManagementPage() {
+  const { t, dir, locale } = useLanguage();
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
@@ -68,12 +70,12 @@ export default function ForexManagementPage() {
       if (res.success) {
         setCurrentRate(res.eurToMad);
         toast({
-          title: '✅ تم تحديث سعر الصرف',
+          title: t('✅ تم تحديث سعر الصرف', '✅ Taux de change mis à jour'),
           description: `1 EUR = ${res.eurToMad} MAD (${res.source})`,
         });
         fetchData();
       } else {
-        toast({ title: 'تنبيه', description: res.error, variant: 'destructive' });
+        toast({ title: t('تنبيه', 'Attention'), description: res.error, variant: 'destructive' });
       }
     } finally {
       setSyncing(false);
@@ -113,15 +115,18 @@ export default function ForexManagementPage() {
   }, [gainLossEntries]);
 
   return (
-    <div className="space-y-6 pb-12" dir="rtl">
+    <div className="space-y-6 pb-12" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <Globe className="w-6 h-6 text-primary" />
-            إدارة العملات الأجنبية وأسعار الصرف (Forex & Treasury)
+            {t('إدارة العملات الأجنبية وأسعار الصرف', 'Gestion des Devises & Taux de Change (Forex)')}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            متابعة السيولة المزدوجة (EUR / MAD)، تسعير العملات الأجنبية، ورصد فروق الصرف المحققة
+            {t(
+              'متابعة السيولة المزدوجة (EUR / MAD)، تسعير العملات الأجنبية، ورصد فروق الصرف المحققة',
+              'Suivi de la trésorerie multi-devises (EUR / MAD), taux de change et écarts de conversion réalisés'
+            )}
           </p>
         </div>
 
@@ -131,7 +136,7 @@ export default function ForexManagementPage() {
           className="rounded-xl gap-2 font-bold shadow-xs self-start sm:self-auto"
         >
           <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-          <span>تحديث سعر الصرف الآن</span>
+          <span>{t('تحديث سعر الصرف الآن', 'Actualiser le taux maintenant')}</span>
         </Button>
       </div>
 
@@ -142,8 +147,8 @@ export default function ForexManagementPage() {
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">أرصدة البنوك بالدرهم (MAD)</p>
-              <p className="text-xl font-bold font-mono text-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground">{t('أرصدة البنوك بالدرهم (MAD)', 'Soldes bancaires en Dirhams (MAD)')}</p>
+              <p className="text-xl font-bold font-mono text-foreground mt-0.5" dir="ltr">
                 {formatCurrency(totalBalances.madTotal, 'MAD')}
               </p>
             </div>
@@ -156,8 +161,8 @@ export default function ForexManagementPage() {
               <Wallet className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">أرصدة الخزينة باليورو (€)</p>
-              <p className="text-xl font-bold font-mono text-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground">{t('أرصدة الخزينة باليورو (€)', 'Soldes trésorerie en Euros (€)')}</p>
+              <p className="text-xl font-bold font-mono text-foreground mt-0.5" dir="ltr">
                 {formatCurrency(totalBalances.eurTotal, 'EUR')}
               </p>
             </div>
@@ -180,11 +185,12 @@ export default function ForexManagementPage() {
               )}
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">صافي فروق الصرف المحققة</p>
+              <p className="text-xs text-muted-foreground">{t('صافي فروق الصرف المحققة', 'Écarts de change nets réalisés')}</p>
               <p
                 className={`text-xl font-bold font-mono mt-0.5 ${
                   totalGainLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
+                dir="ltr"
               >
                 {totalGainLoss >= 0 ? '+' : ''}
                 {formatCurrency(totalGainLoss, 'MAD')}
@@ -204,42 +210,43 @@ export default function ForexManagementPage() {
         <CardHeader className="border-b border-border/70 py-3.5 px-5">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-primary" />
-            <span>سجل تسويات فروق أسعار الصرف (Realized FX Entries)</span>
+            <span>{t('سجل تسويات فروق أسعار الصرف (Realized FX Entries)', 'Historique des gains/pertes de change (Realized FX)')}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="py-12 text-center text-xs text-muted-foreground">جاري تحميل البيانات...</div>
+            <div className="py-12 text-center text-xs text-muted-foreground">{t('جاري تحميل البيانات...', 'Chargement des données...')}</div>
           ) : gainLossEntries.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground">
-              لا توجد قيود فروق صرف مسجلة حتى الآن.
+              {t('لا توجد قيود فروق صرف مسجلة حتى الآن.', 'Aucun écart de change enregistré pour le moment.')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
-                    <th className="py-3 px-4 text-start font-semibold">المبلغ الأصلي</th>
-                    <th className="py-3 px-4 text-start font-semibold">سعر الإصدار</th>
-                    <th className="py-3 px-4 text-start font-semibold">سعر التسوية</th>
-                    <th className="py-3 px-4 text-start font-semibold">الفارق المحقق</th>
-                    <th className="py-3 px-4 text-start font-semibold">النوع</th>
-                    <th className="py-3 px-4 text-start font-semibold">البيان</th>
-                    <th className="py-3 px-4 text-end font-semibold">التاريخ</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('المبلغ الأصلي', 'Montant d\'origine')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('سعر الإصدار', 'Taux initial')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('سعر التسوية', 'Taux règlement')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('الفارق المحقق', 'Écart réalisé')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('النوع', 'Type')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('البيان', 'Description')}</th>
+                    <th className="py-3 px-4 text-end font-semibold">{t('التاريخ', 'Date')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60 font-mono text-xs">
                   {gainLossEntries.map((entry) => (
                     <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground">
+                      <td className="py-3 px-4 font-bold text-foreground" dir="ltr">
                         {entry.original_amount} {entry.original_currency}
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground">{entry.original_rate}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{entry.settlement_rate}</td>
+                      <td className="py-3 px-4 text-muted-foreground" dir="ltr">{entry.original_rate}</td>
+                      <td className="py-3 px-4 text-muted-foreground" dir="ltr">{entry.settlement_rate}</td>
                       <td
                         className={`py-3 px-4 font-bold ${
                           entry.entry_type === 'gain' ? 'text-emerald-600' : 'text-rose-600'
                         }`}
+                        dir="ltr"
                       >
                         {entry.entry_type === 'gain' ? '+' : '-'}
                         {formatCurrency(entry.realized_gain_loss, 'MAD')}
@@ -252,14 +259,14 @@ export default function ForexManagementPage() {
                               : 'bg-rose-500/15 text-rose-600 border border-rose-500/30'
                           }`}
                         >
-                          {entry.entry_type === 'gain' ? 'أرباح صرف' : 'خسائر صرف'}
+                          {entry.entry_type === 'gain' ? t('أرباح صرف', 'Gain de change') : t('خسائر صرف', 'Perte de change')}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-sans text-muted-foreground truncate max-w-xs">
-                        {entry.notes || 'تسوية آلية'}
+                        {entry.notes || t('تسوية آلية', 'Règlement automatique')}
                       </td>
                       <td className="py-3 px-4 text-end text-muted-foreground whitespace-nowrap">
-                        {entry.created_at ? new Date(entry.created_at).toLocaleDateString('ar-MA') : '—'}
+                        {entry.created_at ? new Date(entry.created_at).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR') : '—'}
                       </td>
                     </tr>
                   ))}

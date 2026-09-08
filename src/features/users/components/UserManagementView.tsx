@@ -72,6 +72,13 @@ export function UserManagementView() {
     UserRole,
     { label: string; badgeClass: string; icon: React.ComponentType<{ className?: string }>; desc: string }
   > = {
+    super_admin: {
+      label: t('المدير العام', 'Super Admin'),
+      badgeClass:
+        'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      icon: ShieldCheck,
+      desc: t('إدارة شاملة لكافة الشركات المستأجرة وإعدادات المنظومة', 'Supervision globale de tous les locataires'),
+    },
     admin: {
       label: t('مدير النظام', 'Administrateur'),
       badgeClass:
@@ -111,10 +118,11 @@ export function UserManagementView() {
   // Statistics
   const stats = useMemo(() => {
     const total = users.length;
+    const superAdmins = users.filter((u) => u.role === 'super_admin').length;
     const admins = users.filter((u) => u.role === 'admin').length;
     const secretaries = users.filter((u) => u.role === 'secretary').length;
     const drivers = users.filter((u) => u.role === 'driver').length;
-    return { total, admins, secretaries, drivers };
+    return { total, superAdmins, admins, secretaries, drivers };
   }, [users]);
 
   const handleOpenAddModal = () => {
@@ -359,6 +367,16 @@ export function UserManagementView() {
               >
                 {t('الكل', 'Tous')} ({stats.total})
               </Button>
+              {stats.superAdmins > 0 && (
+                <Button
+                  variant={roleFilter === 'super_admin' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRoleFilter('super_admin')}
+                  className="rounded-xl text-xs"
+                >
+                  {t('المدراء العامين', 'Super Admins')} ({stats.superAdmins})
+                </Button>
+              )}
               <Button
                 variant={roleFilter === 'admin' ? 'default' : 'outline'}
                 size="sm"
@@ -603,8 +621,8 @@ export function UserManagementView() {
                 {t('الدور والصلاحيات في المنظومة', 'Rôle & Permissions')} *
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {(['admin', 'secretary', 'driver'] as UserRole[]).map((r) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {(['super_admin', 'admin', 'secretary', 'driver'] as UserRole[]).map((r) => {
                   const cfg = roleConfig[r];
                   const Icon = cfg.icon;
                   const isSelected = formData.role === r;

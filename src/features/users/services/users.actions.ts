@@ -18,19 +18,45 @@ function getAdminClient() {
 export async function getUsersAction(): Promise<{ success: boolean; data?: User[]; error?: string }> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+    let currentCompanyId: number | null = null;
+    if (currentUser) {
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+      if (userProfile?.company_id) {
+        currentCompanyId = userProfile.company_id;
+      }
+    }
+
+    let query = supabase
       .from('users')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (currentCompanyId) {
+      query = query.eq('company_id', currentCompanyId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       // If RLS denies or table issue, check if adminClient can read
       const adminClient = getAdminClient();
       if (adminClient) {
-        const { data: adminData, error: adminError } = await adminClient
+        let adminQuery = adminClient
           .from('users')
           .select('*')
           .order('created_at', { ascending: false });
+
+        if (currentCompanyId) {
+          adminQuery = adminQuery.eq('company_id', currentCompanyId);
+        }
+
+        const { data: adminData, error: adminError } = await adminQuery;
         if (!adminError && adminData) {
           return { success: true, data: adminData as User[] };
         }
@@ -50,6 +76,22 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
     const supabase = await createClient();
     const adminClient = getAdminClient();
 
+    // Determine tenant company_id
+    let companyIdToAssign = input.company_id;
+    if (!companyIdToAssign) {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { data: userProfile } = await supabase
+          .from('users')
+          .select('company_id')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+        companyIdToAssign = userProfile?.company_id || 1;
+      } else {
+        companyIdToAssign = 1;
+      }
+    }
+
     let authUserId: string | null = null;
 
     // 1. Try creating user in Supabase Auth via Admin Client
@@ -62,6 +104,7 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
           user_metadata: {
             name: input.name,
             role: input.role,
+            company_id: companyIdToAssign,
           },
         });
 
@@ -87,6 +130,7 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
       email: input.email.toLowerCase().trim(),
       role: input.role,
       preferred_language: input.preferred_language || 'ar',
+      company_id: companyIdToAssign,
       created_at: new Date().toISOString(),
     };
 
@@ -132,6 +176,9 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
     };
     if (input.preferred_language) {
       updatePayload.preferred_language = input.preferred_language;
+    }
+    if (input.company_id !== undefined) {
+      updatePayload.company_id = input.company_id;
     }
 
     let { data, error } = await supabase

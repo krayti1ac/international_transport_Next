@@ -19,22 +19,22 @@ export function CardViewToggle({
   viewMode,
   onChange,
   className = '',
-  gridLabel = 'عرض البطاقات (شبكة)',
-  listLabel = 'عرض القائمة ببطاقات',
+  gridLabel = 'عرض كبطاقات',
+  listLabel = 'عرض كقائمة',
   size = 'default',
   showLabels = true,
 }: CardViewToggleProps) {
   return (
     <div
       role="group"
-      aria-label="نمط عرض البطاقات"
+      aria-label="نمط العرض"
       className={`inline-flex items-center rounded-xl bg-muted/60 p-1 border border-border/70 shadow-2xs ${className}`}
     >
       <button
         type="button"
         onClick={() => onChange('grid')}
         aria-pressed={viewMode === 'grid'}
-        title="عرض البطاقات (Grid Cards / Card View)"
+        title="عرض كبطاقات (شبكي)"
         className={`flex items-center gap-1.5 rounded-lg font-semibold transition-all select-none ${
           size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
         } ${
@@ -51,7 +51,7 @@ export function CardViewToggle({
         type="button"
         onClick={() => onChange('list')}
         aria-pressed={viewMode === 'list'}
-        title="عرض القائمة ببطاقات (List View Cards)"
+        title="عرض كقائمة"
         className={`flex items-center gap-1.5 rounded-lg font-semibold transition-all select-none ${
           size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
         } ${
@@ -77,22 +77,21 @@ export function useCardViewMode(storageKey: string, defaultMode: CardViewMode = 
     try {
       const saved = localStorage.getItem(`view_mode_${storageKey}`);
       if (saved === 'grid' || saved === 'list') {
-        setViewMode(saved as CardViewMode);
+        setViewMode(saved);
       }
     } catch {
-      // Ignore localStorage errors in restricted environments
+      // Ignore localStorage errors in SSR/incognito
     }
   }, [storageKey]);
 
-  const updateViewMode = (mode: CardViewMode) => {
+  const setAndSaveViewMode = (mode: CardViewMode) => {
     setViewMode(mode);
     try {
       localStorage.setItem(`view_mode_${storageKey}`, mode);
     } catch {
-      // Ignore
+      // Ignore localStorage errors
     }
   };
 
-  return [viewMode, updateViewMode] as const;
+  return [viewMode, setAndSaveViewMode] as const;
 }
-

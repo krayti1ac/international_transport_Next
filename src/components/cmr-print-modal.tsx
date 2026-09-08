@@ -7,6 +7,7 @@ import { Printer, X, PlaneTakeoff, PlaneLanding, ExternalLink } from 'lucide-rea
 import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
 import { generateCMRQrCodeBase64, buildCMRVerificationUrl } from '@/lib/cmr-qr';
 import { useLanguage } from '@/components/language-provider';
+import { CmrQrCode } from '@/components/cmr-qr-code';
 
 interface CMRModalProps {
   isOpen: boolean;
@@ -56,7 +57,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
-      dir="rtl"
+      dir={dir}
       onClick={onClose}
     >
       <div
@@ -74,7 +75,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
                 }`}
               >
                 <PlaneTakeoff className="w-3.5 h-3.5" />
-                CMR الذهاب (Export Aller)
+                {t('CMR الذهاب (Export Aller)', 'CMR Export (Aller)')}
               </button>
               <button
                 onClick={() => setCmrType('import')}
@@ -83,13 +84,13 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
                 }`}
               >
                 <PlaneLanding className="w-3.5 h-3.5" />
-                CMR العودة (Import Retour)
+                {t('CMR العودة (Import Retour)', 'CMR Import (Retour)')}
               </button>
             </div>
 
-            <Button onClick={handlePrint} className="flex items-center gap-2 mr-2">
+            <Button onClick={handlePrint} className={`flex items-center gap-2 ${dir === 'rtl' ? 'mr-2' : 'ml-2'}`}>
               <Printer className="w-4 h-4" />
-              {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF', 'Print / Export PDF')}
+              {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF')}
             </Button>
             <Button
               variant="outline"
@@ -98,7 +99,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
               className="flex items-center gap-1.5 text-xs text-blue-600"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              {t('معاينة رابط التتبع الحي', 'Aperçu du lien de suivi', 'Preview live tracking')}
+              {t('معاينة رابط التتبع الحي', 'Aperçu du lien de suivi')}
             </Button>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -121,12 +122,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
               </div>
               
               <div className="flex items-center gap-3">
-                {qrCodeBase64 && (
-                  <div className="text-center">
-                    <img src={qrCodeBase64} alt="e-CMR QR Code" className="w-20 h-20 border border-slate-300 rounded p-0.5" />
-                    <span className="text-[8px] font-mono text-slate-500 uppercase block mt-0.5">Scan to Verify (GPS)</span>
-                  </div>
-                )}
+                <CmrQrCode tripId={trip.id} size={76} />
                 <div className="text-right">
                   <p className="text-xs text-slate-500 font-bold uppercase">CMR Document N°</p>
                   <p className="text-base font-mono font-black text-slate-900">{cmrDocNumber}</p>

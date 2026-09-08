@@ -23,6 +23,7 @@ const amiri = Amiri({
 export const metadata: Metadata = {
   title: "النقل الدولي - International Transport",
   description: "نظام إدارة عمليات النقل الدولي واللوجستيك",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

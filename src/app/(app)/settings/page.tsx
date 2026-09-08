@@ -39,6 +39,8 @@ function SettingsContent() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [settings, setSettings] = useState({
     company_name: '',
+    ice: '',
+    currency: 'MAD',
     logo_url: null as string | null,
     owner_profit_share: '0',
     default_bank_account_id: '',
@@ -48,17 +50,34 @@ function SettingsContent() {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const { locale, dir, setLocale, t } = useLanguage();
-  const { user } = useAuth();
+  const { user, company, companyId, refreshCompany } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [companyId, user?.company_id]);
 
   const fetchSettings = async () => {
     try {
       const savedLocalTva = typeof window !== 'undefined' ? localStorage.getItem('app_default_tva_rate') : null;
+      const targetCompanyId = companyId || user?.company_id || 1;
 
+      // 1. Fetch company data from companies table
+      let fetchedCompany: any = null;
+      try {
+        const { data: compData, error: compErr } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', targetCompanyId)
+          .maybeSingle();
+        if (!compErr && compData) {
+          fetchedCompany = compData;
+        }
+      } catch (cErr) {
+        console.warn('Could not fetch companies row:', cErr);
+      }
+
+      // 2. Fetch system settings
       const { data, error } = await supabase
         .from('system_settings')
         .select('*')
@@ -67,19 +86,18 @@ function SettingsContent() {
       if (error && error.code !== 'PGRST116') {
         console.warn('Could not fetch system_settings:', error.message);
       }
-      if (data) {
-        setSettings({
-          company_name: data.company_name || '',
-          logo_url: data.logo_url || null,
-          owner_profit_share: data.owner_profit_share?.toString() || '0',
-          default_bank_account_id: data.default_bank_account_id?.toString() || '',
-          default_tva_rate: (data.default_tva_rate !== undefined && data.default_tva_rate !== null)
-            ? data.default_tva_rate.toString()
-            : (savedLocalTva || '20'),
-        });
-      } else if (savedLocalTva) {
-        setSettings((prev) => ({ ...prev, default_tva_rate: savedLocalTva }));
-      }
+
+      setSettings({
+        company_name: fetchedCompany?.name || data?.company_name || company?.name || '',
+        ice: fetchedCompany?.ice || company?.ice || '',
+        currency: fetchedCompany?.currency || company?.currency || 'MAD',
+        logo_url: fetchedCompany?.logo_url ?? data?.logo_url ?? company?.logo_url ?? null,
+        owner_profit_share: data?.owner_profit_share?.toString() || '0',
+        default_bank_account_id: data?.default_bank_account_id?.toString() || '',
+        default_tva_rate: (data?.default_tva_rate !== undefined && data?.default_tva_rate !== null)
+          ? data.default_tva_rate.toString()
+          : (savedLocalTva || '20'),
+      });
     } catch (error: any) {
       toast({
         title: 'خطأ في تحميل الإعدادات',
@@ -98,6 +116,28 @@ function SettingsContent() {
         localStorage.setItem('app_default_tva_rate', settings.default_tva_rate || '20');
       }
 
+      const targetCompanyId = companyId || user?.company_id || 1;
+
+      // 1. Save to companies table
+      try {
+        const { error: compUpdateErr } = await supabase
+          .from('companies')
+          .update({
+            name: settings.company_name,
+            ice: settings.ice,
+            currency: settings.currency,
+            logo_url: settings.logo_url || null,
+          })
+          .eq('id', targetCompanyId);
+
+        if (compUpdateErr) {
+          console.warn('Could not update companies table:', compUpdateErr.message);
+        }
+      } catch (cSaveErr) {
+        console.warn('Failed saving to companies:', cSaveErr);
+      }
+
+      // 2. Save to system_settings for legacy backward compatibility
       const payload: any = {
         id: 1,
         company_name: settings.company_name,
@@ -127,9 +167,8 @@ function SettingsContent() {
         error = retryResult.error;
       }
 
-      if (error) throw error;
-
-      // Update sidebar branding without requiring a full reload
+      // Update company context & sidebar branding without requiring a full reload
+      await refreshCompany();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('company-settings-updated'));
       }
@@ -532,6 +571,27 @@ function SettingsContent() {
                   onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
                   placeholder={t('مثال: شركة النقل الدولي واللوجستيك', 'Ex: Société de Transport International')}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">{t('التعريف الموحد للمقاولة (ICE)', "Identifiant Commun de l'Entreprise (ICE)")}</label>
+                  <Input
+                    value={settings.ice}
+                    onChange={(e) => setSettings({ ...settings, ice: e.target.value })}
+                    placeholder="000123456789000"
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">{t('العملة الافتراضية للشركة', 'Devise par défaut')}</label>
+                  <Input
+                    value={settings.currency}
+                    onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
+                    placeholder="MAD"
+                    dir="ltr"
+                  />
+                </div>
               </div>
 
               {/* شعار الشركة */}

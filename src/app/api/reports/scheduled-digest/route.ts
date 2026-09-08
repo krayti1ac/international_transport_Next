@@ -5,9 +5,11 @@ import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import { createClient } from '@/lib/supabase/server';
 import { formatCurrency } from '@/lib/forex';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
     const cronSecret = process.env.CRON_SECRET;
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       return new NextResponse('غير مصرح', { status: 401 });

@@ -4,13 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { TruckMaintenance, Truck, Trailer } from '@/types/database';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import {
   Wrench,
-  Search,
   Plus,
   Trash2,
   Calendar,
@@ -29,8 +27,10 @@ import {
 } from '@/features/fleet/services/maintenance-schedule.actions';
 import { MaintenanceSchedulerModal } from '@/features/fleet/components/MaintenanceSchedulerModal';
 import { CompleteMaintenanceModal } from '@/features/fleet/components/CompleteMaintenanceModal';
+import { useLanguage } from '@/components/language-provider';
 
 export default function MaintenancePage() {
+  const { t, dir } = useLanguage();
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
@@ -38,7 +38,6 @@ export default function MaintenancePage() {
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const [schedules, setSchedules] = useState<EnrichedMaintenanceSchedule[]>([]);
   const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
@@ -61,25 +60,25 @@ export default function MaintenancePage() {
         setSchedules(schedRes.data);
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'فشل تحميل سجلات الصيانة';
-      toast({ title: 'خطأ', description: message, variant: 'destructive' });
+      const message = error instanceof Error ? error.message : t('فشل تحميل سجلات الصيانة', 'Échec du chargement de l\'historique');
+      toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, t]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const handleDeleteSchedule = async (id: number) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الموعد المجدول؟')) return;
+    if (!confirm(t('هل أنت متأكد من رغبتك في حذف هذا الموعد المجدول؟', 'Êtes-vous sûr de vouloir supprimer cette maintenance programmée ?'))) return;
     const res = await deleteMaintenanceSchedule(id);
     if (res.success) {
-      toast({ title: 'تم حذف الموعد المجدول' });
+      toast({ title: t('تم حذف الموعد المجدول', 'Maintenance programmée supprimée') });
       fetchData();
     } else {
-      toast({ title: 'خطأ', description: res.error, variant: 'destructive' });
+      toast({ title: t('خطأ', 'Erreur'), description: res.error, variant: 'destructive' });
     }
   };
 
@@ -91,15 +90,18 @@ export default function MaintenancePage() {
   }, [schedules]);
 
   return (
-    <div className="space-y-6 pb-12" dir="rtl">
+    <div className="space-y-6 pb-12" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <Wrench className="w-6 h-6 text-primary" />
-            الصيانة العامة والوقائية للأسطول
+            {t('الصيانة العامة والوقائية للأسطول', 'Maintenance Générale et Préventive de la Flotte')}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            متابعة فواتير الإصلاح، جدولة الصيانة الدورية، ومراقبة استهلاك القطع الحيوية
+            {t(
+              'متابعة فواتير الإصلاح، جدولة الصيانة الدورية، ومراقبة استهلاك القطع الحيوية',
+              'Suivi des factures de réparation, planification préventive et contrôle des pièces'
+            )}
           </p>
         </div>
 
@@ -108,7 +110,7 @@ export default function MaintenancePage() {
           className="rounded-xl gap-2 font-bold shadow-xs self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
-          <span>جدولة صيانة وقائية جديدة</span>
+          <span>{t('جدولة صيانة وقائية جديدة', 'Programmer une nouvelle maintenance')}</span>
         </Button>
       </div>
 
@@ -119,9 +121,9 @@ export default function MaintenancePage() {
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">صيانة متأخرة تجاوزت الموعد</p>
+              <p className="text-xs text-muted-foreground">{t('صيانة متأخرة تجاوزت الموعد', 'Maintenances en retard')}</p>
               <p className="text-xl font-bold font-mono text-rose-600 mt-0.5">
-                {scheduleStats.overdue} مركبات
+                {scheduleStats.overdue} {t('مركبات', 'véhicules')}
               </p>
             </div>
           </CardContent>
@@ -133,9 +135,9 @@ export default function MaintenancePage() {
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">مستحقة خلال 14 يوماً</p>
+              <p className="text-xs text-muted-foreground">{t('مستحقة خلال 14 يوماً', 'Échéance sous 14 jours')}</p>
               <p className="text-xl font-bold font-mono text-amber-600 mt-0.5">
-                {scheduleStats.dueSoon} مركبات
+                {scheduleStats.dueSoon} {t('مركبات', 'véhicules')}
               </p>
             </div>
           </CardContent>
@@ -147,9 +149,9 @@ export default function MaintenancePage() {
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">إجمالي العمليات المجدولة</p>
+              <p className="text-xs text-muted-foreground">{t('إجمالي العمليات المجدولة', 'Total des tâches programmées')}</p>
               <p className="text-xl font-bold font-mono text-foreground mt-0.5">
-                {scheduleStats.total} مهام
+                {scheduleStats.total} {t('مهام', 'tâches')}
               </p>
             </div>
           </CardContent>
@@ -160,11 +162,11 @@ export default function MaintenancePage() {
         <TabsList className="grid w-full sm:w-80 grid-cols-2 h-11 rounded-xl mb-4">
           <TabsTrigger value="scheduler" className="rounded-lg text-xs font-bold gap-2">
             <Calendar className="w-3.5 h-3.5" />
-            جدول المواعيد والتنبيهات ({schedules.length})
+            {t('المواعيد والتنبيهات', 'Échéancier')} ({schedules.length})
           </TabsTrigger>
           <TabsTrigger value="history" className="rounded-lg text-xs font-bold gap-2">
             <Wrench className="w-3.5 h-3.5" />
-            سجل الصيانة المنفذة ({records.length})
+            {t('سجل المنفذة', 'Historique')} ({records.length})
           </TabsTrigger>
         </TabsList>
 
@@ -173,31 +175,31 @@ export default function MaintenancePage() {
             <CardHeader className="border-b border-border/70 py-3.5 px-5 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-primary" />
-                <span>مواعيد الصيانة الوقائية القادمة</span>
+                <span>{t('مواعيد الصيانة الوقائية القادمة', 'Échéances de maintenance à venir')}</span>
               </CardTitle>
               <Button variant="ghost" size="sm" onClick={fetchData} className="h-8 text-xs gap-1">
                 <RefreshCw className="w-3.5 h-3.5" />
-                تحديث
+                {t('تحديث', 'Actualiser')}
               </Button>
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
-                <div className="py-12 text-center text-xs text-muted-foreground">جاري تحميل جدول الصيانة...</div>
+                <div className="py-12 text-center text-xs text-muted-foreground">{t('جاري تحميل جدول الصيانة...', 'Chargement du planning...')}</div>
               ) : schedules.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">
-                  لا توجد مواعيد صيانة مجدولة حالياً. اضغط على &quot;جدولة صيانة وقائية جديدة&quot; للإضافة.
+                  {t('لا توجد مواعيد صيانة مجدولة حالياً. اضغط على "جدولة صيانة وقائية جديدة" للإضافة.', 'Aucune maintenance programmée. Cliquez sur "Programmer une nouvelle maintenance" pour en ajouter.')}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
-                        <th className="py-3 px-4 text-start font-semibold">المركبة</th>
-                        <th className="py-3 px-4 text-start font-semibold">نوع الصيانة المجدولة</th>
-                        <th className="py-3 px-4 text-start font-semibold">تاريخ الاستحقاق</th>
-                        <th className="py-3 px-4 text-start font-semibold">الحالة والمهلة</th>
-                        <th className="py-3 px-4 text-start font-semibold">التكلفة التقديرية</th>
-                        <th className="py-3 px-4 text-end font-semibold">الإجراءات</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('المركبة', 'Véhicule')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('نوع الصيانة المجدولة', 'Type de maintenance')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('تاريخ الاستحقاق', 'Date d\'échéance')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('الحالة والمهلة', 'Statut / Délai')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('التكلفة التقديرية', 'Coût estimé')}</th>
+                        <th className="py-3 px-4 text-end font-semibold">{t('الإجراءات', 'Actions')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60 text-xs">
@@ -224,13 +226,13 @@ export default function MaintenancePage() {
                                 }`}
                               >
                                 {isOverdue
-                                  ? `متأخرة (${Math.abs(item.daysRemaining)} يوم)`
+                                  ? `${t('متأخرة', 'En retard')} (${Math.abs(item.daysRemaining)} ${t('يوم', 'j')})`
                                   : isDueSoon
-                                  ? `مستحقة قريباً (${item.daysRemaining} يوم)`
-                                  : `متبقي ${item.daysRemaining} يوم`}
+                                  ? `${t('مستحقة قريباً', 'Bientôt')} (${item.daysRemaining} ${t('يوم', 'j')})`
+                                  : `${t('متبقي', 'Reste')} ${item.daysRemaining} ${t('يوم', 'j')}`}
                               </span>
                             </td>
-                            <td className="py-3 px-4 font-mono font-bold text-foreground">
+                            <td className="py-3 px-4 font-mono font-bold text-foreground" dir="ltr">
                               {formatCurrency(item.amount_estimate || 0, item.currency || 'MAD')}
                             </td>
                             <td className="py-3 px-4 text-end">
@@ -241,7 +243,7 @@ export default function MaintenancePage() {
                                   className="h-8 text-xs rounded-xl gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
-                                  إتمام وصرف
+                                  {t('إتمام وصرف', 'Valider & Clôturer')}
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -269,7 +271,7 @@ export default function MaintenancePage() {
             <CardHeader className="border-b border-border/70 py-3.5 px-5">
               <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <Gauge className="w-4 h-4 text-primary" />
-                <span>سجل مصاريف الصيانة السابقة</span>
+                <span>{t('سجل مصاريف الصيانة السابقة', 'Historique des dépenses de maintenance')}</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -277,11 +279,11 @@ export default function MaintenancePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
-                      <th className="py-3 px-4 text-start font-semibold">رقم الشاحنة</th>
-                      <th className="py-3 px-4 text-start font-semibold">نوع الصيانة</th>
-                      <th className="py-3 px-4 text-start font-semibold">التاريخ</th>
-                      <th className="py-3 px-4 text-start font-semibold">المبلغ</th>
-                      <th className="py-3 px-4 text-start font-semibold">الورشة / الملاحظات</th>
+                      <th className="py-3 px-4 text-start font-semibold">{t('رقم الشاحنة', 'Camion')}</th>
+                      <th className="py-3 px-4 text-start font-semibold">{t('نوع الصيانة', 'Type')}</th>
+                      <th className="py-3 px-4 text-start font-semibold">{t('التاريخ', 'Date')}</th>
+                      <th className="py-3 px-4 text-start font-semibold">{t('المبلغ', 'Montant')}</th>
+                      <th className="py-3 px-4 text-start font-semibold">{t('الورشة / الملاحظات', 'Atelier / Remarques')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60 text-xs">
@@ -290,11 +292,11 @@ export default function MaintenancePage() {
                       return (
                         <tr key={rec.id} className="hover:bg-muted/30 transition-colors">
                           <td className="py-3 px-4 font-mono font-bold">
-                            {truck ? <MatriculeBadge plate={truck.plate_number} variant="badge" size="xs" /> : `شاحنة #${rec.truck_id}`}
+                            {truck ? <MatriculeBadge plate={truck.plate_number} variant="badge" size="xs" /> : `${t('شاحنة #', 'Camion #')}${rec.truck_id}`}
                           </td>
-                          <td className="py-3 px-4 font-medium">{rec.expense_type || rec.type || 'صيانة عامة'}</td>
+                          <td className="py-3 px-4 font-medium">{rec.expense_type || rec.type || t('صيانة عامة', 'Entretien général')}</td>
                           <td className="py-3 px-4 font-mono">{rec.maintenance_date || rec.date || '—'}</td>
-                          <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                          <td className="py-3 px-4 font-mono font-bold text-rose-600" dir="ltr">
                             -{formatCurrency(rec.amount, rec.currency || 'MAD')}
                           </td>
                           <td className="py-3 px-4 text-muted-foreground truncate max-w-xs">{rec.description || rec.notes || '—'}</td>
