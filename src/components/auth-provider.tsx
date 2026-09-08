@@ -1,25 +1,61 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { User, UserRole } from '@/types/database';
+import type { User, UserRole, Company } from '@/types/database';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 interface AuthContextType {
   user: User | null;
   role: UserRole | null;
+  company: Company | null;
+  companyId: number | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ user?: User; role?: UserRole; error?: string }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ user?: User; role?: UserRole; company?: Company | null; error?: string }>;
+  signUp: (email: string, password: string, name: string, companyId?: number) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  refreshCompany: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const setAuthStoreUser = useAuthStore((s) => s.setUser);
+  const setAuthStoreCompany = useAuthStore((s) => s.setCompany);
+
+  const fetchCompany = useCallback(async (companyId: number | null | undefined): Promise<Company | null> => {
+    if (!companyId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyId)
+        .maybeSingle();
+      if (!error && data) {
+        return data as Company;
+      }
+    } catch (e) {
+      console.warn('Could not fetch company info:', e);
+    }
+    return null;
+  }, [supabase]);
+
+  const refreshCompany = useCallback(async () => {
+    const currentCompanyId = user?.company_id || company?.id;
+    if (currentCompanyId) {
+      const refreshed = await fetchCompany(currentCompanyId);
+      if (refreshed) {
+        setCompany(refreshed);
+        setAuthStoreCompany(refreshed);
+        setUser((prev) => (prev ? { ...prev, company: refreshed } : null));
+      }
+    }
+  }, [user?.company_id, company?.id, fetchCompany, setAuthStoreCompany]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -52,7 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (e) {}
           }
 
-          setUser({
+          const comp = await fetchCompany(data.company_id);
+          setCompany(comp);
+          setAuthStoreCompany(comp);
+
+          const loggedInUser: User = {
             id: data.id,
             email: data.email || session.user.email || '',
             role: data.role,
@@ -61,8 +101,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             theme_mode: data.theme_mode,
             mfa_enabled: data.mfa_enabled,
             preferred_language: userLang,
-          });
+            company_id: data.company_id || (comp?.id ?? null),
+            company: comp || undefined,
+          };
+
+          setUser(loggedInUser);
           setRole(data.role);
+          setAuthStoreUser(loggedInUser);
         }
       }
       setLoading(false);
@@ -99,7 +144,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (e) {}
           }
 
-          setUser({
+          const comp = await fetchCompany(data.company_id);
+          setCompany(comp);
+          setAuthStoreCompany(comp);
+
+          const loggedInUser: User = {
             id: data.id,
             email: data.email || session.user.email || '',
             role: data.role,
@@ -108,18 +157,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             theme_mode: data.theme_mode,
             mfa_enabled: data.mfa_enabled,
             preferred_language: userLang,
-          });
+            company_id: data.company_id || (comp?.id ?? null),
+            company: comp || undefined,
+          };
+
+          setUser(loggedInUser);
           setRole(data.role);
+          setAuthStoreUser(loggedInUser);
         }
       } else {
         setUser(null);
+        setCompany(null);
         setRole(null);
+        setAuthStoreUser(null);
       }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase]);
+  }, [supabase, fetchCompany, setAuthStoreCompany, setAuthStoreUser]);
 
   const signIn = async (email: string, password: string) => {
     const { data: authData, error } = await supabase.auth.signInWithPassword({
@@ -154,6 +210,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }
 
+        const comp = await fetchCompany(profile.company_id);
+        setCompany(comp);
+        setAuthStoreCompany(comp);
+
         const loggedInUser: User = {
           id: profile.id,
           email: profile.email || authData.user.email || '',
@@ -163,16 +223,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           theme_mode: profile.theme_mode,
           mfa_enabled: profile.mfa_enabled,
           preferred_language: userLang,
+          company_id: profile.company_id || (comp?.id ?? null),
+          company: comp || undefined,
         };
+
         setUser(loggedInUser);
         setRole(profile.role);
-        return { user: loggedInUser, role: profile.role };
+        setAuthStoreUser(loggedInUser);
+        return { user: loggedInUser, role: profile.role, company: comp };
       }
     }
     return {};
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, companyId?: number) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -186,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         name,
         role: 'secretary',
+        company_id: companyId || 1,
       });
     }
     return {};
@@ -194,11 +259,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setCompany(null);
     setRole(null);
+    useAuthStore.getState().logout();
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        role,
+        company,
+        companyId: company?.id ?? user?.company_id ?? null,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        refreshCompany,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

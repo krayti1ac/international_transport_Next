@@ -1,314 +1,226 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileText, AlertCircle, CheckCircle2, Loader2, X, Download } from 'lucide-react';
-import { useLanguage } from '@/components/language-provider';
-import { parseFileToRows, validateBulkRows, type BulkImportEntityType, type BulkImportResult } from '@/lib/bulk-import';
-import type { Truck, Trailer, Client } from '@/types/database';
+import { UploadCloud, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { readExcelFile, validateClientsImport, validateTrucksImport, type ImportedClient, type ImportedTruck } from '@/lib/excel-importer';
+import { bulkInsertClients, bulkInsertTrucks, bulkInsertTrailers } from '@/lib/bulk-import.actions';
+import * as XLSX from 'xlsx';
+
+export type BulkImportEntity = 'clients' | 'trucks' | 'client' | 'truck' | 'trailer';
 
 interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  entityType: BulkImportEntityType;
+  entityType: BulkImportEntity;
   onSuccess: () => void;
 }
 
 export function BulkImportModal({ isOpen, onClose, entityType, onSuccess }: BulkImportModalProps) {
-  const { t, dir } = useLanguage();
-  const { toast } = useToast();
-  const [file, setFile] = useState<File | null>(null);
-  const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [validData, setValidData] = useState<unknown[]>([]);
+  const [errors, setErrors] = useState<{ row: number; reasons: string[] }[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
 
-  const entityLabels: Record<BulkImportEntityType, { title: string; description: string; sampleHeaders: string[] }> = {
-    truck: {
-      title: t('استيراد جماعي للشاحنات', 'Importation en masse des camions'),
-      description: t('استيراد قائمة الشاحنات من ملف Excel أو CSV', 'Importer une liste de camions depuis un fichier Excel ou CSV'),
-      sampleHeaders: ['plate_number', 'model', 'status', 'weight_capacity'],
-    },
-    trailer: {
-      title: t('استيراد جماعي للمقطورات', 'Importation en masse des remorques'),
-      description: t('استيراد قائمة المقطورات من ملف Excel أو CSV', 'Importer une liste de remorques depuis un fichier Excel ou CSV'),
-      sampleHeaders: ['plate_number', 'model', 'status'],
-    },
-    client: {
-      title: t('استيراد جماعي للعملاء', 'Importation en masse des clients'),
-      description: t('استيراد قائمة العملاء من ملف Excel أو CSV', 'Importer une liste de clients depuis un fichier Excel ou CSV'),
-      sampleHeaders: ['name', 'phone', 'email', 'city', 'address', 'ice', 'client_type', 'currency'],
-    },
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const isClient = entityType === 'clients' || entityType === 'client';
+  const isTruck = entityType === 'trucks' || entityType === 'truck';
+  const isTrailer = entityType === 'trailer';
+
+  const entityTitle = isClient 
+    ? 'العملاء' 
+    : isTruck 
+      ? 'الشاحنات' 
+      : 'المقطورات';
+
+  const handleReset = () => {
+    setValidData([]);
+    setErrors([]);
+    setTotalRows(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      await processFile(e.dataTransfer.files[0]);
-    }
-  }, []);
-
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      await processFile(e.target.files[0]);
-    }
-  }, []);
-
-  const processFile = async (selectedFile: File) => {
-    setLoading(true);
-    setImportResult(null);
-    setFile(selectedFile);
+  const processFile = async (file: File) => {
+    setIsProcessing(true);
+    handleReset();
 
     try {
-      const rows = await parseFileToRows(selectedFile);
-      const result = validateBulkRows(rows, entityType);
-      setImportResult(result);
+      const rawData = await readExcelFile(file);
+      
+      let validationResult;
+      if (isClient) {
+        validationResult = validateClientsImport(rawData);
+      } else {
+        // Both trucks and trailers share plate_number/model/status layout
+        validationResult = validateTrucksImport(rawData);
+      }
 
-      if (result.invalidCount > 0) {
+      setValidData(validationResult.validData);
+      setErrors(validationResult.errors);
+      setTotalRows(validationResult.totalRows);
+
+      if (validationResult.errors.length > 0) {
         toast({
-          title: t('تم العثور على أخطاء', 'Erreurs détectées'),
-          description: t(`${result.invalidCount} صف يحتوي على أخطاء يجب إصلاحها`, `${result.invalidCount} lignes contiennent des erreurs`),
+          title: 'يوجد أخطاء في بعض الصفوف',
+          description: `تم العثور على أخطاء في ${validationResult.errors.length} صف تم استبعادها.`,
           variant: 'destructive',
         });
       }
-    } catch (error: any) {
-      toast({
-        title: t('خطأ في قراءة الملف', 'Erreur de lecture du fichier'),
-        description: error.message,
-        variant: 'destructive',
-      });
-      setFile(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'خطأ في قراءة الملف';
+      toast({ title: 'خطأ في قراءة الملف', description: message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      setIsProcessing(false);
     }
   };
 
-  const downloadSample = () => {
-    const headers = entityLabels[entityType].sampleHeaders.join(',');
-    const sampleRow = entityType === 'client'
-      ? ['Example Company', '+212600000000', 'contact@example.com', 'Tanger', 'Address', '12345678', 'export', 'MAD'].join(',')
-      : ['12345-A-123', 'Model X', 'active', '25'].join(',');
-    const csv = '\uFEFF' + headers + '\r\n' + sampleRow;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `sample_${entityType}s.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const onDragLeave = () => setIsDragging(false);
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  };
+
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
   };
 
   const handleImport = async () => {
-    if (!importResult || importResult.validCount === 0) return;
+    if (validData.length === 0) return;
+    setIsUploading(true);
 
-    setImporting(true);
     try {
-      const tableName = entityType === 'truck' ? 'trucks' : entityType === 'trailer' ? 'trailers' : 'clients';
-      const payload = importResult.validRows.map(row => {
-        const data = { ...row.data };
-        if (entityType === 'truck' && !data.status) data.status = 'active';
-        if (entityType === 'client') {
-          if (!data.client_type) data.client_type = 'export';
-          if (!data.currency) data.currency = 'MAD';
-          if (!data.is_active && data.is_active !== false) data.is_active = true;
-        }
-        return data;
-      });
+      if (isClient) {
+        await bulkInsertClients(validData as ImportedClient[]);
+      } else if (isTruck) {
+        await bulkInsertTrucks(validData as ImportedTruck[]);
+      } else if (isTrailer) {
+        await bulkInsertTrailers(validData as { plate_number: string; model?: string; status?: string }[]);
+      }
 
-      const { error } = await supabase.from(tableName).insert(payload);
-      if (error) throw error;
-
-      toast({
-        title: t('تم الاستيراد بنجاح', 'Importation réussie'),
-        description: t(`تم استيراد ${importResult.validCount} سجل بنجاح`, `${importResult.validCount} enregistrements importés avec succès`),
-      });
-
+      toast({ title: `✅ تم استيراد ${validData.length} سجل بنجاح.` });
       onSuccess();
-      handleClose();
-    } catch (error: any) {
-      toast({
-        title: t('خطأ أثناء الاستيراد', 'Erreur lors de l\'importation'),
-        description: error.message,
-        variant: 'destructive',
-      });
+      onClose();
+      handleReset();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'فشل الاستيراد';
+      toast({ title: 'فشل الاستيراد', description: message, variant: 'destructive' });
     } finally {
-      setImporting(false);
+      setIsUploading(false);
     }
   };
 
-  const handleClose = () => {
-    setFile(null);
-    setImportResult(null);
-    setLoading(false);
-    setImporting(false);
-    setDragActive(false);
-    onClose();
+  const downloadTemplate = () => {
+    const templateData = isClient 
+      ? [{ 'الاسم': 'شركة النقل السريع', 'الهاتف': '+212600000000', 'ICE': '001928374000082', 'النوع': 'export', 'العملة': 'MAD', 'العنوان': 'طنجة المتوسط' }]
+      : [{ 'رقم اللوحة': '12345-أ-50', 'العلامة التجارية': 'Volvo', 'الموديل': 'FH 500', 'الحالة': 'active' }];
+    
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, `${entityType}_template.xlsx`);
   };
 
-  const currentEntity = entityLabels[entityType];
-
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto" dir={dir}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); handleReset(); }}>
+      <DialogContent className="sm:max-w-xl" dir="rtl">
         <DialogHeader>
-          <DialogTitle className="font-amiri text-xl">{currentEntity.title}</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground mt-1">
-            {currentEntity.description}
-          </DialogDescription>
+          <DialogTitle className="font-amiri text-xl flex items-center justify-between">
+            <span>استيراد {entityTitle} جماعياً</span>
+            <Button variant="ghost" size="sm" onClick={downloadTemplate} className="text-blue-600 text-xs gap-1.5">
+              <FileSpreadsheet className="w-4 h-4" />
+              تحميل القالب الفارغ
+            </Button>
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
-          {!importResult && !loading && (
-            <div className="space-y-3">
-              <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-                  dragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-sm font-semibold text-foreground mb-1">
-                  {t('اسحب الملف هنا أو انقر للاختيار', 'Glissez le fichier ici ou cliquez pour sélectionner')}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t('يدعم ملفات .xlsx و .csv', 'Formats supportés : .xlsx et .csv')}
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.csv,.txt"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
+        {!validData.length && !errors.length && !isProcessing && (
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`mt-4 border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${
+              isDragging ? 'border-primary bg-primary/5' : 'border-slate-300 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-900/50'
+            }`}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input type="file" ref={fileInputRef} onChange={onFileSelect} accept=".xlsx,.xls,.csv" className="hidden" />
+            <UploadCloud className={`w-12 h-12 mb-4 ${isDragging ? 'text-primary' : 'text-slate-400'}`} />
+            <p className="text-sm font-medium text-foreground">اسحب وأفلت ملف Excel هنا</p>
+            <p className="text-xs text-muted-foreground mt-1">أو اضغط لاختيار ملف من جهازك (.xlsx, .csv)</p>
+          </div>
+        )}
 
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {t('الأعمدة المطلوبة:', 'Colonnes requises:')} {entityLabels[entityType].sampleHeaders.join(', ')}
-                </p>
-                <Button variant="ghost" size="sm" onClick={downloadSample} className="text-xs">
-                  <Download className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
-                  {t('تحميل نموذج', 'Télécharger modèle')}
-                </Button>
+        {isProcessing && (
+          <div className="py-12 flex flex-col items-center justify-center">
+            <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+            <p className="text-sm text-muted-foreground">جاري تحليل البيانات والتحقق من صحتها...</p>
+          </div>
+        )}
+
+        {(validData.length > 0 || errors.length > 0) && !isProcessing && (
+          <div className="mt-4 space-y-4">
+            <div className="flex gap-4 p-4 bg-muted/40 rounded-xl border border-border">
+              <div className="flex-1 text-center">
+                <p className="text-2xl font-bold text-foreground font-mono">{totalRows}</p>
+                <p className="text-xs text-muted-foreground">إجمالي الصفوف</p>
+              </div>
+              <div className="flex-1 text-center border-r border-border">
+                <p className="text-2xl font-bold text-emerald-600 font-mono">{validData.length}</p>
+                <p className="text-xs text-emerald-600/80">صفوف صالحة للاستيراد</p>
+              </div>
+              <div className="flex-1 text-center border-r border-border">
+                <p className="text-2xl font-bold text-rose-600 font-mono">{errors.length}</p>
+                <p className="text-xs text-rose-600/80">صفوف بها أخطاء</p>
               </div>
             </div>
-          )}
 
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-10">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-              <p className="text-sm text-muted-foreground">{t('جاري قراءة الملف...', 'Lecture du fichier...')}</p>
-            </div>
-          )}
-
-          {importResult && !loading && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium">{file?.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="flex items-center gap-1 text-emerald-600">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {importResult.validCount} {t('صالح', 'valides')}
-                    </span>
-                    {importResult.invalidCount > 0 && (
-                      <span className="flex items-center gap-1 text-rose-600">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {importResult.invalidCount} {t('خطأ', 'erreurs')}
-                      </span>
-                    )}
-                  </div>
+            {errors.length > 0 && (
+              <div className="border border-rose-200 dark:border-rose-900/50 rounded-xl overflow-hidden">
+                <div className="bg-rose-50 dark:bg-rose-950/40 px-3 py-2 flex items-center text-rose-700 dark:text-rose-300 text-sm font-semibold">
+                  <AlertCircle className="w-4 h-4 ml-2" />
+                  تفاصيل الأخطاء (لن يتم استيرادها)
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => { setImportResult(null); setFile(null); }}>
-                  <X className="w-4 h-4" />
-                </Button>
+                <div className="max-h-40 overflow-y-auto bg-card p-3 space-y-2">
+                  {errors.map((err, i) => (
+                    <div key={i} className="text-xs bg-rose-50/50 dark:bg-rose-950/20 p-2 rounded-lg border border-rose-200/50 dark:border-rose-900/30">
+                      <span className="font-bold text-rose-700 dark:text-rose-300">صف {err.row}:</span>
+                      <ul className="list-disc list-inside mt-1 text-muted-foreground">
+                        {err.reasons.map((r, idx) => <li key={idx}>{r}</li>)}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
 
-              {importResult.invalidCount > 0 && (
-                <div className="border border-rose-200 dark:border-rose-900 rounded-lg p-3 bg-rose-50 dark:bg-rose-950/30">
-                  <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 mb-2">
-                    {t('صفوف تحتوي على أخطاء:', 'Lignes avec erreurs:')}
-                  </p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {importResult.invalidRows.map((row, idx) => (
-                      <div key={idx} className="text-xs text-rose-600 dark:text-rose-400 bg-white dark:bg-rose-950/20 p-2 rounded border border-rose-100 dark:border-rose-900">
-                        <span className="font-mono font-bold">#{row.rowIndex}:</span> {row.errors.join(', ')}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {importResult.validCount > 0 && (
-                <div className="border border-emerald-200 dark:border-emerald-900 rounded-lg p-3 bg-emerald-50 dark:bg-emerald-950/30">
-                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2">
-                    {t('صفوف صالحة للاستيراد:', 'Lignes valides pour importation:')}
-                  </p>
-                  <div className="max-h-60 overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-emerald-200 dark:border-emerald-900">
-                          <th className="py-1.5 px-2 text-start font-semibold text-emerald-700 dark:text-emerald-300">#</th>
-                          {Object.keys(importResult.validRows[0]?.data || {}).slice(0, 6).map(key => (
-                            <th key={key} className="py-1.5 px-2 text-start font-semibold text-emerald-700 dark:text-emerald-300">{key}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900">
-                        {importResult.validRows.map((row) => (
-                          <tr key={row.rowIndex} className="hover:bg-emerald-50 dark:hover:bg-emerald-950/20">
-                            <td className="py-1.5 px-2 font-mono text-emerald-600">{row.rowIndex}</td>
-                            {Object.values(row.data).slice(0, 6).map((val, i) => (
-                              <td key={i} className="py-1.5 px-2 text-emerald-900 dark:text-emerald-100 max-w-[150px] truncate">{String(val ?? '')}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-3 border-t border-border/50">
-                <Button variant="outline" onClick={handleClose} disabled={importing} className="flex-1">
-                  {t('إلغاء', 'Annuler')}
-                </Button>
-                {importResult.validCount > 0 && (
-                  <Button onClick={handleImport} disabled={importing} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
-                    {importing ? <Loader2 className={`w-4 h-4 animate-spin ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} /> : <CheckCircle2 className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />}
-                    {t('تأكيد الاستيراد', 'Confirmer l\'importation')} ({importResult.validCount})
-                  </Button>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={handleReset}>إلغاء واختيار ملف آخر</Button>
+              <Button onClick={handleImport} disabled={validData.length === 0 || isUploading} className="min-w-[140px]">
+                {isUploading ? (
+                  <><Loader2 className="w-4 h-4 ml-2 animate-spin" /> جاري الحفظ...</>
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4 ml-2" /> استيراد ({validData.length}) سجل</>
                 )}
-              </div>
+              </Button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

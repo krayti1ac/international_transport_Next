@@ -1,4 +1,14 @@
-export type UserRole = 'admin' | 'secretary' | 'driver';
+export type UserRole = 'super_admin' | 'admin' | 'secretary' | 'driver';
+
+export interface Company {
+  id: number;
+  name: string;
+  ice?: string | null;
+  logo_url?: string | null;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 export interface User {
   id: string;
@@ -9,10 +19,13 @@ export interface User {
   theme_mode?: 'light' | 'dark' | 'system';
   mfa_enabled?: boolean;
   preferred_language?: 'ar' | 'fr' | 'en';
+  company_id?: number | null;
+  company?: Company;
 }
 
 export interface Client {
   id: number;
+  company_id?: number | null;
   name: string;
   phone: string;
   address: string;
@@ -49,6 +62,7 @@ export interface Client {
 
 export interface Driver {
   id: number;
+  company_id?: number | null;
   user_id?: string;
   name: string;
   phone: string;
@@ -67,6 +81,7 @@ export interface Driver {
 
 export interface Truck {
   id: number;
+  company_id?: number | null;
   plate_number: string;
   model: string;
   status: string;
@@ -83,6 +98,7 @@ export interface Truck {
 
 export interface Trailer {
   id: number;
+  company_id?: number | null;
   plate_number: string;
   model: string;
   status: string;
@@ -91,6 +107,7 @@ export interface Trailer {
 
 export interface TransportRoute {
   id: number;
+  company_id?: number | null;
   name: string;
   route_type: 'outbound' | 'return';
   origin: string;
@@ -107,6 +124,7 @@ export interface TransportRoute {
 
 export interface TripOrder {
   id: number;
+  company_id?: number | null;
   client_id?: number;
   client_import_id?: number;
   driver_id?: number;
@@ -149,6 +167,7 @@ export interface TripOrder {
 
 export interface Trip {
   id: number;
+  company_id?: number | null;
   driver_id: number;
   amount_given: number;
   date_out: string;
@@ -163,6 +182,7 @@ export interface Trip {
 
 export interface Advance {
   id: number;
+  company_id?: number | null;
   driver_id: number;
   amount: number;
   currency: string;
@@ -182,6 +202,7 @@ export interface Advance {
 
 export interface Invoice {
   id: number;
+  company_id?: number | null;
   client_id: string;
   invoice_number: string;
   total_amount: string;
@@ -206,6 +227,7 @@ export interface Invoice {
 
 export interface Payment {
   id: number;
+  company_id?: number | null;
   amount: number;
   method: string;
   status: string;
@@ -220,6 +242,7 @@ export interface Payment {
 
 export interface PaymentInvoiceAllocation {
   id: number;
+  company_id?: number | null;
   payment_id: number;
   invoice_id: number;
   allocated_amount: number;
@@ -228,6 +251,7 @@ export interface PaymentInvoiceAllocation {
 
 export interface TreasuryTransaction {
   id: number;
+  company_id?: number | null;
   type: string;
   amount: number;
   currency: string;

@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { useLanguage } from '@/components/language-provider';
 
 export default function ErrorBoundary({
   error,
@@ -15,6 +16,8 @@ export default function ErrorBoundary({
   reset?: () => void;
   retry?: () => void;
 }) {
+  const { t, dir } = useLanguage();
+
   useEffect(() => {
     if (error) {
       Sentry.captureException(error, {
@@ -39,17 +42,17 @@ export default function ErrorBoundary({
   const errorMessage =
     error?.message ||
     (typeof error === 'string' ? error : '') ||
-    'تعذر استكمال العملية المطلوبة. يرجى إعادة المحاولة أو التواصل مع الدعم الفني.';
+    t('تعذر استكمال العملية المطلوبة. يرجى إعادة المحاولة أو التواصل مع الدعم الفني.', 'Impossible de terminer l\'opération. Veuillez réessayer ou contacter le support technique.');
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100" dir="rtl">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100" dir={dir}>
       <Card className="w-full max-w-md text-center p-6">
         <CardHeader className="flex flex-col items-center gap-2">
           <div className="p-3 bg-red-100 text-red-600 rounded-full">
             <AlertTriangle className="w-8 h-8" />
           </div>
           <CardTitle className="text-xl font-bold font-amiri text-slate-900">
-            حدث خطأ غير متوقع
+            {t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -58,13 +61,24 @@ export default function ErrorBoundary({
           </p>
           {error?.digest && (
             <p className="text-xs font-mono text-slate-400">
-              كود الخطأ: {error.digest}
+              {t('رمز الخطأ:', 'Code d\'erreur :')} {error.digest}
             </p>
           )}
-          <Button onClick={handleRetry} className="w-full flex items-center justify-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            إعادة المحاولة
-          </Button>
+          <div className="flex gap-2 justify-center pt-2">
+            <Button
+              onClick={handleRetry}
+              className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {t('إعادة المحاولة', 'Réessayer')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { window.location.href = '/dashboard'; }}
+            >
+              {t('الرئيسية', 'Accueil')}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

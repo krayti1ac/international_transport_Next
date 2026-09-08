@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, MessageCircle, Ship, FileText, CheckCircle, XCircle } from 'lucide-react';
 import type { TripOrder } from '@/types/database';
 import { generateWhatsAppLink } from '@/lib/utils/whatsapp-links';
+import { useLanguage } from '@/components/language-provider';
 
 interface TransitActionsProps {
   trip: TripOrder;
@@ -28,6 +29,7 @@ const DOCUMENT_LABELS: Record<string, { label: string; field: keyof TripOrder }>
 };
 
 export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferryPhone }: TransitActionsProps) {
+  const { t, dir } = useLanguage();
   const [uploading, setUploading] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const { toast } = useToast();
@@ -57,11 +59,11 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
       if (updateError) throw updateError;
 
       onUpdate({ ...trip, [field]: publicUrl });
-      toast({ title: `تم رفع ${DOCUMENT_LABELS[docType].label} بنجاح` });
+      toast({ title: t(`تم رفع ${DOCUMENT_LABELS[docType].label} بنجاح`, `${DOCUMENT_LABELS[docType].label} téléchargé avec succès`) });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
+      const message = error instanceof Error ? error.message : t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue');
       toast({
-        title: 'خطأ في رفع الملف',
+        title: t('خطأ في رفع الملف', 'Erreur de téléchargement'),
         description: message,
         variant: 'destructive',
       });
@@ -92,10 +94,10 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
   };
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       <h3 className="font-amiri text-lg font-bold text-foreground flex items-center gap-2">
         <Ship className="w-5 h-5 text-primary" />
-        إجراءات العبّارة والجمرك
+        {t('إجراءات العبّارة والجمرك', 'Formalités Ferry & Douane')}
       </h3>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -103,7 +105,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
               <FileText className="w-4 h-4 text-emerald-600" />
-              جمرك التصدير (Export Customs)
+              {t('جمرك التصدير (Export Customs)', 'Douane Export (Export Customs)')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -141,11 +143,11 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
                       disabled={uploading === key}
                     >
                       {uploading === key ? (
-                        <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin ml-1" />
+                        <div className={`w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
                       ) : (
-                        <Upload className="w-3 h-3 ml-1" />
+                        <Upload className={`w-3 h-3 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
                       )}
-                      {url ? 'تغيير' : 'رفع'}
+                      {url ? t('تغيير', 'Modifier') : t('رفع', 'Importer')}
                     </Button>
                   </div>
                 </div>
@@ -158,7 +160,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
               <Ship className="w-4 h-4 text-blue-600" />
-              حجز العبّارة (Ferry Booking)
+              {t('حجز العبّارة (Ferry Booking)', 'Réservation Ferry (Ferry Booking)')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -190,7 +192,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
                   onClick={() => fileInputRefs.current['mrn_export']?.click()}
                   disabled={uploading === 'mrn_export'}
                 >
-                  {uploading === 'mrn_export' ? 'جاري...' : 'رفع MRN'}
+                  {uploading === 'mrn_export' ? t('جاري...', 'En cours...') : t('رفع MRN', 'Importer MRN')}
                 </Button>
               </div>
             </div>
@@ -201,7 +203,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
               onClick={handleFerryWhatsApp}
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              واتساب العبّارة
+              {t('واتساب العبّارة', 'WhatsApp Ferry')}
             </Button>
           </CardContent>
         </Card>
@@ -210,7 +212,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
               <FileText className="w-4 h-4 text-blue-600" />
-              جمرك الاستيراد (Import Customs)
+              {t('جمرك الاستيراد (Import Customs)', 'Douane Import (Import Customs)')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -247,7 +249,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
                       onClick={() => fileInputRefs.current[key]?.click()}
                       disabled={uploading === key}
                     >
-                      {uploading === key ? 'جاري...' : 'رفع'}
+                      {uploading === key ? t('جاري...', 'En cours...') : t('رفع', 'Importer')}
                     </Button>
                   </div>
                 </div>
@@ -260,7 +262,7 @@ export function TransitActions({ trip, onUpdate, truckPlate, trailerPlate, ferry
               onClick={handleTransitExportWhatsApp}
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              واتساب الترانزيت
+              {t('واتساب الترانزيت', 'WhatsApp Transit')}
             </Button>
           </CardContent>
         </Card>

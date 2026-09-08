@@ -1,6 +1,7 @@
 import type { UserRole } from '@/types/database';
 
 export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
+  super_admin: ['*'],
   admin: ['*'],
   secretary: [
     '/dashboard',
@@ -41,13 +42,14 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
 };
 
 export const ROLE_DEFAULT_REDIRECT: Record<UserRole, string> = {
+  super_admin: '/super-admin/companies',
   admin: '/dashboard',
   secretary: '/dashboard',
   driver: '/driver-tasks',
 };
 
 export function isRouteAllowed(role: UserRole, pathname: string): boolean {
-  if (role === 'admin') return true;
+  if (role === 'super_admin' || role === 'admin') return true;
   const allowed = ROLE_ALLOWED_ROUTES[role] || [];
   return allowed.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }

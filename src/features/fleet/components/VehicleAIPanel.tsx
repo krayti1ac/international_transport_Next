@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { generateVehicleAIReport, type FleetAIReport } from '../services/fleet-ai.actions';
 import { formatCurrency } from '@/lib/forex';
+import { useLanguage } from '@/components/language-provider';
 
 interface VehicleAIPanelProps {
   vehicleId: number;
@@ -23,6 +24,7 @@ interface VehicleAIPanelProps {
 }
 
 export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPanelProps) {
+  const { t, dir } = useLanguage();
   const [report, setReport] = useState<FleetAIReport | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -75,11 +77,11 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
   };
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5 shadow-xs overflow-hidden" dir="rtl">
+    <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5 shadow-xs overflow-hidden" dir={dir}>
       <CardHeader className="py-3 px-4 border-b border-border/60 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-amiri font-bold flex items-center gap-2 text-foreground">
           <Sparkles className="w-4 h-4 text-amber-500" />
-          <span>التشخيص التنبؤي وصحة المركبة (Predictive Health AI)</span>
+          <span>{t('التشخيص التنبؤي وصحة المركبة (Predictive Health AI)', 'Diagnostic Prédictif & Santé du Véhicule (IA)')}</span>
         </CardTitle>
         <Button
           variant="ghost"
@@ -87,7 +89,7 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
           onClick={fetchReport}
           disabled={loading}
           className="h-7 w-7 p-0 rounded-lg"
-          title="تحديث التحليل"
+          title={t('تحديث التحليل', 'Actualiser l\'analyse')}
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </Button>
@@ -97,10 +99,10 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
         {loading ? (
           <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-            <p className="text-xs">جاري فحص البيانات التاريخية والتشخيص التنبؤي...</p>
+            <p className="text-xs">{t('جاري فحص البيانات التاريخية والتشخيص التنبؤي...', 'Analyse des données historiques et diagnostic en cours...')}</p>
           </div>
         ) : !report ? (
-          <p className="text-xs text-center text-muted-foreground py-4">لا تتوفر بيانات تشخيصية كافية لهذه المركبة.</p>
+          <p className="text-xs text-center text-muted-foreground py-4">{t('لا تتوفر بيانات تشخيصية كافية لهذه المركبة.', 'Données diagnostiques insuffisantes pour ce véhicule.')}</p>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -113,9 +115,9 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
                   {report.healthScore}%
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">مؤشر الجاهزية والسلامة</p>
+                  <p className="text-[11px] text-muted-foreground">{t('مؤشر الجاهزية والسلامة', 'Indice d\'état & sécurité')}</p>
                   <p className="text-xs font-bold text-foreground mt-0.5">
-                    {report.healthScore >= 80 ? 'حالة ممتازة' : report.healthScore >= 60 ? 'تحتاج مراقبة' : 'فحص عاجل مطلوب'}
+                    {report.healthScore >= 80 ? t('حالة ممتازة', 'Excellent état') : report.healthScore >= 60 ? t('تحتاج مراقبة', 'À surveiller') : t('فحص عاجل مطلوب', 'Inspection urgente requise')}
                   </p>
                 </div>
               </div>
@@ -126,9 +128,9 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
                     <Fuel className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted-foreground">معدل الاستهلاك التقديري</p>
+                    <p className="text-[11px] text-muted-foreground">{t('معدل الاستهلاك التقديري', 'Consommation moyenne estimée')}</p>
                     <p className="text-xs font-bold font-mono text-foreground mt-0.5">
-                      {report.averageLitersPer100Km ? `${report.averageLitersPer100Km} L/100 km` : 'قيد التجميع'}
+                      {report.averageLitersPer100Km ? `${report.averageLitersPer100Km} L/100 km` : t('قيد التجميع', 'En collecte')}
                     </p>
                   </div>
                 </div>
@@ -139,7 +141,7 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
                   <Wrench className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">صيانة آخر 6 أشهر</p>
+                  <p className="text-[11px] text-muted-foreground">{t('صيانة آخر 6 أشهر', 'Entretien 6 derniers mois')}</p>
                   <p className="text-xs font-bold font-mono text-foreground mt-0.5">
                     {formatCurrency(report.recentMaintenanceCost, 'MAD')}
                   </p>
@@ -150,12 +152,12 @@ export function VehicleAIPanel({ vehicleId, vehicleType = 'truck' }: VehicleAIPa
             <div className="space-y-2 pt-1">
               <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-primary" />
-                <span>رؤى وتوصيات الصيانة الوقائية:</span>
+                <span>{t('رؤى وتوصيات الصيانة الوقائية:', 'Recommandations & Maintenance préventive :')}</span>
               </p>
 
               {report.insights.length === 0 ? (
                 <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg text-center">
-                  جميع المؤشرات الحيوية مستقرة وضمن الحدود المعتمدة.
+                  {t('جميع المؤشرات الحيوية مستقرة وضمن الحدود المعتمدة.', 'Tous les indicateurs sont stables et conformes.')}
                 </p>
               ) : (
                 <div className="space-y-1.5">

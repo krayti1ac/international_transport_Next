@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   BarChart3,
   Globe,
+  Building2,
 } from 'lucide-react';
 
 export const navigationGroups: SidebarGroup[] = [
@@ -317,6 +318,21 @@ export const navigationGroups: SidebarGroup[] = [
         href: '/audit-logs',
         icon: <ShieldCheck className="w-4 h-4" />,
         roles: ['admin'],
+      },
+    ],
+  },
+  {
+    id: 'super-admin',
+    label: 'المزود الرئيسي',
+    labelFr: 'Super Admin',
+    icon: <Building2 className="w-4 h-4" />,
+    items: [
+      {
+        title: 'إدارة الشركات',
+        titleFr: 'Gestion des entreprises',
+        href: '/super-admin/companies',
+        icon: <Building2 className="w-4 h-4" />,
+        roles: ['super_admin'],
       },
     ],
   },

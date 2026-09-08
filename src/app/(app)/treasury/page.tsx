@@ -67,6 +67,16 @@ export default function TreasuryPage() {
       .channel('treasury-realtime-sync')
       .on(
         'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'treasury_transactions' },
+        () => {
+          toast({
+            title: t('💰 تم تسجيل معاملة مالية جديدة في الخزينة', '💰 Nouvelle transaction enregistrée en trésorerie'),
+          });
+          refreshData();
+        }
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'treasury_transactions' },
         () => {
           refreshData();
@@ -79,7 +89,7 @@ export default function TreasuryPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshData, supabase]);
+  }, [refreshData, supabase, t, toast]);
 
   const handleCreateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +166,8 @@ export default function TreasuryPage() {
         return t('تحويل مالي', 'Virement / Transfert', 'Internal Transfer');
       case 'payment':
         return t('استلام دفعة عميل', 'Encaissement client', 'Client Payment');
+      case 'income':
+        return t('استلام دفعة / إيراد', 'Encaissement / Recette', 'Income / Receipt');
       default:
         return type;
     }
@@ -190,7 +202,7 @@ export default function TreasuryPage() {
       {/* Bento Grid Treasury KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* MAD Liquidity Card */}
-        <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
+        <div className="bg-card border border-border/80 border-s-4 border-s-blue-600 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
           <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
@@ -211,7 +223,7 @@ export default function TreasuryPage() {
         </div>
 
         {/* EUR Liquidity Card */}
-        <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
+        <div className="bg-card border border-border/80 border-s-4 border-s-emerald-600 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
           <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
@@ -232,11 +244,11 @@ export default function TreasuryPage() {
         </div>
 
         {/* Cash Boxes Card */}
-        <div className="bg-card border border-border/80 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
+        <div className="bg-card border border-border/80 border-s-4 border-s-amber-500 p-5 rounded-2xl flex flex-col justify-between h-40 relative overflow-hidden group shadow-xs hover:shadow-md transition-all">
           <div className={`absolute top-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none`} />
           <div className="relative z-10 flex justify-between items-start">
             <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
-               {t('الصناديق النقدية (Cash Boxes)', 'Caisses Espèces (Cash Boxes)', 'Cash Boxes')}
+               {t('صناديق السلف والمصاريف (MAD)', 'Caisses Espèces (MAD)', 'Cash Boxes (MAD)')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <Wallet className="w-4 h-4" />
@@ -244,11 +256,10 @@ export default function TreasuryPage() {
           </div>
           <div className="relative z-10">
             <div className="text-3xl font-extrabold font-mono text-foreground">
-              {cashBoxes.length}{' '}
-               <span className="text-xs text-muted-foreground font-normal font-sans">{t('صناديق نقدية', 'caisses', 'boxes')}</span>
+              {formatCurrency(groupBalancesByCurrency(cashBoxes)['MAD'] || 0, 'MAD')}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-               {t('المصاريف النثرية وسلف السائقين الميدانية', 'Frais divers et avances chauffeurs', 'Petty cash & driver advances')}
+               {cashBoxes.length} {t('صناديق نقدية للمصاريف وسلف السائقين', 'caisses pour menues dépenses et avances')}
             </div>
           </div>
         </div>

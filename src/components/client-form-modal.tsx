@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { X, Save, Building, PlaneTakeoff, PlaneLanding } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
+import { useToast } from '@/hooks/use-toast';
+import { validateICE } from '@/lib/bulk-import';
 import type { Client } from '@/types/database';
 
 interface ClientModalProps {
@@ -39,6 +41,7 @@ const defaultFormData: Partial<Client> = {
 
 export function ClientFormModal({ isOpen, onClose, onSave, initialData }: ClientModalProps) {
   const { t, dir } = useLanguage();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<Client>>(initialData || defaultFormData);
 
@@ -59,6 +62,19 @@ export function ClientFormModal({ isOpen, onClose, onSave, initialData }: Client
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (formData.ice && formData.ice.trim() !== '') {
+      const iceResult = validateICE(formData.ice);
+      if (!iceResult.valid) {
+        toast({
+          title: t('رقم ICE غير صحيح', 'Numéro ICE invalide'),
+          description: iceResult.message || t('يجب أن يتكون رقم ICE من 15 رقماً بالضبط.', 'Le numéro ICE doit comporter exactement 15 chiffres.'),
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       await onSave(formData);

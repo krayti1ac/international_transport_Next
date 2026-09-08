@@ -6,6 +6,7 @@ import type { TripOrder, DeliverySignature, Client, Driver, Truck } from '@/type
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { Printer, X, MapPin, User, Clock } from 'lucide-react';
+import { useLanguage } from '@/components/language-provider';
 
 interface PodReportViewProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface PodReportViewProps {
 }
 
 export function PodReportView({ isOpen, onClose, trip, client, clientImport, driver, truck }: PodReportViewProps) {
+  const { t, dir } = useLanguage();
   const [signature, setSignature] = useState<DeliverySignature | null>(null);
   const [loading, setLoading] = useState(true);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -59,17 +61,17 @@ export function PodReportView({ isOpen, onClose, trip, client, clientImport, dri
   const activeTruck = truck;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto" dir={dir}>
       <div className="bg-white text-slate-900 rounded-xl shadow-2xl max-w-4xl w-full my-8 flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 print:hidden" data-print-hidden>
           <div className="flex items-center gap-2">
-            <h3 className="font-amiri text-lg font-bold text-slate-900">إثبات التسليم الإلكتروني (E-POD)</h3>
+            <h3 className="font-amiri text-lg font-bold text-slate-900">{t('إثبات التسليم الإلكتروني (E-POD)', 'Preuve de Livraison Électronique (E-POD)')}</h3>
           </div>
           <div className="flex items-center gap-2">
             {signature && (
               <Button onClick={handlePrint} className="flex items-center gap-2">
                 <Printer className="w-4 h-4" />
-                تحميل PDF
+                {t('تحميل PDF', 'Télécharger PDF')}
               </Button>
             )}
             <Button variant="ghost" size="icon" onClick={onClose}>
@@ -81,19 +83,19 @@ export function PodReportView({ isOpen, onClose, trip, client, clientImport, dri
         <div className="p-6 overflow-y-auto print:p-0 print:overflow-visible" ref={printAreaRef} data-print-p-0 data-print-overflow-visible>
           {loading ? (
             <div className="text-center py-12">
-              <p className="text-slate-500">جاري تحميل بيانات إثبات التسليم...</p>
+              <p className="text-slate-500">{t('جاري تحميل بيانات إثبات التسليم...', 'Chargement de la preuve de livraison...')}</p>
             </div>
           ) : !signature ? (
             <div className="text-center py-12">
-              <p className="text-slate-500">لا يوجد إثبات تسليم مسجل لهذه الرحلة</p>
+              <p className="text-slate-500">{t('لا يوجد إثبات تسليم مسجل لهذه الرحلة', 'Aucune preuve de livraison enregistrée pour ce voyage')}</p>
             </div>
           ) : (
-            <div className="space-y-6" dir="rtl">
+            <div className="space-y-6" dir={dir}>
               <div className="border-2 border-slate-900 p-6 text-sm leading-relaxed font-sans" dir="ltr">
                 <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-4">
                   <div>
                     <h1 className="text-2xl font-black tracking-wider text-slate-900">PROOF OF DELIVERY</h1>
-                    <p className="text-sm font-bold text-slate-700">إثبات التسليم الإلكتروني (E-POD)</p>
+                    <p className="text-sm font-bold text-slate-700">LETTRE DE VOITURE / PREUVE DE LIVRAISON (E-POD)</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-slate-500">Trip Reference</p>

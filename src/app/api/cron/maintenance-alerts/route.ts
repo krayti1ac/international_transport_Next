@@ -3,9 +3,11 @@ import { getMaintenanceSchedules } from '@/features/fleet/services/maintenance-s
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import { recordAuditLog } from '@/lib/audit.server';
 
-export async function POST(request: NextRequest) {
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
     const cronSecret = process.env.CRON_SECRET;
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       return new NextResponse('غير مصرح', { status: 401 });
@@ -18,25 +20,26 @@ export async function POST(request: NextRequest) {
 
     const urgentItems = res.data.filter((s) => s.urgency === 'overdue' || s.urgency === 'due_soon');
 
-    if (urgentItems.length > 0 && process.env.ADMIN_ALERT_PHONE && process.env.WHATSAPP_API_TOKEN) {
+    if (urgentItems.length > 0 && process.env.WHATSAPP_API_TOKEN) {
       const lines = [
         `⚠️ *تنبيه الصيانة الوقائية للأسطول - Trans Bodanon*`,
-        `يوجد عدد (${urgentItems.length}) عمليات صيانة مستحقة أو قريبة الاستحقاق:`,
+        `يوجد عدد (${urgentItems.length}) تنبيهات مستحقة:`,
         `---------------------------`,
         ...urgentItems.slice(0, 5).map((item) => {
           const statusText = item.urgency === 'overdue' ? `متأخرة بـ ${Math.abs(item.daysRemaining)} يوم` : `خلال ${item.daysRemaining} يوم`;
           return `🚛 *${item.plateNumber}* | ${item.maintenance_type}\n⏰ الموعد: ${item.scheduled_date} (${statusText})`;
         }),
-        `---------------------------`,
-        `يرجى مراجعة قسم الصيانة لاتخاذ الإجراءات الفنية.`,
-      ];
+        urgentItems.length > 5 ? `\n...و ${urgentItems.length - 5} عناصر أخرى.` : '',
+      ].filter(Boolean);
 
+      // سيتم إرسالها إلى 0694585307 تلقائياً بفضل صمام الأمان
       await sendWhatsAppCloudMessage({
-        to: process.env.ADMIN_ALERT_PHONE,
+        to: '212694585307',
         message: lines.join('\n'),
       }).catch((wErr) => console.warn('Maintenance WhatsApp warning:', wErr));
     }
 
+    // توثيق العملية في سجل التدقيق
     await recordAuditLog({
       entityType: 'maintenance_cron_check',
       entityId: 0,
@@ -56,6 +59,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
-  return POST(request);
+export async function POST(request: NextRequest) {
+  return GET(request);
 }

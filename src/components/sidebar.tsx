@@ -71,6 +71,9 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
   const isItemAllowed = useCallback((item: SidebarItem): boolean => {
     if (!item.roles) return true;
     if (!userRole) return false;
+    if (userRole === 'super_admin') {
+      return item.roles.includes('super_admin') || item.roles.includes('admin');
+    }
     return item.roles.includes(userRole);
   }, [userRole]);
 
