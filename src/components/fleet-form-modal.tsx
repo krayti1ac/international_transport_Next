@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, User } from 'lucide-react';
+import { X, Save, User, Camera, Upload, Trash2, Sparkles, Fuel } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import type { Truck as TruckType, Driver, Trailer } from '@/types/database';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
+import { DriverAvatar } from '@/components/drivers/DriverAvatar';
+import { PRESET_DRIVER_AVATARS, compressImageFile, saveDriverPhotoLocal, resolveDriverPhoto } from '@/lib/driver-photos';
 
 type EntityType = 'truck' | 'driver' | 'trailer';
 
@@ -40,6 +42,9 @@ export function FleetFormModal({
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const [showPresets, setShowPresets] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Deduplicate drivers by name to prevent repeated entries in the dropdown,
   // prioritizing the currently selected driver ID if active.
@@ -61,7 +66,15 @@ export function FleetFormModal({
     if (!isOpen) return;
 
     if (initialData) {
-      setFormData({ ...initialData });
+      const resolvedPhoto = (initialData as any)?.photo_url || resolveDriverPhoto(initialData as any) || '';
+      setFormData({
+        ...initialData,
+        fuel_consumption_rate:
+          (initialData as any)?.fuel_consumption_rate !== undefined && (initialData as any)?.fuel_consumption_rate !== null
+            ? (initialData as any).fuel_consumption_rate
+            : 36.0,
+        photo_url: resolvedPhoto,
+      });
     } else {
       if (entityType === 'truck') {
         setFormData({
@@ -70,6 +83,7 @@ export function FleetFormModal({
           status: 'active',
           weight_capacity: '',
           power: '',
+          fuel_consumption_rate: 36.0,
           default_driver_id: undefined,
           default_trailer_id: undefined,
         });
@@ -83,6 +97,7 @@ export function FleetFormModal({
           default_truck_id: undefined,
           visa_number: '',
           visa_expiry_date: '',
+          photo_url: '',
         });
       } else {
         setFormData({
@@ -92,6 +107,7 @@ export function FleetFormModal({
         });
       }
     }
+    setShowPresets(false);
   }, [isOpen, initialData, entityType]);
 
   if (!isOpen) return null;
@@ -163,6 +179,9 @@ export function FleetFormModal({
           status: formData.status || 'active',
           default_driver_id: formData.default_driver_id ? parseInt(String(formData.default_driver_id)) : null,
           default_trailer_id: formData.default_trailer_id ? parseInt(String(formData.default_trailer_id)) : null,
+          weight_capacity: formData.weight_capacity ? parseFloat(formData.weight_capacity) : null,
+          power: formData.power ? parseFloat(formData.power) : null,
+          fuel_consumption_rate: formData.fuel_consumption_rate !== undefined && formData.fuel_consumption_rate !== '' ? parseFloat(formData.fuel_consumption_rate) : 36.0,
         };
       } else if (entityType === 'driver') {
         payload = {
@@ -175,7 +194,11 @@ export function FleetFormModal({
           visa_number: formData.visa_number?.trim() || null,
           visa_expiry_date: formData.visa_expiry_date || null,
           has_valid_visa: Boolean(formData.visa_expiry_date),
+          photo_url: formData.photo_url?.trim() || null,
         };
+        if (formData.photo_url) {
+          saveDriverPhotoLocal(initialData?.id || formData.name, formData.photo_url, formData.name);
+        }
       } else if (entityType === 'trailer') {
         payload = {
           plate_number: formData.plate_number?.trim() || '',
@@ -307,7 +330,7 @@ export function FleetFormModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('حمولة الوزن (بالأطنان)', 'Capacité de charge (Tonnes)')}</label>
                     <Input
@@ -328,6 +351,25 @@ export function FleetFormModal({
                       dir="ltr"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Fuel className="h-4 w-4 text-primary" />
+                      {t('معدل الاستهلاك (L/100km أو %)', 'Consommation (L/100km)')}
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="10"
+                      max="80"
+                      value={formData.fuel_consumption_rate ?? 36}
+                      onChange={(e) => setFormData({ ...formData, fuel_consumption_rate: parseFloat(e.target.value) || 0 })}
+                      placeholder="36"
+                      dir="ltr"
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      {t('افتراضي 36% - قابل للتعديل والتتبع', 'Par défaut 36% - ajustable')}
+                    </span>
+                  </div>
                 </div>
               </>
             )}
@@ -335,6 +377,113 @@ export function FleetFormModal({
             {/* حقول السائق */}
             {entityType === 'driver' && (
               <>
+                {/* قسم الصورة الشخصية للسائق */}
+                <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 flex flex-col sm:flex-row items-center gap-4">
+                  <DriverAvatar
+                    name={formData.name || 'سائق'}
+                    photoUrl={formData.photo_url}
+                    size="xl"
+                    className="ring-2 ring-primary/20 shadow-xs"
+                  />
+                  <div className="flex-1 space-y-2 text-center sm:text-start w-full">
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground">
+                        {t('الصورة الشخصية للسائق', 'Photo de profil du chauffeur')}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t('اختر صورة من جهازك أو اختر من النماذج الاحترافية الجاهزة', 'Téléversez une photo ou choisissez parmi les modèles')}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setCompressing(true);
+                          try {
+                            const compressed = await compressImageFile(file);
+                            setFormData((prev: any) => ({ ...prev, photo_url: compressed }));
+                          } catch (err) {
+                            console.error('Error compressing image:', err);
+                          } finally {
+                            setCompressing(false);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={compressing}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-8 text-xs rounded-xl gap-1.5"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-primary" />
+                        {compressing ? t('جاري المعالجة...', 'Traitement...') : t('رفع صورة', 'Téléverser')}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowPresets(!showPresets)}
+                        className="h-8 text-xs rounded-xl gap-1.5"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        {t('نماذج جاهزة', 'Modèles')}
+                      </Button>
+
+                      {formData.photo_url && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setFormData((prev: any) => ({ ...prev, photo_url: '' }))}
+                          className="h-8 text-xs text-destructive hover:bg-destructive/10 rounded-xl gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {t('إزالة', 'Supprimer')}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* معرض النماذج الجاهزة */}
+                    {showPresets && (
+                      <div className="pt-2 border-t border-border/40">
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {PRESET_DRIVER_AVATARS.map((preset) => (
+                            <button
+                              type="button"
+                              key={preset.id}
+                              onClick={() => {
+                                setFormData((prev: any) => ({ ...prev, photo_url: preset.url }));
+                                setShowPresets(false);
+                              }}
+                              className={`relative rounded-xl overflow-hidden border-2 transition-all p-0.5 hover:scale-105 ${
+                                formData.photo_url === preset.url
+                                  ? 'border-primary shadow-xs ring-2 ring-primary/30'
+                                  : 'border-border/60 hover:border-border'
+                              }`}
+                              title={preset.label}
+                            >
+                              <img
+                                src={preset.url}
+                                alt={preset.label}
+                                className="w-9 h-9 object-cover rounded-lg"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('الاسم الكامل *', 'Nom complet *')}</label>

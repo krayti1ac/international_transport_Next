@@ -46,9 +46,10 @@ export async function middleware(request: NextRequest) {
     '/dashboard', '/trips', '/fleet', '/truck-tracking', '/treasury',
     '/clients', '/invoices', '/advanced-reports', '/whatsapp-notifications',
     '/chat', '/audit-logs', '/settings', '/fuel-receipt', '/driver-tasks',
+    '/chat', '/audit-logs', '/settings', '/users', '/fuel-receipt', '/driver-tasks',
     '/driver-advances', '/documents', '/reports', '/emergency-advance-requests',
     '/geofence-zones', '/geofence-alerts', '/trip-profitability', '/maintenance',
-    '/driver-settlements'
+    '/driver-settlements', '/super-admin'
   ];
 
   const pathname = request.nextUrl.pathname;
@@ -64,8 +65,14 @@ export async function middleware(request: NextRequest) {
   }
 
   if ((relativePath === '/login' || relativePath === '/signup') && session) {
+    const {data: userProfile} = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
     const url = request.nextUrl.clone();
-    url.pathname = `/${locale}/dashboard`;
+    url.pathname = userProfile?.role === 'super_admin' ? `/${locale}/super-admin/companies` : `/${locale}/dashboard`;
     return NextResponse.redirect(url);
   }
 
@@ -79,6 +86,16 @@ export async function middleware(request: NextRequest) {
     const userRole = userProfile?.role;
 
     if (userRole === 'admin') return response;
+
+    if (userRole === 'super_admin') {
+      const isAllowed = relativePath.startsWith('/super-admin');
+      if (!isAllowed) {
+        const url = request.nextUrl.clone();
+        url.pathname = `/${locale}/super-admin/companies`;
+        return NextResponse.redirect(url);
+      }
+      return response;
+    }
 
     const secretaryAllowedPaths = [
       '/dashboard', '/trips', '/trip-profitability', '/truck-tracking',
@@ -105,5 +122,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/(ar|fr|en)/:path*'],
+  matcher: ['/', '/(ar|fr|es)/:path*'],
 };

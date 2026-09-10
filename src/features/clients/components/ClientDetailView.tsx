@@ -15,6 +15,8 @@ import type { Client, Invoice, TripOrder } from '@/types/database';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
 import { FifoPaymentModal } from './FifoPaymentModal';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
 
 export function ClientDetailView({ clientId }: { clientId: number }) {
   const { t, dir } = useLanguage();
@@ -23,6 +25,7 @@ export function ClientDetailView({ clientId }: { clientId: number }) {
   const [trips, setTrips] = useState<TripOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFifoModalOpen, setIsFifoModalOpen] = useState(false);
+  const { startDate, endDate } = useFiscalStore();
 
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -31,8 +34,8 @@ export function ClientDetailView({ clientId }: { clientId: number }) {
     try {
       const [clientRes, invoicesRes, tripsRes] = await Promise.all([
         supabase.from('clients').select('*').eq('id', clientId).single(),
-        supabase.from('invoices').select('*').eq('client_id', clientId.toString()).order('issue_date', { ascending: false }),
-        supabase.from('trip_orders').select('*').or(`client_id.eq.${clientId},client_import_id.eq.${clientId}`).order('departure_date', { ascending: false })
+        supabase.from('invoices').select('*').eq('client_id', clientId.toString()).gte('issue_date', startDate).lte('issue_date', endDate).order('issue_date', { ascending: false }),
+        supabase.from('trip_orders').select('*').or(`client_id.eq.${clientId},client_import_id.eq.${clientId}`).gte('departure_date', startDate).lte('departure_date', endDate).order('departure_date', { ascending: false })
       ]);
 
       if (clientRes.error) throw clientRes.error;
@@ -49,15 +52,7 @@ export function ClientDetailView({ clientId }: { clientId: number }) {
 
   useEffect(() => {
     fetchData();
-
-    const channel = supabase
-      .channel(`client-${clientId}-updates`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `client_id=eq.${clientId}` }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients', filter: `id=eq.${clientId}` }, () => fetchData())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [clientId, supabase]);
+  }, [clientId, startDate, endDate]);
 
   const kpis = useMemo(() => {
     let totalInvoiced = new Decimal(0);
@@ -126,6 +121,8 @@ export function ClientDetailView({ clientId }: { clientId: number }) {
           </div>
         </CardContent>
       </Card>
+
+      <PeriodFilterBar onFilterChange={fetchData} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className={`${dir === 'rtl' ? 'border-r-4 border-r-blue-500' : 'border-l-4 border-l-blue-500'}`}>

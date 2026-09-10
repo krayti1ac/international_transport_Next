@@ -32,7 +32,7 @@ import {
   Legend,
 } from 'recharts';
 
-export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; vehicleType: 'truck' | 'trailer' }) {
+export function TcoDashboard({ vehicleId, vehicleType, startDate, endDate }: { vehicleId: number; vehicleType: 'truck' | 'trailer'; startDate?: string; endDate?: string }) {
   const { t, dir } = useLanguage();
   const { toast } = useToast();
   const [rows, setRows] = useState<TcoBreakdown[]>([]);
@@ -41,7 +41,7 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
   const fetchTco = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await calculateTcoPerKm(vehicleType === 'truck' ? vehicleId : undefined);
+      const result = await calculateTcoPerKm(vehicleType === 'truck' ? vehicleId : undefined, startDate, endDate);
       if (!result.success) throw new Error(result.error);
       const filtered = vehicleType === 'truck'
         ? (result.data || []).filter((r) => r.truckId === vehicleId)
@@ -53,7 +53,7 @@ export function TcoDashboard({ vehicleId, vehicleType }: { vehicleId: number; ve
     } finally {
       setLoading(false);
     }
-  }, [vehicleId, vehicleType, toast, t]);
+  }, [vehicleId, vehicleType, toast, t, startDate, endDate]);
 
   useEffect(() => {
     fetchTco();

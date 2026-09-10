@@ -37,6 +37,9 @@ import {
 import { formatCurrency } from '@/lib/forex';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
+import { DriverAvatar } from '@/components/drivers/DriverAvatar';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
 
 interface DriverDetailViewProps {
     driverId: number;
@@ -61,6 +64,7 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
     const [payMonth, setPayMonth] = useState(() => new Date().getMonth() + 1);
     const [payYear, setPayYear] = useState(() => new Date().getFullYear());
 
+    const { startDate, endDate } = useFiscalStore();
     const supabase = useMemo(() => createClient(), []);
     const { toast } = useToast();
 
@@ -70,9 +74,9 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
             const [driverRes, salariesRes, advancesRes, finesRes, tripsRes] = await Promise.all([
                 supabase.from('drivers').select('*').eq('id', driverId).maybeSingle<Driver>(),
                 supabase.from('driver_salaries').select('*').eq('driver_id', driverId).order('period_start', { ascending: false }),
-                supabase.from('advances').select('*').eq('driver_id', driverId).eq('is_deleted', false).order('date', { ascending: false }),
-                supabase.from('fine_penalties').select('*').eq('driver_id', driverId).order('created_at', { ascending: false }),
-                supabase.from('trip_orders').select('*').eq('driver_id', driverId).order('departure_date', { ascending: false }).limit(100),
+                supabase.from('advances').select('*').eq('driver_id', driverId).eq('is_deleted', false).gte('date', startDate).lte('date', endDate).order('date', { ascending: false }),
+                supabase.from('fine_penalties').select('*').eq('driver_id', driverId).gte('created_at', startDate).lte('created_at', endDate).order('created_at', { ascending: false }),
+                supabase.from('trip_orders').select('*').eq('driver_id', driverId).gte('departure_date', startDate).lte('departure_date', endDate).order('departure_date', { ascending: false }).limit(100),
             ]);
 
             const drv = driverRes.data;
@@ -129,7 +133,7 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
         } finally {
             setLoading(false);
         }
-    }, [driverId, supabase, toast, t]);
+    }, [driverId, supabase, toast, t, startDate, endDate]);
 
     useEffect(() => {
         fetchAll();
@@ -176,6 +180,32 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
             .toNumber();
     }, [fines]);
 
+    const periodNetSettlement = useMemo(() => {
+        if (!driver) return null;
+        const baseSalary = new Decimal(driver.base_salary || 0);
+        const bonusPct = new Decimal(driver.bonus_percentage || 0);
+        const periodRevenue = trips.reduce((sum, t) => sum.plus(new Decimal(t.price || 0)), new Decimal(0));
+        const bonus = periodRevenue.times(bonusPct).dividedBy(100);
+        const advancesTotal = advances.reduce((sum, a) => {
+            const amt = new Decimal(a.amount || 0);
+            const extra = new Decimal(a.extra_advances || 0);
+            const allow = new Decimal(a.driver_allowance || 0);
+            const receipt = new Decimal(a.receipt_expenses || 0);
+            return sum.plus(amt).plus(extra).plus(allow).plus(receipt);
+        }, new Decimal(0));
+        const finesTotal = fines.reduce((sum, f) => sum.plus(new Decimal(f.amount || 0)), new Decimal(0));
+        const net = baseSalary.plus(bonus).minus(advancesTotal).minus(finesTotal);
+        return {
+            baseSalary: baseSalary.toNumber(),
+            bonus: bonus.toNumber(),
+            advancesTotal: advancesTotal.toNumber(),
+            finesTotal: finesTotal.toNumber(),
+            net: net.toNumber(),
+            tripsCount: trips.length,
+            periodRevenue: periodRevenue.toNumber(),
+        };
+    }, [driver, trips, advances, fines]);
+
     const latestSalary = salaries[0];
     const lastSalaryNet = latestSalary ? Number(latestSalary.amount) : 0;
 
@@ -220,6 +250,15 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
                         <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                             <User className="w-7 h-7" />
                         </div>
+                        <DriverAvatar
+                            name={driver.name}
+                            photoUrl={driver.photo_url}
+                            driverId={driver.id}
+                            status={driver.status}
+                            showStatusDot
+                            size="xl"
+                            className="shadow-md ring-2 ring-primary/20"
+                        />
                         <div>
                             <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">{driver.name}</h1>
                             <p className="text-xs text-muted-foreground mt-1 font-mono">#{driver.id}</p>
@@ -231,6 +270,8 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
                     </Button>
                 </div>
             </div>
+
+            <PeriodFilterBar onFilterChange={fetchAll} />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard icon={Banknote} label={t('إجمالي السلف المعتمدة', 'Total Avances Approuvées')} value={formatCurrency(totalAdvances, 'MAD')} subtitle={t(`${advances.filter((a) => a.status === 'approved').length} عملية`, `${advances.filter((a) => a.status === 'approved').length} opération(s)`)} color="amber" />
@@ -262,7 +303,8 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
             </div>
 
             {activeTab === 'overview' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <Card className="rounded-2xl border border-border/80 lg:col-span-2">
                         <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
                             <CardTitle className="text-sm flex items-center gap-2"><User className="w-4 h-4 text-amber-500" /> {t('البيانات الشخصية', 'Informations personnelles')}</CardTitle>
@@ -307,6 +349,47 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
                         </CardContent>
                     </Card>
                 </div>
+
+                {periodNetSettlement && (
+                    <Card className="rounded-2xl border border-border/80 bg-gradient-to-br from-primary/5 to-transparent">
+                        <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                            <CardTitle className="text-sm flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> {t('تسوية الفترة المحاسبية', 'Règlement de la période comptable')}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('الراتب الأساسي', 'Salaire de base')}</div>
+                                    <div className="font-bold font-mono text-foreground">{formatCurrency(periodNetSettlement.baseSalary, 'MAD')}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('عمولة الرحلات', 'Commission trajets')}</div>
+                                    <div className="font-bold font-mono text-emerald-700 dark:text-emerald-300">+{formatCurrency(periodNetSettlement.bonus, 'MAD')}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('إجمالي السلف', 'Total avances')}</div>
+                                    <div className="font-bold font-mono text-amber-700 dark:text-amber-300">-{formatCurrency(periodNetSettlement.advancesTotal, 'MAD')}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('إجمالي الغرامات', 'Total amendes')}</div>
+                                    <div className="font-bold font-mono text-rose-700 dark:text-rose-300">-{formatCurrency(periodNetSettlement.finesTotal, 'MAD')}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('صافي التسوية', 'Net à payer')}</div>
+                                    <div className="font-extrabold font-mono text-primary text-lg">{formatCurrency(periodNetSettlement.net, 'MAD')}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground mb-1">{t('الرحلات في الفترة', 'Missions période')}</div>
+                                    <div className="font-bold font-mono text-foreground">{periodNetSettlement.tripsCount}</div>
+                                </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-border/40 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                                <span>{t('إيرادات الفترة:', 'Revenus période:')} {formatCurrency(periodNetSettlement.periodRevenue, 'MAD')}</span>
+                                <span className="font-mono" dir="ltr">{startDate} → {endDate}</span>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+                </>
             )}
 
             {activeTab === 'salaries' && (

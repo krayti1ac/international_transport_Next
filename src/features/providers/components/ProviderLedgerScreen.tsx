@@ -12,6 +12,7 @@ import { formatCurrency } from '@/lib/forex';
 import { DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
+import { ProviderAvatar } from '@/components/providers/ProviderAvatar';
 
 interface LedgerEntry {
   id: number;
@@ -141,13 +142,21 @@ export default function ProviderLedgerScreen({ providerId }: { providerId: numbe
   return (
     <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground">
-            {t('دفتر الأستاذ - ', 'Grand Livre - ')}{ledger.provider.name}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t('سجل الديون والمدفوعات للمزود', 'Historique des créances, dettes et règlements du prestataire')}
-          </p>
+        <div className="flex items-center gap-3.5">
+          <ProviderAvatar
+            name={ledger.provider.name}
+            providerId={ledger.provider.id}
+            size="lg"
+            shape="rounded"
+          />
+          <div>
+            <h1 className="text-2xl font-bold font-amiri text-foreground">
+              {t('دفتر الأستاذ - ', 'Grand Livre - ')}{ledger.provider.name}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {t('سجل الديون والمدفوعات للمزود', 'Historique des créances, dettes et règlements du prestataire')}
+            </p>
+          </div>
         </div>
         <Button onClick={() => setShowPaymentModal(true)}>
           <Wallet className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />

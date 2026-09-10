@@ -12,43 +12,44 @@ export interface FleetMatrixRow {
   urgent_count: number;
 }
 
-export const DOCUMENT_TYPE_LABELS: Record<string, { label_ar: string; label_fr: string; label_en: string }> = {
-  insurance: { label_ar: 'التأمين الدولي / المحلي', label_fr: 'Assurance', label_en: 'Insurance' },
-  technical_inspection: { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_en: 'Technical Inspection' },
-  grey_card: { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_en: 'Grey Card' },
-  transport_license: { label_ar: 'رخصة النقل / CMR', label_fr: 'Autorisation de Transport', label_en: 'Transport License / CMR' },
-  atp_certificate: { label_ar: 'شهادة التبريد ATP', label_fr: 'Certificat ATP', label_en: 'ATP Certificate' },
-  tachograph_calibration: { label_ar: 'معايرة التاكوغراف', label_fr: 'Tachygraphe', label_en: 'Tachograph Calibration' },
-  other: { label_ar: 'وثيقة أخرى', label_fr: 'Autre Document', label_en: 'Other Document' },
+export const DOCUMENT_TYPE_LABELS: Record<string, { label_ar: string; label_fr: string; label_es: string; label_en?: string }> = {
+  insurance: { label_ar: 'التأمين الدولي / المحلي', label_fr: 'Assurance', label_es: 'Seguro', label_en: 'Insurance' },
+  technical_inspection: { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_es: 'Inspección Técnica', label_en: 'Technical Inspection' },
+  grey_card: { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_es: 'Permiso de Circulación', label_en: 'Grey Card' },
+  transport_license: { label_ar: 'رخصة النقل / CMR', label_fr: 'Autorisation de Transport', label_es: 'Autorización de Transporte / CMR', label_en: 'Transport License / CMR' },
+  atp_certificate: { label_ar: 'شهادة التبريد ATP', label_fr: 'Certificat ATP', label_es: 'Certificado ATP', label_en: 'ATP Certificate' },
+  tachograph_calibration: { label_ar: 'معايرة التاكوغراف', label_fr: 'Tachygraphe', label_es: 'Calibración del Tacógrafo', label_en: 'Tachograph Calibration' },
+  other: { label_ar: 'وثيقة أخرى', label_fr: 'Autre Document', label_es: 'Otro Documento', label_en: 'Other Document' },
 
-  assurance: { label_ar: 'التأمين الدولي / المحلي', label_fr: 'Assurance', label_en: 'Insurance' },
-  visite_technique: { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_en: 'Technical Inspection' },
-  carte_grise: { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_en: 'Grey Card' },
-  'التأمين': { label_ar: 'التأمين', label_fr: 'Assurance', label_en: 'Insurance' },
-  '*التأمين': { label_ar: '*التأمين', label_fr: '*Assurance', label_en: '*Insurance' },
-  'البطاقة الرمادية': { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_en: 'Grey Card' },
-  '*البطاقة الرمادية': { label_ar: '*البطاقة الرمادية', label_fr: '*Carte Grise', label_en: '*Grey Card' },
-  'الفحص التقني': { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_en: 'Technical Inspection' },
-  '*الفحص التقني': { label_ar: '*الفحص التقني', label_fr: '*Visite Technique', label_en: '*Technical Inspection' },
-  'رخصة النقل': { label_ar: 'رخصة النقل / CMR', label_fr: 'Autorisation de Transport', label_en: 'Transport License / CMR' },
-  '*رخصة النقل': { label_ar: '*رخصة النقل', label_fr: '*Autorisation de Transport', label_en: '*Transport License / CMR' },
+  assurance: { label_ar: 'التأمين الدولي / المحلي', label_fr: 'Assurance', label_es: 'Seguro', label_en: 'Insurance' },
+  visite_technique: { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_es: 'Inspección Técnica', label_en: 'Technical Inspection' },
+  carte_grise: { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_es: 'Permiso de Circulación', label_en: 'Grey Card' },
+  'التأمين': { label_ar: 'التأمين', label_fr: 'Assurance', label_es: 'Seguro', label_en: 'Insurance' },
+  '*التأمين': { label_ar: '*التأمين', label_fr: '*Assurance', label_es: '*Seguro', label_en: '*Insurance' },
+  'البطاقة الرمادية': { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_es: 'Permiso de Circulación', label_en: 'Grey Card' },
+  '*البطاقة الرمادية': { label_ar: '*البطاقة الرمادية', label_fr: '*Carte Grise', label_es: '*Permiso de Circulación', label_en: '*Grey Card' },
+  'الفحص التقني': { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_es: 'Inspección Técnica', label_en: 'Technical Inspection' },
+  '*الفحص التقني': { label_ar: '*الفحص التقني', label_fr: '*Visite Technique', label_es: '*Inspección Técnica', label_en: '*Technical Inspection' },
+  'رخصة النقل': { label_ar: 'رخصة النقل / CMR', label_fr: 'Autorisation de Transport', label_es: 'Autorización de Transporte / CMR', label_en: 'Transport License / CMR' },
+  '*رخصة النقل': { label_ar: '*رخصة النقل', label_fr: '*Autorisation de Transport', label_es: '*Autorización de Transporte / CMR', label_en: '*Transport License / CMR' },
 };
 
 export const DEFAULT_DOCUMENT_CATEGORIES: Array<{
   id: number;
   name: string;
   name_fr: string;
-  name_en: string;
+  name_es: string;
+  name_en?: string;
   applicable_to: 'both' | 'truck' | 'trailer';
   is_active: boolean;
 }> = [
-  { id: 1, name: 'التأمين الدولي / المحلي', name_fr: 'Assurance', name_en: 'Insurance', applicable_to: 'both', is_active: true },
-  { id: 2, name: 'الفحص التقني', name_fr: 'Visite Technique', name_en: 'Technical Inspection', applicable_to: 'both', is_active: true },
-  { id: 3, name: 'البطاقة الرمادية', name_fr: 'Carte Grise', name_en: 'Grey Card', applicable_to: 'both', is_active: true },
-  { id: 4, name: 'رخصة النقل / CMR', name_fr: 'Autorisation de Transport', name_en: 'Transport License / CMR', applicable_to: 'truck', is_active: true },
-  { id: 5, name: 'شهادة التبريد ATP', name_fr: 'Certificat ATP', name_en: 'ATP Certificate', applicable_to: 'both', is_active: true },
-  { id: 6, name: 'معايرة التاكوغراف', name_fr: 'Tachygraphe', name_en: 'Tachograph Calibration', applicable_to: 'truck', is_active: true },
-  { id: 7, name: 'وثيقة أخرى', name_fr: 'Autre Document', name_en: 'Other Document', applicable_to: 'both', is_active: true },
+  { id: 1, name: 'التأمين الدولي / المحلي', name_fr: 'Assurance', name_es: 'Seguro', name_en: 'Insurance', applicable_to: 'both', is_active: true },
+  { id: 2, name: 'الفحص التقني', name_fr: 'Visite Technique', name_es: 'Inspección Técnica', name_en: 'Technical Inspection', applicable_to: 'both', is_active: true },
+  { id: 3, name: 'البطاقة الرمادية', name_fr: 'Carte Grise', name_es: 'Permiso de Circulación', name_en: 'Grey Card', applicable_to: 'both', is_active: true },
+  { id: 4, name: 'رخصة النقل / CMR', name_fr: 'Autorisation de Transport', name_es: 'Autorización de Transporte / CMR', name_en: 'Transport License / CMR', applicable_to: 'truck', is_active: true },
+  { id: 5, name: 'شهادة التبريد ATP', name_fr: 'Certificat ATP', name_es: 'Certificado ATP', name_en: 'ATP Certificate', applicable_to: 'both', is_active: true },
+  { id: 6, name: 'معايرة التاكوغراف', name_fr: 'Tachygraphe', name_es: 'Calibración del Tacógrafo', name_en: 'Tachograph Calibration', applicable_to: 'truck', is_active: true },
+  { id: 7, name: 'وثيقة أخرى', name_fr: 'Autre Document', name_es: 'Otro Documento', name_en: 'Other Document', applicable_to: 'both', is_active: true },
 ];
 
 export const CORE_DOC_TYPES = [
@@ -65,10 +66,11 @@ export const CORE_DOC_TYPES = [
  */
 export function getDocumentTypeLabel(
   docOrType?: Partial<FleetDocument> | string | null,
-  locale: 'ar' | 'fr' | 'en' = 'ar'
+  locale: 'ar' | 'fr' | 'es' | 'en' = 'ar'
 ): string {
   if (!docOrType) {
     if (locale === 'fr') return 'Document';
+    if (locale === 'es') return 'Documento';
     if (locale === 'en') return 'Document';
     return 'وثيقة';
   }
@@ -86,29 +88,33 @@ export function getDocumentTypeLabel(
   const trimmed = rawType.trim();
   if (!trimmed) {
     if (locale === 'fr') return 'Document';
+    if (locale === 'es') return 'Documento';
     if (locale === 'en') return 'Document';
     return 'وثيقة';
   }
 
   if (DOCUMENT_TYPE_LABELS[trimmed]) {
     if (locale === 'fr') return DOCUMENT_TYPE_LABELS[trimmed].label_fr;
-    if (locale === 'en') return DOCUMENT_TYPE_LABELS[trimmed].label_en;
+    if (locale === 'es') return DOCUMENT_TYPE_LABELS[trimmed].label_es;
+    if (locale === 'en') return DOCUMENT_TYPE_LABELS[trimmed].label_en || DOCUMENT_TYPE_LABELS[trimmed].label_es;
     return DOCUMENT_TYPE_LABELS[trimmed].label_ar;
   }
 
   const cleanKey = trimmed.toLowerCase();
   if (DOCUMENT_TYPE_LABELS[cleanKey]) {
     if (locale === 'fr') return DOCUMENT_TYPE_LABELS[cleanKey].label_fr;
-    if (locale === 'en') return DOCUMENT_TYPE_LABELS[cleanKey].label_en;
+    if (locale === 'es') return DOCUMENT_TYPE_LABELS[cleanKey].label_es;
+    if (locale === 'en') return DOCUMENT_TYPE_LABELS[cleanKey].label_en || DOCUMENT_TYPE_LABELS[cleanKey].label_es;
     return DOCUMENT_TYPE_LABELS[cleanKey].label_ar;
   }
 
   const defaultMatch = DEFAULT_DOCUMENT_CATEGORIES.find(
-    (c) => c.name.toLowerCase() === cleanKey || c.name_fr.toLowerCase() === cleanKey || c.name_en.toLowerCase() === cleanKey
+    (c) => c.name.toLowerCase() === cleanKey || c.name_fr.toLowerCase() === cleanKey || c.name_es.toLowerCase() === cleanKey || c.name_en?.toLowerCase() === cleanKey
   );
   if (defaultMatch) {
     if (locale === 'fr') return defaultMatch.name_fr;
-    if (locale === 'en') return defaultMatch.name_en;
+    if (locale === 'es') return defaultMatch.name_es;
+    if (locale === 'en') return defaultMatch.name_en || defaultMatch.name_es;
     return defaultMatch.name;
   }
 
@@ -131,14 +137,14 @@ export interface DocStatusDetails {
  */
 export function getDocStatusDetails(
   expiryDate?: string | null,
-  locale: 'ar' | 'fr' | 'en' = 'ar'
+  locale: 'ar' | 'fr' | 'es' | 'en' = 'ar'
 ): DocStatusDetails {
   if (!expiryDate) {
     return {
       status: 'safe',
       days: 9999,
-      durationText: locale === 'fr' ? 'Valide (sans date)' : locale === 'en' ? 'Valid (no expiry)' : 'ساري (بدون تاريخ انتهاء)',
-      badgeLabel: locale === 'fr' ? 'Valide' : locale === 'en' ? 'Valid' : 'ساري',
+      durationText: locale === 'fr' ? 'Valide (sans date)' : locale === 'es' ? 'Válido (sin fecha)' : locale === 'en' ? 'Valid (no expiry)' : 'ساري (بدون تاريخ انتهاء)',
+      badgeLabel: locale === 'fr' ? 'Valide' : locale === 'es' ? 'Válido' : locale === 'en' ? 'Valid' : 'ساري',
       cardClass: 'bg-white dark:bg-[#11161d] border-slate-200 dark:border-border/50',
       textClass: 'text-slate-500 dark:text-slate-400 font-medium',
       badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
@@ -158,8 +164,8 @@ export function getDocStatusDetails(
     return {
       status: 'expired',
       days: diffDays,
-      durationText: locale === 'fr' ? `Expiré depuis ${daysAgo} jour(s)` : locale === 'en' ? `Expired ${daysAgo} day(s) ago` : `انتهت منذ ${daysAgo} يوم`,
-      badgeLabel: locale === 'fr' ? 'Expiré' : locale === 'en' ? 'Expired' : 'منتهي',
+      durationText: locale === 'fr' ? `Expiré depuis ${daysAgo} jour(s)` : locale === 'es' ? `Expirado hace ${daysAgo} día(s)` : locale === 'en' ? `Expired ${daysAgo} day(s) ago` : `انتهت منذ ${daysAgo} يوم`,
+      badgeLabel: locale === 'fr' ? 'Expiré' : locale === 'es' ? 'Expirado' : locale === 'en' ? 'Expired' : 'منتهي',
       cardClass: 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50',
       textClass: 'text-rose-600 dark:text-rose-400 font-bold',
       badgeClass: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-900/60',
@@ -171,8 +177,8 @@ export function getDocStatusDetails(
     return {
       status: 'warning',
       days: 0,
-      durationText: locale === 'fr' ? "Expire aujourd'hui" : locale === 'en' ? "Expires today" : 'تنتهي اليوم',
-      badgeLabel: locale === 'fr' ? "Aujourd'hui" : locale === 'en' ? 'Today' : 'اليوم',
+      durationText: locale === 'fr' ? "Expire aujourd'hui" : locale === 'es' ? "Expira hoy" : locale === 'en' ? "Expires today" : 'تنتهي اليوم',
+      badgeLabel: locale === 'fr' ? "Aujourd'hui" : locale === 'es' ? "Hoy" : locale === 'en' ? 'Today' : 'اليوم',
       cardClass: 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50',
       textClass: 'text-amber-600 dark:text-amber-400 font-bold',
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900/60',
@@ -184,8 +190,8 @@ export function getDocStatusDetails(
     return {
       status: 'warning',
       days: diffDays,
-      durationText: locale === 'fr' ? `Expire dans ${diffDays} jour(s)` : locale === 'en' ? `Expires in ${diffDays} day(s)` : `ينتهي خلال ${diffDays} يوم`,
-      badgeLabel: locale === 'fr' ? `${diffDays} j` : locale === 'en' ? `${diffDays}d` : `${diffDays} يوم`,
+      durationText: locale === 'fr' ? `Expire dans ${diffDays} jour(s)` : locale === 'es' ? `Expira en ${diffDays} día(s)` : locale === 'en' ? `Expires in ${diffDays} day(s)` : `ينتهي خلال ${diffDays} يوم`,
+      badgeLabel: locale === 'fr' ? `${diffDays} j` : locale === 'es' ? `${diffDays} d` : locale === 'en' ? `${diffDays}d` : `${diffDays} يوم`,
       cardClass: 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50',
       textClass: 'text-amber-600 dark:text-amber-400 font-bold',
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900/60',
@@ -196,8 +202,8 @@ export function getDocStatusDetails(
   return {
     status: 'safe',
     days: diffDays,
-    durationText: locale === 'fr' ? `${diffDays} jours restants` : locale === 'en' ? `${diffDays} days remaining` : `متبقي ${diffDays} يوم`,
-    badgeLabel: locale === 'fr' ? 'Valide' : locale === 'en' ? 'Valid' : 'ساري',
+    durationText: locale === 'fr' ? `${diffDays} jours restants` : locale === 'es' ? `${diffDays} días restantes` : locale === 'en' ? `${diffDays} days remaining` : `متبقي ${diffDays} يوم`,
+    badgeLabel: locale === 'fr' ? 'Valide' : locale === 'es' ? 'Válido' : locale === 'en' ? 'Valid' : 'ساري',
     cardClass: 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50',
     textClass: 'text-emerald-600 dark:text-emerald-400 font-bold',
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60',

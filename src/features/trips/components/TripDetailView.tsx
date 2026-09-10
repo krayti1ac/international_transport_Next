@@ -14,6 +14,7 @@ import { PodReportView } from '@/features/trips/components/PodReportView';
 import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
 import { formatCurrency } from '@/lib/forex';
 import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 import {
   ArrowRight,
   MapPin,
@@ -26,6 +27,7 @@ import {
   ShieldCheck,
   Box,
   Printer,
+  Ship,
 } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 
@@ -253,8 +255,8 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             className="rounded-xl text-xs gap-1.5 font-bold border-primary/30 hover:bg-primary/10"
           >
             <Printer className="w-3.5 h-3.5 text-primary" />
-            <span className="hidden sm:inline">{t('تحميل الملف اللوجستي الموحد (Dossier PDF)', 'Télécharger le dossier unifié (PDF)', 'Download unified logistics dossier (PDF)')}</span>
-            <span className="sm:hidden">{t('Dossier PDF', 'Dossier PDF', 'Dossier PDF')}</span>
+            <span className="hidden sm:inline">{t('تحميل الملف اللوجستي الموحد (PDF)', 'Télécharger le dossier unifié (PDF)', 'Descargar expediente unificado (PDF)')}</span>
+            <span className="sm:hidden">{t('ملف PDF', 'Dossier PDF', 'Expediente PDF')}</span>
           </Button>
           <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusInfo.color}`}>
             {statusInfo.text}
@@ -428,6 +430,44 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
                     {trip.ferry_localizador || 'N/A'}
                   </span>
                 </div>
+
+                {(trip.ferry_cost || trip.triptik_cost || trip.transit_almeria_cost || trip.marsa_maroc_cost) ? (
+                  <div className="pt-2 border-t border-border/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                        <Ship className="w-3.5 h-3.5" />
+                        {t('تفصيل مصاريف الموانئ والترانزيت المعتمدة:', 'Détail des frais portuaires et transit :', 'Port & Transit Fees Breakdown:')}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
+                        {new Decimal(trip.ferry_cost || 0)
+                          .plus(trip.triptik_cost || 0)
+                          .plus(trip.transit_almeria_cost || 0)
+                          .plus(trip.marsa_maroc_cost || 0)
+                          .toNumber()
+                          .toLocaleString()}{' '}
+                        MAD
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 bg-muted/40 rounded-lg border border-border/40">
+                        <p className="text-[11px] text-muted-foreground">{t('تذكرة العبّارة / الباخرة', 'Billet Bateau', 'Ferry Ticket')}</p>
+                        <p className="font-mono font-bold text-foreground">{(trip.ferry_cost || 0).toLocaleString()} MAD</p>
+                      </div>
+                      <div className="p-2 bg-muted/40 rounded-lg border border-border/40">
+                        <p className="text-[11px] text-muted-foreground">{t('التريبتك (CPD)', 'Triptyque (CPD)', 'Triptyque (CPD)')}</p>
+                        <p className="font-mono font-bold text-foreground">{(trip.triptik_cost || 0).toLocaleString()} MAD</p>
+                      </div>
+                      <div className="p-2 bg-muted/40 rounded-lg border border-border/40">
+                        <p className="text-[11px] text-muted-foreground">{t('ترانزيت ألميريا', 'Transit Almería', 'Transit Almería')}</p>
+                        <p className="font-mono font-bold text-foreground">{(trip.transit_almeria_cost || 0).toLocaleString()} MAD</p>
+                      </div>
+                      <div className="p-2 bg-muted/40 rounded-lg border border-border/40">
+                        <p className="text-[11px] text-muted-foreground">{t('مرسى المغرب', 'Marsa Maroc', 'Marsa Maroc')}</p>
+                        <p className="font-mono font-bold text-foreground">{(trip.marsa_maroc_cost || 0).toLocaleString()} MAD</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>

@@ -56,16 +56,16 @@ export function LanguageToggle({ userKey, className = '', showIcon = true }: Lan
       </button>
       <button
         type="button"
-        onClick={() => handleSelect('en')}
+        onClick={() => handleSelect('es')}
         className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-          locale === 'en'
+          locale === 'es'
             ? 'bg-background text-foreground shadow-xs font-bold border border-border/50'
             : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
         }`}
-        aria-pressed={locale === 'en'}
-        title="English"
+        aria-pressed={locale === 'es'}
+        title="Español (Spanish)"
       >
-        EN
+        ES
       </button>
     </div>
   );

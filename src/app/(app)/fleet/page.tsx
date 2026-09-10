@@ -18,6 +18,7 @@ import {
   Activity,
   FileText,
   Upload,
+  Fuel,
 } from 'lucide-react';
 import { FleetFormModal } from '@/components/fleet-form-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
@@ -420,6 +421,15 @@ export default function FleetPage() {
                           <span className="font-mono font-bold text-foreground">{truck.weight_capacity} {t('طن', 't')}</span>
                         </div>
                       )}
+                      <div className="flex justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Fuel className="w-3.5 h-3.5 text-amber-500" />
+                          {t('معدل الاستهلاك:', 'Consommation :')}
+                        </span>
+                        <span className="font-mono font-bold text-foreground">
+                          {truck.fuel_consumption_rate ?? 36}% <span className="text-[10px] text-muted-foreground font-normal">({truck.fuel_consumption_rate ?? 36} L/100km)</span>
+                        </span>
+                      </div>
                       <div className="flex justify-between py-1">
                         <span className="text-muted-foreground">{t('الموقع الحالي:', 'Position actuelle :')}</span>
                         <span className="font-mono text-foreground text-[11px]">{truck.current_location || t('المقر الرئيسي', 'Siège principal')}</span>
@@ -621,6 +631,12 @@ export default function FleetPage() {
                           <span className="font-mono font-bold text-foreground">{truck.weight_capacity} {t('طن', 't')}</span>
                         </div>
                       )}
+
+                      <div className="bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20 flex items-center gap-1.5">
+                        <Fuel className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-muted-foreground text-[11px]">{t('الاستهلاك:', 'Conso :')}</span>
+                        <span className="font-mono font-bold text-foreground">{truck.fuel_consumption_rate ?? 36}%</span>
+                      </div>
 
                       <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                         <span className="text-muted-foreground text-[11px]">{t('الموقع:', 'Position :')}</span>

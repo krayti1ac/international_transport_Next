@@ -163,9 +163,9 @@ Default credentials are seeded via `supabase/seed.sql`. These accounts are creat
 
 | Role | Email | Default Password | Notes |
 |------|-------|------------------|-------|
-| **Admin** | `admin@transbodanon.ma` | `TransB0d@non!2026` | Full system access — assign only to trusted IT admins |
-| **Secretary** | `secretary@transbodanon.ma` | `Secr3tary!2026` | Trip, treasury, invoicing, fleet, reports |
-| **Driver** | `driver1@transbodanon.ma` | `Dr1ver2026!` | Driver tasks, advances, fuel receipts |
+| **Admin** | `admin@transbodanon.com` | `TransB0d@non!2026` | Full system access — assign only to trusted IT admins |
+| **Secretary** | `iman@transbodanon.com` | `Secr3tary!2026` | Trip, treasury, invoicing, fleet, reports |
+| **Driver** | `hamza@transbodanon.com` | `Dr1ver2026!` | Driver tasks, advances, fuel receipts |
 
 ### How to Reset a Password
 

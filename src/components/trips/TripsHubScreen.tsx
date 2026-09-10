@@ -60,11 +60,11 @@ import {
 } from '@dnd-kit/core';
 
 const KANBAN_STAGES = [
-  { id: 'pendingAssignment', labelAr: 'قيد التعيين', labelFr: 'En attente', icon: ClipboardList, color: 'bg-amber-500', badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' },
-  { id: 'outbound', labelAr: 'في طريق الذهاب', labelFr: 'Transit Aller', icon: PlaneTakeoff, color: 'bg-blue-500', badgeClass: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30' },
-  { id: 'pendingReturn', labelAr: 'بانتظار العودة', labelFr: 'Attente Retour', icon: MapPin, color: 'bg-orange-500', badgeClass: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30' },
-  { id: 'returnRoute', labelAr: 'في طريق العودة', labelFr: 'Transit Retour', icon: PlaneLanding, color: 'bg-indigo-500', badgeClass: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30' },
-  { id: 'settled', labelAr: 'مكتملة ومفوترة', labelFr: 'Clôturé & Facturé', icon: CheckCircle, color: 'bg-emerald-500', badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' },
+  { id: 'pendingAssignment', labelAr: 'قيد التعيين', labelFr: 'En attente', labelEs: 'Pendiente de asignar', icon: ClipboardList, color: 'bg-amber-500', badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' },
+  { id: 'outbound', labelAr: 'في طريق الذهاب', labelFr: 'Transit Aller', labelEs: 'En tránsito de ida', icon: PlaneTakeoff, color: 'bg-blue-500', badgeClass: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30' },
+  { id: 'pendingReturn', labelAr: 'بانتظار العودة', labelFr: 'Attente Retour', labelEs: 'En espera de retorno', icon: MapPin, color: 'bg-orange-500', badgeClass: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30' },
+  { id: 'returnRoute', labelAr: 'في طريق العودة', labelFr: 'Transit Retour', labelEs: 'En tránsito de retorno', icon: PlaneLanding, color: 'bg-indigo-500', badgeClass: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30' },
+  { id: 'settled', labelAr: 'مكتملة ومفوترة', labelFr: 'Clôturé & Facturé', labelEs: 'Completado y facturado', icon: CheckCircle, color: 'bg-emerald-500', badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' },
 ];
 
 interface KanbanColumnProps {
@@ -83,7 +83,7 @@ function KanbanColumn({ stage, trips, drivers, trucks, trailers, onTripClick, on
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const { locale, t } = useLanguage();
   const Icon = stage.icon;
-  const stageLabel = locale === 'fr' ? stage.labelFr : stage.labelAr;
+  const stageLabel = locale === 'es' ? (stage.labelEs || stage.labelFr) : locale === 'fr' ? stage.labelFr : stage.labelAr;
 
   return (
     <div className="flex flex-col min-w-[280px] bg-muted/20 border border-border/70 rounded-2xl p-3">

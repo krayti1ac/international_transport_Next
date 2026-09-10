@@ -2,12 +2,13 @@
 
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getDynamicTreasuryBalance, recordBulkClientPayment } from '../services/finance.actions';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
 
 export const CASH_BOXES = [
-  { code: 'owner_cash', label: 'Owner Cash', labelAr: 'نقدية المالك', labelFr: 'Caisse Propriétaire', currency: 'MAD' as const },
-  { code: 'bank_morocco', label: 'Bank Morocco (MAD)', labelAr: 'بنك المغرب', labelFr: 'Banque Maroc (MAD)', currency: 'MAD' as const },
-  { code: 'bank_europe', label: 'Bank Europe (EUR)', labelAr: 'بنك أوروبا', labelFr: 'Banque Europe (EUR)', currency: 'EUR' as const },
-  { code: 'secretary_cash', label: 'Secretary Cash', labelAr: 'نقدية المكتب', labelFr: 'Caisse Secrétaire', currency: 'MAD' as const },
+  { code: 'owner_cash', label: 'Owner Cash', labelAr: 'نقدية المالك', labelFr: 'Caisse Propriétaire', labelEs: 'Caja del Propietario', currency: 'MAD' as const },
+  { code: 'bank_morocco', label: 'Bank Morocco (MAD)', labelAr: 'بنك المغرب', labelFr: 'Banque Maroc (MAD)', labelEs: 'Banco Marruecos (MAD)', currency: 'MAD' as const },
+  { code: 'bank_europe', label: 'Bank Europe (EUR)', labelAr: 'بنك أوروبا', labelFr: 'Banque Europe (EUR)', labelEs: 'Banco Europa (EUR)', currency: 'EUR' as const },
+  { code: 'secretary_cash', label: 'Secretary Cash', labelAr: 'نقدية المكتب', labelFr: 'Caisse Secrétaire', labelEs: 'Caja de Secretaría', currency: 'MAD' as const },
 ] as const;
 
 export function useTreasuryBalance(cashBoxCode: string) {

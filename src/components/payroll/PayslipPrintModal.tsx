@@ -54,18 +54,20 @@ export function PayslipPrintModal({
     window.print();
   };
 
-  const periodLabel = new Date(periodStart).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA', {
+  const dateLocale = locale === 'es' ? 'es-ES' : locale === 'fr' ? 'fr-FR' : 'ar-MA';
+
+  const periodLabel = new Date(periodStart).toLocaleDateString(dateLocale, {
     month: 'long',
     year: 'numeric',
   });
 
   const paymentLabel = paymentDate
-    ? new Date(paymentDate).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA', {
+    ? new Date(paymentDate).toLocaleDateString(dateLocale, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
       })
-    : new Date().toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA', {
+    : new Date().toLocaleDateString(dateLocale, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -129,10 +131,10 @@ export function PayslipPrintModal({
                   {t('تفاصيل الصرف / Paiement', 'Détails du Paiement')}
                 </span>
                 <p className="text-xs text-slate-600">
-                  <span className="font-medium">{t('بداية الفترة: ', 'Début période : ')}</span>{new Date(periodStart).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
+                  <span className="font-medium">{t('بداية الفترة: ', 'Début période : ')}</span>{new Date(periodStart).toLocaleDateString(dateLocale)}
                 </p>
                 <p className="text-xs text-slate-600">
-                  <span className="font-medium">{t('نهاية الفترة: ', 'Fin période : ')}</span>{new Date(periodEnd).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'ar-MA')}
+                  <span className="font-medium">{t('نهاية الفترة: ', 'Fin période : ')}</span>{new Date(periodEnd).toLocaleDateString(dateLocale)}
                 </p>
                 <p className="text-xs text-slate-600">
                   <span className="font-medium">{t('تاريخ الصرف: ', 'Date de paiement : ')}</span>{paymentLabel}
@@ -147,24 +149,24 @@ export function PayslipPrintModal({
             <div className="border border-slate-800 mb-6">
               <div className="bg-slate-100 p-2 border-b border-slate-300">
                 <span className="font-bold text-xs text-slate-700 uppercase">
-                  {t('تفاصيل الراتب / Détail de Paie', 'Salary Breakdown / Détail de Paie')}
+                  {t('تفاصيل الراتب', 'Détail de Paie', 'Detalle de nómina')}
                 </span>
               </div>
               <table className={`w-full ${dir === 'rtl' ? 'text-right' : 'text-left'} border-collapse`}>
                 <thead>
                   <tr className="border-b border-slate-300 text-slate-600 text-xs">
                     <th className="p-2 w-8">#</th>
-                    <th className="p-2">{t('الوصف / Description', 'Description')}</th>
-                    <th className={`p-2 ${dir === 'rtl' ? 'text-left' : 'text-right'}`}>{t('المبلغ / Montant', 'Amount')}</th>
+                    <th className="p-2">{t('الوصف', 'Description', 'Descripción')}</th>
+                    <th className={`p-2 ${dir === 'rtl' ? 'text-left' : 'text-right'}`}>{t('المبلغ', 'Montant', 'Importe')}</th>
                   </tr>
                 </thead>
                 <tbody className="text-xs">
                   <tr className="border-b border-slate-200">
                     <td className="p-2 font-mono">1</td>
                     <td className="p-2">
-                      <span className="font-medium">{t('الراتب الأساسي', 'Salaire de base')}</span>
+                      <span className="font-medium">{t('الراتب الأساسي', 'Salaire de base', 'Salario base')}</span>
                       <br />
-                      <span className="text-slate-500">{t('Base Salary / Salaire de base', 'Base Salary')}</span>
+                      <span className="text-slate-500">{t('الراتب الأساسي الثابت', 'Salaire de base fixe', 'Salario base fijo')}</span>
                     </td>
                     <td className={`p-2 ${dir === 'rtl' ? 'text-left' : 'text-right'} font-mono font-bold`}>
                       {formatCurrency(baseSalary, currency)}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -176,6 +177,16 @@ export function FleetDocumentsDashboard() {
             <FolderCog className="w-4 h-4 text-blue-600" />
             <span>{t('إدارة أنواع الوثائق', 'Types de documents')}</span>
           </Button>
+          <Link href="/documents/types">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 px-3.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted/50 cursor-pointer"
+              title={t('إدارة أنواع وثائق الأسطول (شاشة مستقلة)', 'Gérer les types de documents de flotte (Écran dédié)')}
+            >
+              <FolderCog className="w-4 h-4 text-blue-600" />
+              <span>{t('إدارة أنواع الوثائق', 'Types de documents')}</span>
+            </Button>
+          </Link>
 
           <Button
             variant="ghost"

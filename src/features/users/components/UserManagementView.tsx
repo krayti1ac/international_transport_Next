@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Users,
@@ -15,7 +15,12 @@ import {
   FileText,
   Loader2,
   AlertTriangle,
+  Upload,
+  Sparkles,
 } from 'lucide-react';
+import { UserAvatar } from '@/components/users/UserAvatar';
+import { PRESET_USER_AVATARS, saveUserPhotoLocal, resolveUserPhoto } from '@/lib/user-photos';
+import { compressImageFile } from '@/lib/driver-photos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,9 +46,18 @@ import type { User, UserRole } from '@/types/database';
 
 export function UserManagementView() {
   const { dir, t } = useLanguage();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, role: userRole, company: currentCompany } = useAuth();
+  const isSuperAdmin = userRole === 'super_admin' || currentUser?.role === 'super_admin';
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const companyEmailDomain = currentCompany?.email_domain;
+  const companyDomain = useMemo(() => {
+    if (companyEmailDomain) {
+      return companyEmailDomain.replace(/^@+/, '').trim().toLowerCase();
+    }
+    return 'transbodanon.com';
+  }, [companyEmailDomain]);
 
   const { data: users = [], isLoading } = useUsersQuery();
 
@@ -53,14 +67,49 @@ export function UserManagementView() {
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showPresets, setShowPresets] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     role: 'secretary' as UserRole,
     password: '',
-    preferred_language: 'ar' as 'ar' | 'fr',
+    preferred_language: 'ar' as 'ar' | 'fr' | 'es',
+    avatar_url: '',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  // Check in real-time if the entered username or email conflicts with an existing user in the company
+  const usernameConflict = useMemo(() => {
+    const rawVal = formData.email.trim().toLowerCase();
+    if (!rawVal) return null;
+
+    const targetEmail =
+      formData.role === 'super_admin'
+        ? rawVal
+        : rawVal.includes('@')
+          ? rawVal
+          : `${rawVal}@${companyDomain}`;
+
+    const targetUsername = targetEmail.split('@')[0].trim().toLowerCase();
+
+    return (
+      users.find((u) => {
+        if (editingUser && u.id === editingUser.id) return false;
+        const candEmail = (u.email || '').trim().toLowerCase();
+        const candUsername = candEmail.split('@')[0].trim().toLowerCase();
+
+        // Exact email match
+        if (candEmail === targetEmail) return true;
+
+        // In company domain: same username prefix regardless of role (admin, secretary, driver)
+        if (formData.role !== 'super_admin' && candUsername === targetUsername) return true;
+
+        return false;
+      }) || null
+    );
+  }, [formData.email, formData.role, companyDomain, users, editingUser]);
 
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -102,10 +151,17 @@ export function UserManagementView() {
     },
   };
 
+  // Only super_admin can see super_admin accounts in the user management list
+  const visibleUsers = useMemo(() => {
+    if (isSuperAdmin) return users;
+    return users.filter((u) => u.role !== 'super_admin');
+  }, [users, isSuperAdmin]);
+
   // Filtered users
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+    const effectiveRoleFilter = !isSuperAdmin && roleFilter === 'super_admin' ? 'all' : roleFilter;
+    return visibleUsers.filter((u) => {
+      const matchesRole = effectiveRoleFilter === 'all' || u.role === effectiveRoleFilter;
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -113,17 +169,17 @@ export function UserManagementView() {
         (u.email && u.email.toLowerCase().includes(q));
       return matchesRole && matchesSearch;
     });
-  }, [users, roleFilter, searchQuery]);
+  }, [visibleUsers, roleFilter, searchQuery, isSuperAdmin]);
 
   // Statistics
   const stats = useMemo(() => {
-    const total = users.length;
-    const superAdmins = users.filter((u) => u.role === 'super_admin').length;
-    const admins = users.filter((u) => u.role === 'admin').length;
-    const secretaries = users.filter((u) => u.role === 'secretary').length;
-    const drivers = users.filter((u) => u.role === 'driver').length;
+    const total = visibleUsers.length;
+    const superAdmins = visibleUsers.filter((u) => u.role === 'super_admin').length;
+    const admins = visibleUsers.filter((u) => u.role === 'admin').length;
+    const secretaries = visibleUsers.filter((u) => u.role === 'secretary').length;
+    const drivers = visibleUsers.filter((u) => u.role === 'driver').length;
     return { total, superAdmins, admins, secretaries, drivers };
-  }, [users]);
+  }, [visibleUsers]);
 
   const handleOpenAddModal = () => {
     setEditingUser(null);
@@ -133,19 +189,28 @@ export function UserManagementView() {
       role: 'secretary',
       password: '',
       preferred_language: 'ar',
+      avatar_url: '',
     });
+    setShowPresets(false);
     setModalOpen(true);
   };
 
   const handleOpenEditModal = (userToEdit: User) => {
     setEditingUser(userToEdit);
+    let usernamePart = userToEdit.email || '';
+    if (companyDomain && usernamePart.toLowerCase().endsWith(`@${companyDomain}`)) {
+      usernamePart = usernamePart.slice(0, -(companyDomain.length + 1));
+    }
+    const resolvedPhoto = userToEdit.avatar_url || resolveUserPhoto(userToEdit) || '';
     setFormData({
       name: userToEdit.name || '',
-      email: userToEdit.email || '',
+      email: usernamePart,
       role: userToEdit.role || 'secretary',
       password: '',
-      preferred_language: (userToEdit.preferred_language === 'en' ? 'ar' : userToEdit.preferred_language) || 'ar',
+      preferred_language: ((userToEdit.preferred_language as any) === 'en' ? 'ar' : userToEdit.preferred_language) || 'ar',
+      avatar_url: resolvedPhoto,
     });
+    setShowPresets(false);
     setModalOpen(true);
   };
 
@@ -169,19 +234,42 @@ export function UserManagementView() {
       return;
     }
 
+    if (usernameConflict) {
+      toast({
+        title: t('اسم المستخدم مكرر', 'Identifiant déjà utilisé'),
+        description: t(
+          `اسم المستخدم محجوز بالفعل للحساب "${usernameConflict.name}" (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). لا يمكن تكراره لنفس الشركة حتى وإن اختلفت الصلاحية.`,
+          `Cet identifiant est déjà utilisé par "${usernameConflict.name}" (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). Impossible de le dupliquer.`
+        ),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const finalEmail =
+        formData.role !== 'super_admin' && !formData.email.includes('@')
+          ? `${formData.email.trim()}@${companyDomain}`
+          : formData.email.trim();
+
       if (editingUser) {
         const res = await updateUserAction({
           id: editingUser.id,
           name: formData.name.trim(),
+          email: finalEmail,
           role: formData.role,
           password: formData.password ? formData.password : undefined,
           preferred_language: formData.preferred_language,
+          avatar_url: formData.avatar_url || null,
         });
 
         if (!res.success) {
           throw new Error(res.error || 'فشل تحديث بيانات المستخدم');
+        }
+
+        if (formData.avatar_url) {
+          saveUserPhotoLocal(editingUser.id, formData.avatar_url, formData.name, finalEmail);
         }
 
         toast({
@@ -191,14 +279,19 @@ export function UserManagementView() {
       } else {
         const res = await createUserAction({
           name: formData.name.trim(),
-          email: formData.email.trim(),
+          email: finalEmail,
           role: formData.role,
           password: formData.password,
           preferred_language: formData.preferred_language,
+          avatar_url: formData.avatar_url || null,
         });
 
         if (!res.success) {
           throw new Error(res.error || 'فشل إنشاء المستخدم');
+        }
+
+        if (formData.avatar_url) {
+          saveUserPhotoLocal(res.data?.id || finalEmail, formData.avatar_url, formData.name, finalEmail);
         }
 
         toast({
@@ -460,6 +553,14 @@ export function UserManagementView() {
                             <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center shrink-0 text-sm border border-primary/20">
                               {(u.name || u.email || 'U').charAt(0).toUpperCase()}
                             </div>
+                            <UserAvatar
+                              name={u.name}
+                              email={u.email}
+                              avatarUrl={u.avatar_url}
+                              userId={u.id}
+                              role={u.role}
+                              size="md"
+                            />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <p className="font-semibold text-foreground truncate">
@@ -561,6 +662,114 @@ export function UserManagementView() {
           </DialogHeader>
 
           <form onSubmit={handleSaveUser} className="space-y-4 pt-2">
+            {/* قسم صورة المستخدم */}
+            <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 flex flex-col sm:flex-row items-center gap-4">
+              <UserAvatar
+                name={formData.name || 'مستخدم'}
+                email={formData.email}
+                avatarUrl={formData.avatar_url}
+                size="xl"
+                className="ring-2 ring-primary/20 shadow-xs"
+              />
+              <div className="flex-1 space-y-2 text-center sm:text-start w-full">
+                <div>
+                  <h4 className="text-xs font-bold text-foreground">
+                    {t('الصورة الشخصية للمستخدم', "Photo de profil de l'utilisateur")}
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    {t('اختر صورة من جهازك أو اختر من النماذج الاحترافية الجاهزة', 'Téléversez une photo ou choisissez parmi les modèles')}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setCompressing(true);
+                      try {
+                        const compressed = await compressImageFile(file);
+                        setFormData((prev) => ({ ...prev, avatar_url: compressed }));
+                      } catch (err) {
+                        console.error('Error compressing image:', err);
+                      } finally {
+                        setCompressing(false);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={compressing}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-8 text-xs rounded-xl gap-1.5"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-primary" />
+                    {compressing ? t('جاري المعالجة...', 'Traitement...') : t('رفع صورة', 'Téléverser')}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPresets(!showPresets)}
+                    className="h-8 text-xs rounded-xl gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                    {t('نماذج جاهزة', 'Modèles')}
+                  </Button>
+
+                  {formData.avatar_url && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData((prev) => ({ ...prev, avatar_url: '' }))}
+                      className="h-8 text-xs text-destructive hover:bg-destructive/10 rounded-xl gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {t('إزالة', 'Supprimer')}
+                    </Button>
+                  )}
+                </div>
+
+                {/* معرض النماذج الجاهزة */}
+                {showPresets && (
+                  <div className="pt-2 border-t border-border/40">
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {PRESET_USER_AVATARS.map((preset) => (
+                        <button
+                          type="button"
+                          key={preset.id}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, avatar_url: preset.url }));
+                            setShowPresets(false);
+                          }}
+                          className={`relative rounded-full overflow-hidden border-2 transition-all p-0.5 hover:scale-105 ${
+                            formData.avatar_url === preset.url
+                              ? 'border-primary shadow-xs ring-2 ring-primary/30'
+                              : 'border-border/60 hover:border-border'
+                          }`}
+                          title={preset.label}
+                        >
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            className="w-9 h-9 object-cover rounded-full"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Name */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
@@ -575,25 +784,101 @@ export function UserManagementView() {
               />
             </div>
 
-            {/* Email */}
+            {/* Email / Username */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                {t('البريد الإلكتروني', 'Adresse e-mail')} *
-              </label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@transbodanon.ma"
-                required
-                disabled={!!editingUser}
-                dir="ltr"
-                className="rounded-xl h-10"
-              />
-              {editingUser && (
-                <p className="text-[11px] text-muted-foreground">
-                  {t('لا يمكن تعديل البريد الإلكتروني بعد إنشاء الحساب', "L'adresse email ne peut pas être modifiée")}
-                </p>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">
+                  {t('اسم المستخدم / البريد الإلكتروني', 'Identifiant / Adresse e-mail')} *
+                </label>
+                {formData.role !== 'super_admin' && (
+                  <span className="text-[10px] text-sky-600 dark:text-sky-400 font-mono font-medium" dir="ltr">
+                    @{companyDomain}
+                  </span>
+                )}
+              </div>
+
+              {formData.role === 'super_admin' ? (
+                <div className="space-y-1.5">
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="superadmin@system.internal"
+                    required
+                    dir="ltr"
+                    className={`rounded-xl h-10 font-mono text-xs ${
+                      usernameConflict ? 'border-amber-500 focus-visible:ring-amber-500' : ''
+                    }`}
+                  />
+                  {usernameConflict && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-[11px]">
+                          {t('هذا البريد مستخدم بالفعل في المنظومة', 'Adresse email déjà utilisée dans le système')}
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-amber-800/80 dark:text-amber-300/80">
+                          {t(
+                            `مسجل للحساب «${usernameConflict.name}» (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). لا يمكن تكراره.`,
+                            `Attribué au compte «${usernameConflict.name}» (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). Impossible de le dupliquer.`
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center" dir="ltr">
+                    <Input
+                      type="text"
+                      value={formData.email}
+                      onChange={(e) => {
+                        let val = e.target.value.trim().toLowerCase();
+                        if (val.includes(`@${companyDomain}`)) {
+                          val = val.replace(`@${companyDomain}`, '');
+                        } else if (val.includes('@')) {
+                          val = val.split('@')[0];
+                        }
+                        val = val.replace(/[^a-z0-9._-]/g, '');
+                        setFormData({ ...formData, email: val });
+                      }}
+                      placeholder="hamza"
+                      required
+                      className={`rounded-e-none h-10 font-mono text-xs ${
+                        usernameConflict ? 'border-amber-500 focus-visible:ring-amber-500' : ''
+                      }`}
+                    />
+                    <div className="h-10 px-3 bg-muted/80 border border-s-0 border-input rounded-e-xl flex items-center font-mono text-xs font-bold text-sky-600 dark:text-sky-400 select-none whitespace-nowrap shadow-2xs">
+                      @{companyDomain}
+                    </div>
+                  </div>
+
+                  {/* Duplicate username conflict warning banner */}
+                  {usernameConflict ? (
+                    <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-[11px]">
+                          {t('اسم المستخدم محجوز بالفعل في نطاق هذه الشركة', 'Identifiant déjà utilisé dans cette entreprise')}
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-amber-800/80 dark:text-amber-300/80">
+                          {t(
+                            `مخصص حالياً للحساب «${usernameConflict.name}» بصلاحية (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). يمنع تكرار اسم المستخدم لنفس الشركة حتى وإن اختلفت الصلاحية.`,
+                            `Attribué à «${usernameConflict.name}» avec le rôle (${roleConfig[usernameConflict.role]?.label || usernameConflict.role}). Impossible de le dupliquer.`
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t(
+                        `البريد الرسمي المعتمد: ${formData.email ? formData.email : 'username'}@${companyDomain}`,
+                        `Adresse email officielle : ${formData.email ? formData.email : 'username'}@${companyDomain}`
+                      )}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -692,7 +977,7 @@ export function UserManagementView() {
               </Button>
               <Button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !!usernameConflict}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl"
               >
                 {submitting ? (

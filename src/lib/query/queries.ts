@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import type { Client, Driver, Truck, Trailer, TripOrder, Advance, Invoice, TreasuryTransaction, FleetDocument, FleetDocumentRenewal, CashBox } from '@/types/database';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
 
 const supabase = () => createClient();
 
@@ -126,6 +127,28 @@ export function useInvoices(filters?: { client_id?: string; status?: string }) {
       let query = supabase()
         .from('invoices')
         .select('*')
+        .order('issue_date', { ascending: false });
+
+      if (filters?.client_id) query = query.eq('client_id', filters.client_id);
+      if (filters?.status) query = query.eq('status', filters.status);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as Invoice[];
+    },
+  });
+}
+
+export function useInvoicesByPeriod(filters?: { client_id?: string; status?: string }) {
+  const { startDate, endDate } = useFiscalStore();
+  return useQuery({
+    queryKey: ['invoices', 'period', startDate, endDate, filters],
+    queryFn: async () => {
+      let query = supabase()
+        .from('invoices')
+        .select('*')
+        .gte('issue_date', startDate)
+        .lte('issue_date', endDate)
         .order('issue_date', { ascending: false });
 
       if (filters?.client_id) query = query.eq('client_id', filters.client_id);

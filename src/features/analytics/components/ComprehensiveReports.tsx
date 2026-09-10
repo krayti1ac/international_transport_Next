@@ -55,6 +55,9 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
+import { useQueryClient } from '@tanstack/react-query';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -92,6 +95,8 @@ export default function ComprehensiveReports() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('trips');
+  const queryClient = useQueryClient();
+  const { startDate, endDate } = useFiscalStore();
 
   const statusLabels: Record<string, { label: string; badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'danger' }> = useMemo(() => ({
     completed: { label: t('مكتملة', 'Terminée'), badgeVariant: 'success' },
@@ -111,7 +116,6 @@ export default function ComprehensiveReports() {
   }), [t]);
 
   // Filter States
-  const [period, setPeriod] = useState<'all' | 'today' | 'month' | 'quarter' | 'year'>('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterClient, setFilterClient] = useState<string>('all');
@@ -142,6 +146,8 @@ export default function ComprehensiveReports() {
               truck:trucks(plate_number),
               client:clients(name)
             `)
+            .gte('departure_date', startDate)
+            .lte('departure_date', endDate)
             .order('id', { ascending: false }),
           supabase
             .from('invoices')
@@ -149,6 +155,8 @@ export default function ComprehensiveReports() {
               *,
               client:clients(name)
             `)
+            .gte('issue_date', startDate)
+            .lte('issue_date', endDate)
             .order('id', { ascending: false }),
           supabase.from('trucks').select('*').order('id', { ascending: true }),
           supabase.from('drivers').select('*').order('id', { ascending: true }),
@@ -173,43 +181,15 @@ export default function ComprehensiveReports() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, startDate, endDate]);
 
   useEffect(() => {
     fetchReportData();
   }, [fetchReportData]);
 
-  // Period Date Range Filter Helpers
-  const isDateInSelectedPeriod = useCallback((dateStr?: string | null) => {
-    if (!dateStr || period === 'all') return true;
-    const date = new Date(dateStr);
-    const now = new Date();
-
-    if (period === 'today') {
-      return (
-        date.getDate() === now.getDate() &&
-        date.getMonth() === now.getMonth() &&
-        date.getFullYear() === now.getFullYear()
-      );
-    }
-    if (period === 'month') {
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-    }
-    if (period === 'quarter') {
-      const currentQuarter = Math.floor(now.getMonth() / 3);
-      const dateQuarter = Math.floor(date.getMonth() / 3);
-      return currentQuarter === dateQuarter && date.getFullYear() === now.getFullYear();
-    }
-    if (period === 'year') {
-      return date.getFullYear() === now.getFullYear();
-    }
-    return true;
-  }, [period]);
-
-  // Filtered Trips
+  // Filtered Trips (date filtering is now server-side via fiscal store)
   const filteredTrips = useMemo(() => {
     return trips.filter((trip) => {
-      if (!isDateInSelectedPeriod(trip.departure_date)) return false;
       if (filterStatus !== 'all' && trip.status !== filterStatus) return false;
       if (filterClient !== 'all' && String(trip.client_id) !== filterClient) return false;
       if (filterTruck !== 'all' && String(trip.truck_id) !== filterTruck) return false;
@@ -223,12 +203,11 @@ export default function ComprehensiveReports() {
       }
       return true;
     });
-  }, [trips, isDateInSelectedPeriod, filterStatus, filterClient, filterTruck, searchQuery]);
+  }, [trips, filterStatus, filterClient, filterTruck, searchQuery]);
 
-  // Filtered Invoices
+  // Filtered Invoices (date filtering is now server-side via fiscal store)
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
-      if (!isDateInSelectedPeriod(inv.created_at)) return false;
       if (filterClient !== 'all' && String(inv.client_id) !== filterClient) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -237,7 +216,7 @@ export default function ComprehensiveReports() {
       }
       return true;
     });
-  }, [invoices, isDateInSelectedPeriod, filterClient, searchQuery]);
+  }, [invoices, filterClient, searchQuery]);
 
   // Financial Aggregations using Decimal.js
   const summaryMetrics = useMemo(() => {
@@ -578,89 +557,64 @@ export default function ComprehensiveReports() {
 
       {/* Advanced Filters Bar */}
       <Card className="rounded-2xl border border-border/80 bg-card shadow-xs print:hidden">
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-3">
+          <PeriodFilterBar onFilterChange={() => {
+            queryClient.invalidateQueries({ queryKey: ['reports'] });
+            fetchReportData();
+          }} />
+
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            {/* Quick Period Buttons */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-              <span className="text-xs font-bold text-muted-foreground ms-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                {t('الفترة:', 'Période:')}
-              </span>
-              {[
-                { id: 'month', label: t('هذا الشهر', 'Ce mois') },
-                { id: 'quarter', label: t('الربع الحالي', 'Ce trimestre') },
-                { id: 'year', label: t('هذا العام', 'Cette année') },
-                { id: 'today', label: t('اليوم', "Aujourd'hui") },
-                { id: 'all', label: t('كل الفترات', 'Toutes') },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setPeriod(item.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    period === item.id
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  {item.label}
-                </button>
+            {/* Search */}
+            <div className="relative min-w-[180px] flex-1 md:flex-initial">
+              <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('بحث برقم الرحلة، CMR أو المسار...', 'Rechercher N° trajet, CMR ou trajet...')}
+                className="h-9 pr-8 text-xs rounded-xl bg-background"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">{t('كافة الحالات', 'Tous les statuts')}</option>
+              <option value="completed">{t('مكتملة', 'Terminées')}</option>
+              <option value="in_transit">{t('في الطريق', 'En transit')}</option>
+              <option value="loaded">{t('تم التحميل', 'Chargées')}</option>
+              <option value="pending">{t('معلقة', 'En attente')}</option>
+            </select>
+
+            {/* Client Filter */}
+            <select
+              value={filterClient}
+              onChange={(e) => setFilterClient(e.target.value)}
+              className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">{t('كافة العملاء', 'Tous les clients')}</option>
+              {clients.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
               ))}
-            </div>
+            </select>
 
-            {/* Filter Dropdowns & Search */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
-              <div className="relative min-w-[180px] flex-1 md:flex-initial">
-                <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('بحث برقم الرحلة، CMR أو المسار...', 'Rechercher N° trajet, CMR ou trajet...')}
-                  className="h-9 pr-8 text-xs rounded-xl bg-background"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="all">{t('كافة الحالات', 'Tous les statuts')}</option>
-                <option value="completed">{t('مكتملة', 'Terminées')}</option>
-                <option value="in_transit">{t('في الطريق', 'En transit')}</option>
-                <option value="loaded">{t('تم التحميل', 'Chargées')}</option>
-                <option value="pending">{t('معلقة', 'En attente')}</option>
-              </select>
-
-              {/* Client Filter */}
-              <select
-                value={filterClient}
-                onChange={(e) => setFilterClient(e.target.value)}
-                className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="all">{t('كافة العملاء', 'Tous les clients')}</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-
-              {/* Truck Filter */}
-              <select
-                value={filterTruck}
-                onChange={(e) => setFilterTruck(e.target.value)}
-                className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="all">{t('كافة الشاحنات', 'Tous les camions')}</option>
-                {trucks.map((tr) => (
-                  <option key={tr.id} value={String(tr.id)}>
-                    {tr.plate_number} - {tr.model}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Truck Filter */}
+            <select
+              value={filterTruck}
+              onChange={(e) => setFilterTruck(e.target.value)}
+              className="h-9 px-3 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">{t('كافة الشاحنات', 'Tous les camions')}</option>
+              {trucks.map((tr) => (
+                <option key={tr.id} value={String(tr.id)}>
+                  {tr.plate_number} - {tr.model}
+                </option>
+              ))}
+            </select>
           </div>
         </CardContent>
       </Card>

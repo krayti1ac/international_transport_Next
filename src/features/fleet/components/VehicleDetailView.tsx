@@ -26,6 +26,8 @@ import {
   Calculator,
 } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
 import { TcoDashboard } from './TcoDashboard';
 
 interface VehicleDetailViewProps {
@@ -39,6 +41,7 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
+  const { startDate, endDate } = useFiscalStore();
   const [vehicle, setVehicle] = useState<Truck | Trailer | null>(null);
   const [documents, setDocuments] = useState<FleetDocument[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<TruckMaintenance[]>([]);
@@ -71,12 +74,16 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
               .from('truck_maintenance')
               .select('*')
               .eq('truck_id', vehicleId)
+              .gte('maintenance_date', startDate)
+              .lte('maintenance_date', endDate)
               .order('maintenance_date', { ascending: false })
           : Promise.resolve({ data: [] }),
         supabase
           .from('trip_orders')
           .select('*')
           .eq(vehicleType === 'truck' ? 'truck_id' : 'trailer_id', vehicleId)
+          .gte('departure_date', startDate)
+          .lte('departure_date', endDate)
           .order('departure_date', { ascending: false }),
       ]);
 
@@ -93,7 +100,7 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
     } finally {
       setLoading(false);
     }
-  }, [vehicleId, vehicleType, supabase, toast, t]);
+  }, [vehicleId, vehicleType, supabase, toast, t, startDate, endDate]);
 
   useEffect(() => {
     fetchVehicleData();
@@ -193,6 +200,8 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
           {vehicle.status === 'active' ? t('نشط ومتاح', 'Actif', 'Active') : vehicle.status}
         </Badge>
       </div>
+
+      <PeriodFilterBar onFilterChange={fetchVehicleData} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         <Card className="rounded-2xl border-border bg-card">
@@ -372,7 +381,7 @@ export function VehicleDetailView({ vehicleId, vehicleType }: VehicleDetailViewP
           </TabsContent>
 
           <TabsContent value="tco" className="space-y-4">
-            <TcoDashboard vehicleId={vehicleId} vehicleType={vehicleType} />
+            <TcoDashboard vehicleId={vehicleId} vehicleType={vehicleType} startDate={startDate} endDate={endDate} />
           </TabsContent>
         </Tabs>
     </div>

@@ -3,13 +3,25 @@
 -- Context: Moroccan & European Logistics
 -- ============================================================
 
+-- Ensure user profile columns exist
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS theme_mode TEXT DEFAULT 'system';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS preferred_language TEXT DEFAULT 'ar';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company_id BIGINT DEFAULT 1;
+
 -- USERS
 INSERT INTO users (id, email, role, name, created_at, theme_mode, mfa_enabled) VALUES
-('00000000-0000-0000-0000-000000000001', 'admin@transbodanon.ma', 'admin', 'Admin Trans Bodanon', '2025-01-01T08:00:00Z', 'system', false),
-('00000000-0000-0000-0000-000000000002', 'secretary@transbodanon.ma', 'secretary', 'Fatima Zahra', '2025-01-01T08:00:00Z', 'light', false),
-('00000000-0000-0000-0000-000000000003', 'driver1@transbodanon.ma', 'driver', 'Ahmed Benali', '2025-01-01T08:00:00Z', 'system', false),
+('00000000-0000-0000-0000-000000000001', 'admin@transbodanon.com', 'admin', 'Admin Trans Bodanon', '2025-01-01T08:00:00Z', 'system', false),
+('00000000-0000-0000-0000-000000000002', 'iman@transbodanon.com', 'secretary', 'إيمان', '2025-01-01T08:00:00Z', 'light', false),
+('00000000-0000-0000-0000-000000000003', 'hamza@transbodanon.com', 'driver', 'حمزة', '2025-01-01T08:00:00Z', 'system', false),
 ('00000000-0000-0000-0000-000000000004', 'driver2@transbodanon.ma', 'driver', 'Mohamed Amrani', '2025-01-01T08:00:00Z', 'system', false),
-('00000000-0000-0000-0000-000000000005', 'driver3@transbodanon.ma', 'driver', 'Youssef El Idrissi', '2025-01-01T08:00:00Z', 'system', false);
+('00000000-0000-0000-0000-000000000005', 'driver3@transbodanon.ma', 'driver', 'Youssef El Idrissi', '2025-01-01T08:00:00Z', 'system', false)
+ON CONFLICT (id) DO UPDATE SET
+  email = EXCLUDED.email,
+  role = EXCLUDED.role,
+  name = EXCLUDED.name,
+  theme_mode = EXCLUDED.theme_mode,
+  mfa_enabled = EXCLUDED.mfa_enabled;
 
 -- CLIENTS
 INSERT INTO clients (

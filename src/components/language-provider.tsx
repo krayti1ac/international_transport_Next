@@ -2,14 +2,15 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { SPANISH_DICTIONARY } from '@/i18n/dictionary';
 
-export type Locale = 'ar' | 'fr' | 'en';
+export type Locale = 'ar' | 'fr' | 'es';
 
 interface LanguageContextType {
   locale: Locale;
   dir: 'rtl' | 'ltr';
   setLocale: (newLocale: Locale, userKey?: string) => Promise<void>;
-  t: (ar: string, fr: string, en?: string) => string;
+  t: (ar: string, fr: string, es?: string) => string;
   getUserPreferredLanguage: (userKey: string) => Locale | null;
 }
 
@@ -28,7 +29,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined' || !userKey) return null;
     try {
       const stored = localStorage.getItem(`user_lang_${userKey.trim().toLowerCase()}`);
-      if (stored === 'ar' || stored === 'fr' || stored === 'en') {
+      if (stored === 'ar' || stored === 'fr' || stored === 'es') {
         return stored as Locale;
       }
     } catch (e) {}
@@ -50,7 +51,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       // 2. If not found, check global app_locale or cookie
       if (!initialLocale) {
         const storedGlobal = localStorage.getItem('app_locale') as Locale | null;
-        if (storedGlobal === 'ar' || storedGlobal === 'fr' || storedGlobal === 'en') {
+        if (storedGlobal === 'ar' || storedGlobal === 'fr' || storedGlobal === 'es') {
           initialLocale = storedGlobal;
         }
       }
@@ -113,9 +114,21 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const t = useCallback((ar: string, fr: string, en?: string): string => {
+
+  const t = useCallback((ar: string, fr: string, es?: string): string => {
     if (locale === 'fr') return fr;
-    if (locale === 'en') return en ?? ar;
+    if (locale === 'es') {
+      const trimmedAr = ar?.trim();
+      if (trimmedAr && SPANISH_DICTIONARY[trimmedAr]) return SPANISH_DICTIONARY[trimmedAr];
+      const trimmedFr = fr?.trim();
+      if (trimmedFr && SPANISH_DICTIONARY[trimmedFr]) return SPANISH_DICTIONARY[trimmedFr];
+      const trimmedFrLower = fr?.trim()?.toLowerCase();
+      if (trimmedFrLower && SPANISH_DICTIONARY[trimmedFrLower]) return SPANISH_DICTIONARY[trimmedFrLower];
+      if (es && !/^(general dashboard|manage trips|total trips|active trips|refresh|in transit|in progress|completed|delivered|loaded|pending|cancelled)$/i.test(es.trim())) {
+        return es;
+      }
+      return fr || ar;
+    }
     return ar;
   }, [locale]);
 
@@ -135,7 +148,7 @@ export function useLanguage() {
       locale: 'ar' as Locale,
       dir: 'rtl' as const,
       setLocale: async () => {},
-      t: (ar: string, _fr: string, _en?: string) => ar,
+      t: (ar: string, _fr: string, es?: string) => es || ar,
       getUserPreferredLanguage: () => null,
     };
   }

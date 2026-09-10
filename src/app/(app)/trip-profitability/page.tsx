@@ -14,6 +14,9 @@ import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function TripProfitabilityPage() {
   const { t, dir, locale } = useLanguage();
@@ -21,6 +24,8 @@ export default function TripProfitabilityPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [cardLayout, setCardLayout] = useCardViewMode('trip_profitability', 'grid');
+  const queryClient = useQueryClient();
+  const { startDate, endDate } = useFiscalStore();
 
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -29,11 +34,11 @@ export default function TripProfitabilityPage() {
     try {
       setLoading(true);
       const [tripsRes, advancesRes, fuelRes, finesRes, ferriesRes, driversRes, trucksRes] = await Promise.all([
-        supabase.from('trip_orders').select('*').order('departure_date', { ascending: false }),
-        supabase.from('advances').select('*'),
-        supabase.from('truck_maintenance').select('*'),
-        supabase.from('fine_penalties').select('*'),
-        supabase.from('ferry_expenses').select('*'),
+        supabase.from('trip_orders').select('*').gte('departure_date', startDate).lte('departure_date', endDate).order('departure_date', { ascending: false }),
+        supabase.from('advances').select('*').gte('date', startDate).lte('date', endDate),
+        supabase.from('truck_maintenance').select('*').gte('maintenance_date', startDate).lte('maintenance_date', endDate),
+        supabase.from('fine_penalties').select('*').gte('date', startDate).lte('date', endDate),
+        supabase.from('ferry_expenses').select('*').gte('date', startDate).lte('date', endDate),
         supabase.from('drivers').select('id, name'),
         supabase.from('trucks').select('id, plate_number'),
       ]);
@@ -78,7 +83,7 @@ export default function TripProfitabilityPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast, t]);
+  }, [supabase, toast, t, startDate, endDate]);
 
   useEffect(() => {
     fetchData();
@@ -121,6 +126,10 @@ export default function TripProfitabilityPage() {
           {t('تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة', 'Analyse du résultat net réel (P&L) et de la consommation de gasoil par trajet')}
         </p>
       </div>
+
+      <PeriodFilterBar onFilterChange={() => {
+        queryClient.invalidateQueries({ queryKey: ['trips', 'period'] });
+      }} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

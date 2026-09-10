@@ -59,9 +59,14 @@ CREATE INDEX IF NOT EXISTS idx_trip_orders_driver_id
 CREATE INDEX IF NOT EXISTS idx_trip_orders_client_id
   ON public.trip_orders(client_id);
 
-CREATE INDEX IF NOT EXISTS idx_trip_orders_client_import_id
-  ON public.trip_orders(client_import_id)
-  WHERE client_import_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'trip_orders' AND column_name = 'client_import_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_trip_orders_client_import_id
+      ON public.trip_orders(client_import_id)
+      WHERE client_import_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Query 4: Chronological ordering by departure date
 CREATE INDEX IF NOT EXISTS idx_trip_orders_departure

@@ -56,10 +56,17 @@ export function calculateTripFinancials(params: {
     .filter((f) => f.truck_id === trip.truck_id && f.type === 'fuel')
     .reduce((sum, f) => sum.plus(new Decimal(f.amount || 0)), new Decimal(0));
 
-  // 3. مصاريف العبّارة والترانزيت البحري
-  const ferryCostDec = ferries
+  // 3. مصاريف العبّارة والترانزيت البحري والموانئ
+  const portFeesFromTrip = new Decimal(trip.ferry_cost || 0)
+    .plus(trip.triptik_cost || 0)
+    .plus(trip.transit_almeria_cost || 0)
+    .plus(trip.marsa_maroc_cost || 0);
+
+  const ferryExpensesDec = ferries
     .filter((fe) => fe.trip_order_id === trip.id)
     .reduce((sum, fe) => sum.plus(new Decimal(fe.amount || 0)), new Decimal(0));
+
+  const ferryCostDec = ferryExpensesDec.greaterThan(0) ? ferryExpensesDec : portFeesFromTrip;
 
   // 4. الغرامات والمخالفات
   const finesCostDec = fines

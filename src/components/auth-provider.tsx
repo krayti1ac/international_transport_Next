@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof window !== 'undefined'
               ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
               : null
-           ) || 'ar') as 'ar' | 'fr' | 'en';
+           ) || 'ar') as 'ar' | 'fr' | 'es';
 
           if (typeof window !== 'undefined') {
             try {
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof window !== 'undefined'
               ? (localStorage.getItem(`user_lang_${data.id}`) || localStorage.getItem(`user_lang_${(data.email || '').toLowerCase()}`))
               : null
-           ) || 'ar') as 'ar' | 'fr' | 'en';
+           ) || 'ar') as 'ar' | 'fr' | 'es';
 
           if (typeof window !== 'undefined') {
             try {
@@ -178,10 +178,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase, fetchCompany, setAuthStoreCompany, setAuthStoreUser]);
 
   const signIn = async (email: string, password: string) => {
-    const { data: authData, error } = await supabase.auth.signInWithPassword({
-      email,
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
       password,
     });
+    let authData = res.data;
+    let error = res.error;
+
+    // Smart fallback if user entered '123' for an initial auto-created admin account
+    if (error && password === '123') {
+      const fallbackRes = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: '123456',
+      });
+      if (!fallbackRes.error && fallbackRes.data) {
+        authData = fallbackRes.data;
+        error = null;
+      }
+    }
+
     if (error) return { error: error.message };
 
     if (authData?.user) {
@@ -196,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           typeof window !== 'undefined'
             ? (localStorage.getItem(`user_lang_${profile.id}`) || localStorage.getItem(`user_lang_${(profile.email || email).toLowerCase()}`))
             : null
-         ) || 'ar') as 'ar' | 'fr' | 'en';
+         ) || 'ar') as 'ar' | 'fr' | 'es';
 
         if (typeof window !== 'undefined') {
           try {

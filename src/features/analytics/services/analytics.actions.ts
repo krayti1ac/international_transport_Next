@@ -68,7 +68,10 @@ export interface ExecutiveKPI {
   fleetROI: FleetROIItem[];
 }
 
-export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: ExecutiveKPI; error?: string }> {
+export async function getExecutiveKPIs(
+  startDate?: string,
+  endDate?: string
+): Promise<{ success: boolean; data?: ExecutiveKPI; error?: string }> {
   try {
     const supabase = await createClient();
 
@@ -104,14 +107,43 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
     const drivers = fallbackArray(driversRes.data, DEFAULT_DRIVERS);
     const advances = advancesRes.data || [];
 
+    let filteredInvoices = invoices;
+    let filteredTripOrders = tripOrders;
+    let filteredTreasury = treasury;
+    let filteredTruckMaintenance = truckMaintenance;
+    let filteredAdvances = advances;
+
+    if (startDate && endDate) {
+      filteredInvoices = invoices.filter((inv) => {
+        const d = inv.issue_date || inv.created_at;
+        return d >= startDate && d <= endDate;
+      });
+      filteredTripOrders = tripOrders.filter((trip) => {
+        const d = trip.departure_date || trip.created_at;
+        return d >= startDate && d <= endDate;
+      });
+      filteredTreasury = treasury.filter((tx) => {
+        const d = tx.created_at;
+        return d >= startDate && d <= endDate;
+      });
+      filteredTruckMaintenance = truckMaintenance.filter((m) => {
+        const d = m.maintenance_date || m.created_at;
+        return d >= startDate && d <= endDate;
+      });
+      filteredAdvances = advances.filter((a) => {
+        const d = a.date || a.created_at;
+        return d >= startDate && d <= endDate;
+      });
+    }
+
     // 1. Compute Liquidity
     const liquidAssets: Record<string, InstanceType<typeof Decimal>> = {
       MAD: new Decimal(185000),
       EUR: new Decimal(42500),
     };
 
-    if (treasury.length > 0) {
-      for (const tx of treasury) {
+    if (filteredTreasury.length > 0) {
+      for (const tx of filteredTreasury) {
         const currency = tx.currency || 'MAD';
         if (!liquidAssets[currency]) liquidAssets[currency] = new Decimal(0);
         const amount = new Decimal(tx.amount || 0);
@@ -133,7 +165,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
     const todayStr = new Date().toISOString().split('T')[0];
     const criticalAlerts: CriticalAlert[] = [];
 
-    for (const inv of invoices) {
+    for (const inv of filteredInvoices) {
       if (inv.status !== 'paid') {
         const total = new Decimal(inv.total_amount || 0);
         const paid = new Decimal(inv.paid_amount || 0);
@@ -155,7 +187,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
       }
     }
 
-    if (invoices.length === 0) {
+    if (filteredInvoices.length === 0) {
       totalUnpaidInvoices = new Decimal(64500);
       criticalAlerts.push({
         id: 'inv-demo-1',
@@ -179,12 +211,12 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
 
     // 3. Unsettled Advances
     let totalUnsettledAdvances = 0;
-    for (const adv of advances) {
+    for (const adv of filteredAdvances) {
       if (adv.status !== 'settled' && !adv.is_deleted) {
         totalUnsettledAdvances += Number(adv.amount || 0);
       }
     }
-    if (advances.length === 0) {
+    if (filteredAdvances.length === 0) {
       totalUnsettledAdvances = 28500;
     }
 
@@ -200,7 +232,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
     }
 
     let totalTripsRevenue = new Decimal(0);
-    for (const trip of tripOrders) {
+    for (const trip of filteredTripOrders) {
       const price = new Decimal(trip.price || 0);
       totalTripsRevenue = totalTripsRevenue.plus(price);
       if (trip.truck_id && truckStats[trip.truck_id]) {
@@ -209,7 +241,7 @@ export async function getExecutiveKPIs(): Promise<{ success: boolean; data?: Exe
       }
     }
 
-    for (const tm of truckMaintenance) {
+    for (const tm of filteredTruckMaintenance) {
       if (tm.truck_id && truckStats[tm.truck_id]) {
         const amt = new Decimal(tm.amount || 0);
         const expType = (tm.expense_type || tm.type || '').toLowerCase();

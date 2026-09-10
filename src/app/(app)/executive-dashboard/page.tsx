@@ -3,11 +3,13 @@ import { ExecutiveCharts } from '@/features/analytics/components/ExecutiveCharts
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/forex';
 import { LayoutDashboard, TrendingUp, AlertCircle, Truck, Activity } from 'lucide-react';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ExecutiveDashboardPage() {
-  const metrics = await getExecutiveMetrics();
+  const { startDate, endDate } = useFiscalStore.getState();
+  const metrics = await getExecutiveMetrics(startDate, endDate);
 
   const totalTrucks = Object.values(metrics.fleetStatus).reduce((a, b) => a + b, 0);
   const activeAndInTransit = metrics.fleetStatus.active + metrics.fleetStatus.in_transit;

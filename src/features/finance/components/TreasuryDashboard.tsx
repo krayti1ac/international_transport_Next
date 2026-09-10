@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAllTreasuryBalances } from '../hooks/use-finance-queries';
+import { useAllTreasuryBalances, useTreasuryBalance } from '../hooks/use-finance-queries';
+import { useTreasuryOpeningBalance } from '@/features/treasury/services/treasury.queries';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useLanguage } from '@/components/language-provider';
 import type { CashBox, BankAccount } from '@/types/database';
 import { useQueryClient } from '@tanstack/react-query';
+import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import { PeriodFilterBar } from '@/components/PeriodFilterBar';
 
 export default function TreasuryDashboard() {
   const { t, dir, locale } = useLanguage();
@@ -21,10 +24,11 @@ export default function TreasuryDashboard() {
   const [showNewTransaction, setShowNewTransaction] = useState(false);
   const [showFifoDialog, setShowFifoDialog] = useState(false);
   const queryClient = useQueryClient();
+  const { startDate, endDate } = useFiscalStore();
 
   return (
     <div className="space-y-6" dir={dir}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold font-amiri text-foreground">{t('الخزينة وإدارة السيولة النقدية', 'Trésorerie et gestion des liquidités')}</h1>
         <div className="flex gap-2">
           <Button onClick={() => setShowFifoDialog(true)} variant="default">
@@ -38,8 +42,14 @@ export default function TreasuryDashboard() {
         </div>
       </div>
 
+      <PeriodFilterBar onFilterChange={() => {
+        queryClient.invalidateQueries({ queryKey: ['treasuryBalances'] });
+        queryClient.invalidateQueries({ queryKey: ['treasuryBalance'] });
+        queryClient.invalidateQueries({ queryKey: ['treasuryOpeningBalance'] });
+      }} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {CASH_BOXES.map((box: { code: string; labelAr: string; labelFr?: string; currency: string }) => {
+        {CASH_BOXES.map((box: { code: string; labelAr: string; labelFr?: string; labelEs?: string; currency: string }) => {
           const balance = balances?.[box.code];
           const Icon =
             box.code === 'owner_cash'
@@ -70,13 +80,16 @@ export default function TreasuryDashboard() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <Icon className={`w-4 h-4 ${color}`} />
-                  {locale === 'fr' ? box.labelFr || box.labelAr : box.labelAr}
+                  {locale === 'es' ? box.labelEs || box.labelFr || box.labelAr : locale === 'fr' ? box.labelFr || box.labelAr : box.labelAr}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono text-foreground">
                   {isLoading ? '...' : formatCurrency(parseFloat(balance || '0'), box.currency)}
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                  {t('الرصيد الحالي', 'Solde actuel')}
+                </p>
               </CardContent>
             </Card>
           );

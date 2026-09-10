@@ -36,7 +36,7 @@ function isFuelExpense(record: any): boolean {
   return raw === 'fuel' || raw === 'carburant' || raw === 'gasoil';
 }
 
-export async function calculateTcoPerKm(truckId?: number): Promise<TcoResponse> {
+export async function calculateTcoPerKm(truckId?: number, startDate?: string, endDate?: string): Promise<TcoResponse> {
   try {
     const supabase = await createClient();
 
@@ -48,19 +48,25 @@ export async function calculateTcoPerKm(truckId?: number): Promise<TcoResponse> 
     const { data: maintenanceRows, error: maintError } = await supabase
       .from('truck_maintenance')
       .select('*')
-      .or(truckId ? `truck_id.eq.${truckId}` : 'truck_id.neq.0');
+      .or(truckId ? `truck_id.eq.${truckId}` : 'truck_id.neq.0')
+      .gte('maintenance_date', startDate || '1900-01-01')
+      .lte('maintenance_date', endDate || '9999-12-31');
     if (maintError) throw maintError;
 
     const { data: trips, error: tripsError } = await supabase
       .from('trip_orders')
       .select('*')
       .or(truckId ? `truck_id.eq.${truckId}` : 'truck_id.neq.0')
-      .neq('status', 'cancelled');
+      .neq('status', 'cancelled')
+      .gte('departure_date', startDate || '1900-01-01')
+      .lte('departure_date', endDate || '9999-12-31');
     if (tripsError) throw tripsError;
 
     const { data: locations, error: locError } = await supabase
       .from('truck_locations')
       .select('*')
+      .gte('recorded_at', startDate || '1900-01-01')
+      .lte('recorded_at', endDate || '9999-12-31')
       .order('truck_id')
       .order('recorded_at');
     if (locError) throw locError;

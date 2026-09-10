@@ -22,6 +22,7 @@ import { formatCurrency } from '@/lib/forex';
 import { DriverFineModal } from '@/features/drivers/components/DriverFineModal';
 import { processDriverSettlementPayout } from '@/features/drivers/services/driver-fines.actions';
 import { useLanguage } from '@/components/language-provider';
+import { DriverAvatar } from '@/components/drivers/DriverAvatar';
 
 export default function DriverSettlementsPage() {
   const { toast } = useToast();
@@ -209,6 +210,7 @@ export default function DriverSettlementsPage() {
               }`}
             >
               <User className="w-3.5 h-3.5" />
+              <DriverAvatar name={drv.name} photoUrl={drv.photo_url} driverId={drv.id} size="xs" />
               <span>{drv.name}</span>
               {drvFinesCount > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px]">

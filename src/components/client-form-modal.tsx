@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Building, PlaneTakeoff, PlaneLanding } from 'lucide-react';
+import { X, Save, Building, PlaneTakeoff, PlaneLanding, Upload, Sparkles, Trash2 } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 import { useToast } from '@/hooks/use-toast';
 import { validateICE } from '@/lib/bulk-import';
 import type { Client } from '@/types/database';
+import { ClientAvatar } from '@/components/clients/ClientAvatar';
+import { PRESET_CLIENT_LOGOS, resolveClientLogo } from '@/lib/client-photos';
+import { compressImageFile } from '@/lib/driver-photos';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -37,26 +40,76 @@ const defaultFormData: Partial<Client> = {
   billing_city: '',
   billing_postal_code: '',
   billing_country: 'Morocco',
+  logo_url: '',
 };
 
 export function ClientFormModal({ isOpen, onClose, onSave, initialData }: ClientModalProps) {
   const { t, dir } = useLanguage();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<Partial<Client>>(initialData || defaultFormData);
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
+        const resolvedLogo = initialData.logo_url || resolveClientLogo(initialData) || '';
         setFormData({
           ...defaultFormData,
           ...initialData,
+          logo_url: resolvedLogo,
         });
       } else {
         setFormData(defaultFormData);
       }
+      setShowPresets(false);
     }
   }, [initialData, isOpen]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: t('نوع الملف غير مدعوم', 'Type de fichier non supporté'),
+        description: t('يرجى اختيار صورة صالحة (PNG, JPG, WebP)', 'Veuillez sélectionner une image valide (PNG, JPG, WebP)'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setCompressing(true);
+      const dataUrl = await compressImageFile(file, 320, 0.85);
+      setFormData((prev) => ({ ...prev, logo_url: dataUrl }));
+      toast({
+        title: t('تم تحميل الشعار بنجاح', 'Logo chargé avec succès'),
+      });
+    } catch {
+      toast({
+        title: t('فشل في معالجة الشعار', 'Échec du traitement du logo'),
+        variant: 'destructive',
+      });
+    } finally {
+      setCompressing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSelectPreset = (url: string) => {
+    setFormData((prev) => ({ ...prev, logo_url: url }));
+    setShowPresets(false);
+    toast({
+      title: t('تم اختيار الشعار', 'Logo sélectionné'),
+    });
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData((prev) => ({ ...prev, logo_url: '' }));
+  };
 
   if (!isOpen) return null;
 
@@ -98,6 +151,115 @@ export function ClientFormModal({ isOpen, onClose, onSave, initialData }: Client
         </CardHeader>
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4" dir={dir}>
+            {/* الشعار أو صورة العميل */}
+            <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span>{t('شعار أو صورة العميل', 'Logo ou image du client')}</span>
+                </label>
+                {formData.logo_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveLogo}
+                    className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 me-1" />
+                    {t('إزالة الشعار', 'Supprimer')}
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-4">
+                <ClientAvatar
+                  name={formData.name || 'عميل'}
+                  logoUrl={formData.logo_url}
+                  size="xl"
+                  shape="rounded"
+                  className="ring-2 ring-border shadow-xs shrink-0"
+                />
+
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={compressing}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-primary" />
+                      <span>
+                        {compressing
+                          ? t('جاري المعالجة...', 'Traitement...')
+                          : t('رفع شعار من الجهاز', 'Importer un logo')}
+                      </span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant={showPresets ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => setShowPresets(!showPresets)}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{t('نماذج شعارات جاهزة', 'Logos prédéfinis')}</span>
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {t('يدعم PNG, JPG, WebP. يتم ضغط الصورة تلقائياً.', 'PNG, JPG, WebP supportés. Compression automatique.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* معرض الشعارات الجاهزة */}
+              {showPresets && (
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    {t('اختر نموذج شعار قطاعي:', 'Choisissez un modèle sectoriel :')}
+                  </p>
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                    {PRESET_CLIENT_LOGOS.map((preset) => {
+                      const isSelected = formData.logo_url === preset.url;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectPreset(preset.url)}
+                          className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all hover:scale-105 cursor-pointer ${
+                            isSelected
+                              ? 'border-primary bg-primary/10 ring-2 ring-primary'
+                              : 'border-border bg-card hover:border-muted-foreground/40'
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            className="w-10 h-10 rounded-md object-contain bg-white/60 p-0.5"
+                          />
+                          <span className="text-[10px] text-center text-foreground font-medium truncate w-full">
+                            {preset.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* نوع الرحلات: ذهاب أو عودة حصرياً */}
             <div className="space-y-2 p-3 bg-muted/40 border border-border rounded-xl">
               <div className="flex items-center justify-between">

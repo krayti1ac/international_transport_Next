@@ -34,4 +34,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260908_driver_rls_and_storage_policies.sql` — Driver RLS & Storage Security (`storage.objects`, `trip_orders`, `truck_maintenance`, `advances`).
 - `supabase/migrations/20260908_fifo_payment_rpc.sql` — FIFO Payment Allocation Engine (`process_fifo_payment` RPC, `payment_invoice_allocations` table).
 - `supabase/migrations/20260909_multi_tenant_saas.sql` — Multi-Tenancy SaaS Architecture & Tenant Isolation (`companies` table, `company_id` columns, RLS policies, helper functions).
+- `supabase/migrations/20260909_company_subscriptions_and_devices.sql` — Company Subscriptions & Devices Management (`subscription_cost`, `subscription_start_date`, `subscription_end_date`, `max_devices`, `company_devices` table).
+- `supabase/migrations/20260910_super_admin_role_and_policies.sql` — Super Admin Role Isolation & Central Companies Management.
+- `supabase/migrations/20260911_update_transbodanon_user_emails.sql` — Update Trans Bodanon User Emails (Admin, Secretary, Driver).
+- `supabase/migrations/20260912_hide_super_admin_from_tenants.sql` — Super Admin Isolation from Tenant Companies & User Management RLS.
+- `supabase/migrations/20260913_add_company_email_domain.sql` — Company Email Domain Assignment & User Registration Enforcement.
+- `supabase/migrations/20260914_unique_username_per_company.sql` — Enforce unique username per company domain across all user roles (indexes & constraints).
+- `supabase/migrations/20260915_add_driver_photo_url.sql` — Add driver photo_url column and driver-photos storage bucket.
+- `supabase/migrations/20260916_add_user_avatar_url.sql` — Add user avatar_url column to public.users table.
+- `supabase/migrations/20260917_add_client_logo_url.sql` — Add client logo_url column to public.clients table.
+- `supabase/migrations/20260918_add_provider_logo_url.sql` — Add provider logo_url and photo_url columns to public.providers table.
+- `supabase/migrations/20260919_add_route_cost_and_pricing.sql` — Add route freight cost, fuel calculation parameters (fuel price, consumption rate, fuel cost) and customs/other expenses to public.transport_routes.
+- `supabase/migrations/20260920_add_truck_fuel_and_route_ferry.sql` — Add truck fuel_consumption_rate (default 36%), route ferry_cost, road_distance_km, and ferry_distance_km.
 

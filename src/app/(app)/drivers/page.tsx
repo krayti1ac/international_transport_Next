@@ -29,6 +29,8 @@ import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
+import { DriverAvatar } from '@/components/drivers/DriverAvatar';
+import { saveDriverPhotoLocal } from '@/lib/driver-photos';
 
 type StatusFilter = 'all' | 'active' | 'in_trip' | 'vacation' | 'inactive';
 type VisaFilter = 'all' | 'valid' | 'expiring_soon' | 'expired_or_none';
@@ -134,6 +136,9 @@ export default function DriversPage() {
       }
 
       if (error) throw error;
+      if (data.photo_url) {
+        saveDriverPhotoLocal(data.id || data.name, data.photo_url, data.name);
+      }
       toast({ title: data.id ? t('تم تحديث بيانات السائق بنجاح', 'Chauffeur mis à jour avec succès') : t('تمت إضافة السائق بنجاح', 'Chauffeur ajouté avec succès') });
       fetchData();
     } catch (error: any) {
@@ -518,6 +523,14 @@ export default function DriversPage() {
                         <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                           <User className="w-5 h-5" />
                         </div>
+                        <DriverAvatar
+                          name={driver.name}
+                          photoUrl={driver.photo_url}
+                          driverId={driver.id}
+                          status={driver.status}
+                          showStatusDot
+                          size="md"
+                        />
                         <div>
                           <CardTitle className="text-base font-bold font-amiri text-foreground">
                             {driver.name}
@@ -677,6 +690,14 @@ export default function DriversPage() {
                     <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                       <User className="w-5 h-5" />
                     </div>
+                    <DriverAvatar
+                      name={driver.name}
+                      photoUrl={driver.photo_url}
+                      driverId={driver.id}
+                      status={driver.status}
+                      showStatusDot
+                      size="md"
+                    />
                     <div>
                       <CardTitle className="text-base font-bold font-amiri text-foreground">{driver.name}</CardTitle>
                     </div>

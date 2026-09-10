@@ -198,4 +198,4 @@ EXCEPTION WHEN OTHERS THEN
     -- In PostgreSQL, any unhandled exception inside a function automatically rolls back the transaction
     RAISE EXCEPTION 'فشل معالجة دفعة FIFO: %', SQLERRM;
 END;
-$$ LANGUAGE plpgsql;
+$$;

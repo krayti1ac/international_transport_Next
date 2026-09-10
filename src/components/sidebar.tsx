@@ -8,18 +8,15 @@ import {
   Search,
   ChevronsUpDown,
   ChevronsDownUp,
-  Sun,
-  Settings,
-  Users,
 } from "lucide-react";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { useTheme } from "@/components/theme-provider";
 import { useLanguage } from "@/components/language-provider";
 import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export interface SidebarItem {
   title: string;
   titleFr?: string;
+  titleEs?: string;
   href: string;
   icon?: React.ReactNode;
   roles?: string[];
@@ -32,10 +29,12 @@ export interface SidebarGroup {
   id?: string;
   label: string;
   labelFr?: string;
+  labelEs?: string;
   icon?: React.ReactNode;
   badge?: string | number;
   items: SidebarItem[];
   defaultOpen?: boolean;
+  roles?: string[];
 }
 
 interface SidebarProps {
@@ -47,21 +46,11 @@ interface SidebarProps {
 }
 
 export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: SidebarProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const { theme, setTheme } = useTheme();
-  const { dir, locale, t } = useLanguage();
+  const [searchQuery, setSearchQuery] = useState('');  const { dir, locale, t } = useLanguage();
   const { companyName, logoUrl } = useCompanyBranding();
 
   const [activeGroupId, setActiveGroupId] = useState<string | null | undefined>(undefined);
   const [allExpanded, setAllExpanded] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(() => currentPath.startsWith('/settings'));
-
-  useEffect(() => {
-    if (currentPath.startsWith('/settings')) {
-      setSettingsOpen(true);
-    }
-  }, [currentPath]);
-
   const normalizedGroups: SidebarGroup[] = useMemo(() => {
     if (groups && groups.length > 0) return groups;
     if (items && items.length > 0) return [{ id: 'default', label: t('الرئيسية', 'Accueil', 'Home'), items }];
@@ -71,14 +60,26 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
   const isItemAllowed = useCallback((item: SidebarItem): boolean => {
     if (!item.roles) return true;
     if (!userRole) return false;
-    if (userRole === 'super_admin') {
+    const normalizedRole = userRole === 'super-admin' ? 'super_admin' : userRole;
+    if (normalizedRole === 'super_admin') {
       return item.roles.includes('super_admin') || item.roles.includes('admin');
     }
-    return item.roles.includes(userRole);
+    return item.roles.includes(normalizedRole);
+  }, [userRole]);
+
+  const isGroupAllowed = useCallback((group: SidebarGroup): boolean => {
+    if (!group.roles || group.roles.length === 0) return true;
+    if (!userRole) return false;
+    const normalizedRole = userRole === 'super-admin' ? 'super_admin' : userRole;
+    if (normalizedRole === 'super_admin') {
+      return group.roles.includes('super_admin') || group.roles.includes('admin');
+    }
+    return group.roles.includes(normalizedRole);
   }, [userRole]);
 
   const filteredGroups = useMemo(() => {
     return normalizedGroups
+      .filter(isGroupAllowed)
       .map((group, gIdx) => {
         const groupId = group.id || `group-${gIdx}-${group.label}`;
         const filteredItems = group.items
@@ -95,7 +96,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         };
       })
       .filter((group) => group.items.length > 0);
-  }, [normalizedGroups, isItemAllowed]);
+  }, [normalizedGroups, isGroupAllowed, isItemAllowed]);
 
   const isGroupActive = useCallback((group: SidebarGroup): boolean => {
     const currentBase = currentPath.split('?')[0];
@@ -110,6 +111,14 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
       }
     );
   }, [currentPath]);
+
+  // Keep active route's group opened automatically when navigating
+  useEffect(() => {
+    const matched = filteredGroups.find(isGroupActive);
+    if (matched?.id) {
+      setActiveGroupId(matched.id);
+    }
+  }, [currentPath, filteredGroups, isGroupActive]);
 
   const defaultActiveGroupId = useMemo(() => {
     const matched = filteredGroups.find(isGroupActive);
@@ -142,11 +151,6 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
     setAllExpanded(false);
     setActiveGroupId(null);
   };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
-
   const searchedGroups = useMemo(() => {
     if (!searchQuery.trim()) return filteredGroups;
 
@@ -156,10 +160,12 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         const matchingItems = group.items.filter((item) => {
           const titleMatches =
             item.title.toLowerCase().includes(query) ||
-            (item.titleFr ? item.titleFr.toLowerCase().includes(query) : false);
+            (item.titleFr ? item.titleFr.toLowerCase().includes(query) : false) ||
+            (item.titleEs ? item.titleEs.toLowerCase().includes(query) : false);
           const childMatches = item.children?.some((child) =>
             child.title.toLowerCase().includes(query) ||
-            (child.titleFr ? child.titleFr.toLowerCase().includes(query) : false)
+            (child.titleFr ? child.titleFr.toLowerCase().includes(query) : false) ||
+            (child.titleEs ? child.titleEs.toLowerCase().includes(query) : false)
           );
           return titleMatches || childMatches;
         });
@@ -304,7 +310,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                       <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                     )}
                     <span className="text-[13px] tracking-wide truncate">
-                      {locale === 'fr' ? (group.labelFr || group.label) : group.label}
+                      {locale === 'es' ? (group.labelEs || group.labelFr || group.label) : locale === 'fr' ? (group.labelFr || group.label) : group.label}
                     </span>
                   </div>
 
@@ -332,7 +338,7 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
                         const isExact = currentPath === item.href;
                         const isBaseMatch = itemBase !== '/dashboard' && (currentPath === itemBase || currentBase === itemBase);
                         const isCurrent = isExact || isBaseMatch;
-                        const itemTitle = locale === 'fr' ? (item.titleFr || item.title) : item.title;
+                        const itemTitle = locale === 'es' ? (item.titleEs || item.titleFr || item.title) : locale === 'fr' ? (item.titleFr || item.title) : item.title;
 
                         return (
                           <Link
@@ -381,96 +387,10 @@ export function Sidebar({ groups, items, currentPath, userRole, onItemClick }: S
         )}
       </nav>
 
-      {/* Footer Section: Dark Mode Toggle, Settings, Version */}
-      <div className="border-t border-[var(--sidebar-border)] bg-[var(--sidebar-header-bg)] p-2 space-y-1 transition-colors duration-200">
-        {/* Dark Mode Row */}
-        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12.5px] text-[var(--sidebar-fg)]">
-          <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
-            <span className="text-[12px] font-medium">
-              {theme === 'dark' ? (locale === 'ar' ? 'الوضع الداكن' : 'Mode sombre') : (locale === 'ar' ? 'الوضع الفاتح' : 'Mode clair')}
-            </span>
-          </div>
-          {/* Custom iOS/Modern style toggle switch */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={t('تبديل الوضع', 'Basculer le thème', 'Toggle theme')}
-            className={cn(
-              "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer outline-hidden",
-              theme === 'dark' ? "bg-[var(--sidebar-fg-muted)]" : "bg-[var(--sidebar-border)]"
-            )}
-          >
-            <div
-              className={cn(
-                "w-5 h-5 rounded-full transition-transform duration-200 shadow-sm",
-                theme === 'dark'
-                  ? "bg-[var(--sidebar-bg)] translate-x-0"
-                  : (dir === 'rtl' ? "bg-[var(--sidebar-fg-muted)] -translate-x-5" : "bg-[var(--sidebar-fg-muted)] translate-x-5")
-              )}
-            />
-          </button>
-        </div>
-
-        {/* Collapsible Settings Group */}
-        <div className="pt-0.5">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(!settingsOpen)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--sidebar-fg-muted)] hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover-bg)] rounded-md cursor-pointer transition-colors"
-          >
-            <span className="text-[12.5px] tracking-wide">{t('الإعدادات', 'Paramètres', 'Settings')}</span>
-            <span className="text-[var(--sidebar-fg-muted)] transition-transform duration-200">
-              {settingsOpen ? (
-                <ChevronDown className="w-4 h-4 text-[var(--sidebar-fg-muted)]" />
-              ) : (
-                <ChevronLeft className={`w-4 h-4 text-[var(--sidebar-fg-muted)] ${dir === 'ltr' ? 'rotate-180' : ''}`} />
-              )}
-            </span>
-          </button>
-
-          {settingsOpen && (
-            <div className="space-y-0.5 pr-2 pl-1 py-1">
-              <Link
-                href="/settings"
-                prefetch={true}
-                onClick={onItemClick}
-                className={cn(
-                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
-                  currentPath === '/settings' && "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
-                )}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
-                    <Settings className="w-4 h-4" />
-                  </span>
-                  <span className="truncate">{t('إعدادات الشركة', 'Paramètres entreprise', 'Company Settings')}</span>
-                </div>
-              </Link>
-
-              <Link
-                href="/settings?tab=users"
-                prefetch={true}
-                onClick={onItemClick}
-                className={cn(
-                  "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--sidebar-fg-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-fg)] transition-colors cursor-pointer",
-                  currentPath.includes('tab=users') && "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-fg)] font-semibold"
-                )}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-5 h-5 flex items-center justify-center shrink-0 text-[var(--sidebar-fg-muted)]">
-                    <Users className="w-4 h-4" />
-                  </span>
-                  <span className="truncate">{t('المستخدمين', 'Utilisateurs', 'Users')}</span>
-                </div>
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {/* System Version string */}
-        <div className="text-[10px] text-center text-[var(--sidebar-fg-muted)] pt-1 pb-0.5 tracking-wider font-mono">
-          {t('إصدار المنظومة v1.0.0+1', 'Version système v1.0.0+1', 'System version v1.0.0+1')}
+      {/* Footer Section: Version */}
+      <div className="border-t border-[var(--sidebar-border)] bg-[var(--sidebar-header-bg)] p-2 transition-colors duration-200">
+        <div className="text-[10px] text-center text-[var(--sidebar-fg-muted)] py-0.5 tracking-wider font-mono">
+          {t('إصدار المنظومة v1.0.0+1', 'Version système v1.0.0+1', 'Versión del sistema v1.0.0+1')}
         </div>
       </div>
     </aside>

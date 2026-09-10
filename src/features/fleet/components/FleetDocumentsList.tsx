@@ -217,16 +217,20 @@ export function FleetDocumentsList({
               doc.truck?.plate_number || doc.trailer?.plate_number || `${t('مركبة', 'Véhicule')} #${doc.entity_id}`;
             const vehicleModel = doc.truck?.model || doc.trailer?.model || '';
             const docLabel =
-              locale === 'fr'
+              locale === 'es'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_es || DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
+                : locale === 'fr'
                 ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
                 : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
             const docLabelAlt =
-              locale === 'fr'
+              locale === 'es'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
+                : locale === 'fr'
                 ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
                 : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
             const expiryDateFormatted = doc.expiry_date
-              ? new Date(doc.expiry_date).toLocaleDateString('fr-MA')
-              : (locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
+              ? new Date(doc.expiry_date).toLocaleDateString(locale === 'es' ? 'es-ES' : 'fr-MA')
+              : (locale === 'es' ? 'Sin fecha' : locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
 
             return (
               <Card
@@ -408,16 +412,20 @@ export function FleetDocumentsList({
               doc.truck?.plate_number || doc.trailer?.plate_number || `${t('مركبة', 'Véhicule')} #${doc.entity_id}`;
             const vehicleModel = doc.truck?.model || doc.trailer?.model || '';
             const docLabel =
-              locale === 'fr'
+              locale === 'es'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_es || DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
+                : locale === 'fr'
                 ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || doc.document_type
                 : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || doc.document_type;
             const docLabelAlt =
-              locale === 'fr'
+              locale === 'es'
+                ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
+                : locale === 'fr'
                 ? DOCUMENT_TYPE_LABELS[doc.document_type]?.label_ar || ''
                 : DOCUMENT_TYPE_LABELS[doc.document_type]?.label_fr || '';
             const expiryDateFormatted = doc.expiry_date
-              ? new Date(doc.expiry_date).toLocaleDateString('fr-MA')
-              : (locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
+              ? new Date(doc.expiry_date).toLocaleDateString(locale === 'es' ? 'es-ES' : 'fr-MA')
+              : (locale === 'es' ? 'Sin fecha' : locale === 'fr' ? 'Sans date' : 'بدون تاريخ');
 
             return (
               <Card

@@ -44,6 +44,7 @@ import {
   History,
   Archive,
   Zap,
+  Fuel,
 } from 'lucide-react';
 
 interface MaintenanceRecord {
@@ -507,6 +508,15 @@ export function VehicleDetailsModal({
                     <span className="text-slate-500 dark:text-muted-foreground">{t('المقطورة المجرورة:', 'Remorque attelée :')}</span>
                     <span className="font-semibold text-slate-900 dark:text-foreground">
                       {assignedTrailer ? assignedTrailer.plate_number : t('بدون مقطورة مرتبطة', 'Sans remorque attelée')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 dark:text-muted-foreground flex items-center gap-1">
+                      <Fuel className="w-3.5 h-3.5 text-amber-500" />
+                      {t('معدل استهلاك الوقود:', 'Taux de consommation :')}
+                    </span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {truck?.fuel_consumption_rate ?? 36}% <span className="text-[10px] text-muted-foreground font-normal">({truck?.fuel_consumption_rate ?? 36} L/100km)</span>
                     </span>
                   </div>
                 </>

@@ -12,6 +12,8 @@ import { ClientFormModal } from '@/components/client-form-modal';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { BulkImportModal } from '@/components/bulk-import-modal';
 import { useLanguage } from '@/components/language-provider';
+import { ClientAvatar } from '@/components/clients/ClientAvatar';
+import { saveClientPhotoLocal } from '@/lib/client-photos';
 
 import { useClientsDataQuery } from '@/lib/query/hooks';
 import { useQueryClient } from '@tanstack/react-query';
@@ -39,8 +41,10 @@ export default function ClientsPage() {
 
   useEffect(() => {
     const channel = supabase
-      .channel('clients-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => refreshClients())
+      .channel('clients-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+        refreshClients();
+      })
       .subscribe();
 
     return () => {
@@ -50,16 +54,34 @@ export default function ClientsPage() {
 
   const handleSaveClient = async (clientData: Partial<Client>) => {
     try {
+      let payload: any = { ...clientData };
       if (editingClient) {
-        const { error } = await supabase
+        let { error } = await supabase
           .from('clients')
-          .update(clientData)
+          .update(payload)
           .eq('id', editingClient.id);
+        if (error && error.message?.includes('logo_url')) {
+          delete payload.logo_url;
+          const retry = await supabase.from('clients').update(payload).eq('id', editingClient.id);
+          error = retry.error;
+        }
         if (error) throw error;
+        if (clientData.logo_url) {
+          saveClientPhotoLocal(editingClient.id, clientData.logo_url, clientData.name);
+        }
         toast({ title: t('تم تحديث بيانات العميل بنجاح', 'Données client mises à jour avec succès') });
       } else {
-        const { error } = await supabase.from('clients').insert(clientData);
+        let { data: inserted, error } = await supabase.from('clients').insert(payload).select().maybeSingle();
+        if (error && error.message?.includes('logo_url')) {
+          delete payload.logo_url;
+          const retry = await supabase.from('clients').insert(payload).select().maybeSingle();
+          error = retry.error;
+          inserted = retry.data;
+        }
         if (error) throw error;
+        if (clientData.logo_url) {
+          saveClientPhotoLocal(inserted?.id || clientData.name || 'new', clientData.logo_url, clientData.name);
+        }
         toast({ title: t('تم إضافة العميل بنجاح', 'Client ajouté avec succès') });
       }
       refreshClients();
@@ -212,9 +234,14 @@ export default function ClientsPage() {
               <div>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-amiri font-bold flex items-center gap-2 text-foreground">
-                      <Building className="w-4 h-4 text-primary" />
-                      {client.name}
+                    <CardTitle className="text-lg font-amiri font-bold flex items-center gap-2.5 text-foreground">
+                      <ClientAvatar
+                        name={client.name}
+                        logoUrl={client.logo_url}
+                        clientId={client.id}
+                        size="sm"
+                      />
+                      <span>{client.name}</span>
                     </CardTitle>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       client.is_active
@@ -316,9 +343,12 @@ export default function ClientsPage() {
               <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
                 {/* Right: Company Name & City/Currency */}
                 <div className="flex items-center gap-3 min-w-[220px]">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <Building className="w-4 h-4" />
-                  </div>
+                  <ClientAvatar
+                    name={client.name}
+                    logoUrl={client.logo_url}
+                    clientId={client.id}
+                    size="md"
+                  />
                   <div>
                     <CardTitle className="text-base font-amiri font-bold text-foreground">
                       {client.name}

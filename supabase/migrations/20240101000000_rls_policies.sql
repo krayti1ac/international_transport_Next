@@ -299,29 +299,33 @@ END $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins full access on secretary_cash') THEN
-    CREATE POLICY "Admins full access on secretary_cash"
-      ON secretary_cash FOR ALL
-      USING (
-        EXISTS (
-          SELECT 1 FROM users
-          WHERE users.id = auth.uid() AND users.role = 'admin'
-        )
-      );
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'secretary_cash') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins full access on secretary_cash') THEN
+      CREATE POLICY "Admins full access on secretary_cash"
+        ON secretary_cash FOR ALL
+        USING (
+          EXISTS (
+            SELECT 1 FROM users
+            WHERE users.id = auth.uid() AND users.role = 'admin'
+          )
+        );
+    END IF;
   END IF;
 END $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Secretaries manage secretary_cash') THEN
-    CREATE POLICY "Secretaries manage secretary_cash"
-      ON secretary_cash FOR ALL
-      USING (
-        EXISTS (
-          SELECT 1 FROM users
-          WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')
-        )
-      );
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'secretary_cash') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Secretaries manage secretary_cash') THEN
+      CREATE POLICY "Secretaries manage secretary_cash"
+        ON secretary_cash FOR ALL
+        USING (
+          EXISTS (
+            SELECT 1 FROM users
+            WHERE users.id = auth.uid() AND users.role IN ('admin', 'secretary')
+          )
+        );
+    END IF;
   END IF;
 END $$;
 
@@ -513,7 +517,12 @@ ALTER TABLE trip_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE advances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE driver_salaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE secretary_cash ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'secretary_cash') THEN
+    EXECUTE 'ALTER TABLE secretary_cash ENABLE ROW LEVEL SECURITY';
+  END IF;
+END $$;
 ALTER TABLE emergency_advance_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE treasury_transactions ENABLE ROW LEVEL SECURITY;

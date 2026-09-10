@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlaneTakeoff, PlaneLanding, DollarSign, X, Navigation } from 'lucide-react';
+import { PlaneTakeoff, PlaneLanding, DollarSign, X, Navigation, Ship } from 'lucide-react';
+import Decimal from 'decimal.js';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { TransitActions } from '@/components/trips/TransitActions';
 import { DriverSettlementDialog } from '@/components/trips/DriverSettlementDialog';
@@ -168,6 +169,47 @@ function TripOrderDetails({
               </div>
             </CardContent>
           </Card>
+
+          {(trip.ferry_cost || trip.triptik_cost || trip.transit_almeria_cost || trip.marsa_maroc_cost) ? (
+            <Card className="bg-blue-500/5 border-blue-500/20">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                    <Ship className="w-4 h-4" />
+                    {t('الرسوم المينائية ومصاريف العبور الدولي', 'Frais portuaires & transit maritime')}
+                  </CardTitle>
+                  <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
+                    {t('المجموع:', 'Total :')}{' '}
+                    {new Decimal(trip.ferry_cost || 0)
+                      .plus(trip.triptik_cost || 0)
+                      .plus(trip.transit_almeria_cost || 0)
+                      .plus(trip.marsa_maroc_cost || 0)
+                      .toNumber()
+                      .toLocaleString()}{' '}
+                    MAD
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div className="p-2 bg-card rounded-lg border border-border/50">
+                  <p className="text-muted-foreground text-xs">{t('الباخرة / العبارة', 'Billet Bateau')}</p>
+                  <p className="font-mono font-bold text-foreground">{(trip.ferry_cost || 0).toLocaleString()} MAD</p>
+                </div>
+                <div className="p-2 bg-card rounded-lg border border-border/50">
+                  <p className="text-muted-foreground text-xs">{t('التريبتك (CPD)', 'Triptyque')}</p>
+                  <p className="font-mono font-bold text-foreground">{(trip.triptik_cost || 0).toLocaleString()} MAD</p>
+                </div>
+                <div className="p-2 bg-card rounded-lg border border-border/50">
+                  <p className="text-muted-foreground text-xs">{t('ترانزيت ألميريا', 'Transit Almería')}</p>
+                  <p className="font-mono font-bold text-foreground">{(trip.transit_almeria_cost || 0).toLocaleString()} MAD</p>
+                </div>
+                <div className="p-2 bg-card rounded-lg border border-border/50">
+                  <p className="text-muted-foreground text-xs">{t('مرسى المغرب', 'Marsa Maroc')}</p>
+                  <p className="font-mono font-bold text-foreground">{(trip.marsa_maroc_cost || 0).toLocaleString()} MAD</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <TransitActions
             trip={trip}

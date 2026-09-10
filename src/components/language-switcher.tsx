@@ -8,7 +8,7 @@ import { Languages } from 'lucide-react';
 const LOCALES = [
   { code: 'ar', label: 'العربية', short: 'AR' },
   { code: 'fr', label: 'Français', short: 'FR' },
-  { code: 'en', label: 'English', short: 'EN' },
+  { code: 'es', label: 'Español', short: 'ES' },
 ] as const;
 
 type LocaleCode = (typeof LOCALES)[number]['code'];

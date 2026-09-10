@@ -151,7 +151,10 @@ export interface ExecutiveMetrics {
   monthlyTrend: { name: string; revenue: number; expenses: number }[];
 }
 
-export async function getExecutiveMetrics(): Promise<ExecutiveMetrics> {
+export async function getExecutiveMetrics(
+  startDate?: string,
+  endDate?: string
+): Promise<ExecutiveMetrics> {
   const supabase = await createClient();
   const currentYear = new Date().getFullYear();
 
@@ -173,6 +176,11 @@ export async function getExecutiveMetrics(): Promise<ExecutiveMetrics> {
 
   if (invoices) {
     invoices.forEach((inv) => {
+      if (startDate && endDate) {
+        const d = inv.issue_date || (inv as any).created_at;
+        if (!d || d < startDate || d > endDate) return;
+      }
+
       const total = new Decimal(inv.total_amount || 0);
       const paid = new Decimal(inv.paid_amount || 0);
       const debt = total.minus(paid);
@@ -185,7 +193,6 @@ export async function getExecutiveMetrics(): Promise<ExecutiveMetrics> {
         if (inv.issue_date) {
           const date = new Date(inv.issue_date);
           if (date.getFullYear() === currentYear) {
-            // توحيد العملة في الرسم البياني لأغراض المقارنة (تقدير تقريبي 1 EUR = 10.8 MAD)
             monthlyData[date.getMonth()].revenue += isEUR ? total.times(10.8).toNumber() : total.toNumber();
           }
         }
@@ -206,6 +213,11 @@ export async function getExecutiveMetrics(): Promise<ExecutiveMetrics> {
 
   if (expenses) {
     expenses.forEach((exp) => {
+      if (startDate && endDate) {
+        const d = exp.created_at;
+        if (!d || d < startDate || d > endDate) return;
+      }
+
       const date = new Date(exp.created_at);
       if (date.getFullYear() === currentYear) {
         const amount = new Decimal(exp.amount || 0).abs();

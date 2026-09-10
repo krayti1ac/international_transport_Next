@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Fuel, AlertTriangle, TrendingUp, RefreshCw, Truck } from 'lucide-react';
-import { calculateFuelAnalytics } from '@/features/fleet/services/fuel_intelligence.actions';
+import { Fuel, AlertTriangle, TrendingUp, RefreshCw, Truck, Check, SlidersHorizontal } from 'lucide-react';
+import { calculateFuelAnalytics, updateTruckFuelConsumptionRate } from '@/features/fleet/services/fuel_intelligence.actions';
 import Decimal from 'decimal.js';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import type { TruckFuelStats, FuelAnomaly } from '@/features/fleet/services/fuel_intelligence.actions';
@@ -22,6 +22,7 @@ export default function FuelAnalyticsScreen() {
   const [anomalies, setAnomalies] = useState<FuelAnomaly[]>([]);
   const [totalTrucks, setTotalTrucks] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [updatingTruckId, setUpdatingTruckId] = useState<number | null>(null);
 
   const { toast } = useToast();
 
@@ -43,6 +44,34 @@ export default function FuelAnalyticsScreen() {
       setLoading(false);
     }
   }, [toast, t]);
+
+  const handleApplyTrackedRate = async (truckId: number, rate: number) => {
+    try {
+      setUpdatingTruckId(truckId);
+      const res = await updateTruckFuelConsumptionRate(truckId, rate);
+      if (res.success) {
+        toast({
+          title: t('تم تحديث معدل استهلاك الشاحنة', 'Taux de consommation mis à jour'),
+          description: t(`تم اعتماد ${rate}% (${rate} لتر/100كم) كمعدل رسمي للشاحنة بنجاح`, `Taux défini à ${rate}% avec succès`),
+        });
+        fetchReport();
+      } else {
+        toast({
+          title: t('خطأ', 'Erreur'),
+          description: res.error,
+          variant: 'destructive',
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: t('خطأ', 'Erreur'),
+        description: e.message || 'Error',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingTruckId(null);
+    }
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch
@@ -249,34 +278,79 @@ export default function FuelAnalyticsScreen() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {truckStats.map((truck) => (
-                <div
-                  key={truck.truckId}
-                  className="flex items-center justify-between p-3 bg-muted/40 hover:bg-muted/70 transition-colors rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/15">
-                      <Fuel className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <div className="mb-1">
-                        <MatriculeBadge plate={truck.truckName} variant="badge" size="xs" />
+              {truckStats.map((truck) => {
+                const configured = truck.configuredRate ?? 36;
+                const tracked = truck.lPer100km;
+                const canUpdate = tracked > 0 && Math.abs(tracked - configured) >= 0.1;
+                const isUpdating = updatingTruckId === truck.truckId;
+
+                return (
+                  <div
+                    key={truck.truckId}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/70 transition-colors rounded-xl border border-border/50 gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                        <Fuel className="w-5 h-5" />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {truck.receiptsCount} {t('إيصالات', 'reçus')} • {truck.totalDistanceKm} {t('كم', 'km')}
-                      </p>
+                      <div>
+                        <div className="mb-1">
+                          <MatriculeBadge plate={truck.truckName} variant="badge" size="xs" />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {truck.receiptsCount} {t('إيصالات', 'reçus')} • {truck.totalDistanceKm} {t('كم مقطوعة', 'km parcourus')}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 sm:gap-4">
+                      {/* Configured Baseline Rate */}
+                      <div className="text-start sm:text-end">
+                        <span className="text-[11px] text-muted-foreground block">
+                          {t('المعدل المسجل (الأساسي):', 'Taux enregistré :')}
+                        </span>
+                        <span className="font-bold font-mono text-xs text-foreground">
+                          {configured}% ({configured} L/100km)
+                        </span>
+                      </div>
+
+                      {/* Tracked Real Rate */}
+                      <div className="text-start sm:text-end">
+                        <span className="text-[11px] text-muted-foreground block">
+                          {t('الاستهلاك الفعلي المتبع:', 'Conso réelle suivie :')}
+                        </span>
+                        <div className="flex items-center gap-1.5 justify-start sm:justify-end">
+                          <span className="font-extrabold font-mono text-sm text-foreground">
+                            {tracked > 0 ? `${tracked} L/100km` : t('غير متوفر', 'N/D')}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(truck.status)}`}>
+                            {truck.status === 'normal' ? t('طبيعي', 'Normal') : truck.status === 'warning' ? t('تحذير', 'Avertissement') : t('حرج', 'Critique')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Button: Apply Tracked Rate to Truck */}
+                      {canUpdate && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isUpdating}
+                          onClick={() => handleApplyTrackedRate(truck.truckId, tracked)}
+                          className="h-8 text-xs bg-primary/10 text-primary hover:bg-primary/20 border-primary/30 rounded-lg shrink-0"
+                          title={t('تحديث نسبة استهلاك الشاحنة في النظام وفق الاستهلاك الفعلي', 'Mettre à jour le taux du camion selon la conso réelle')}
+                        >
+                          {isUpdating ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin me-1" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5 me-1" />
+                          )}
+                          {t('اعتماد هذا المعدل', 'Appliquer ce taux')}
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
-                    <p className="font-bold font-mono text-foreground">
-                      {truck.lPer100km} L/100km
-                    </p>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(truck.status)}`}>
-                      {truck.status === 'normal' ? t('طبيعي', 'Normal') : truck.status === 'warning' ? t('تحذير', 'Avertissement') : t('حرج', 'Critique')}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

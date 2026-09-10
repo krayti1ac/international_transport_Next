@@ -15,6 +15,7 @@ export interface TruckFuelStats {
   totalLiters: number;
   totalDistanceKm: number;
   lPer100km: number;
+  configuredRate?: number;
   receiptsCount: number;
   status: 'normal' | 'warning' | 'critical';
 }
@@ -47,6 +48,7 @@ export async function calculateFuelAnalytics(): Promise<FuelAnalyticsResponse> {
     const { data: trucks, error: trucksError } = await supabase
       .from('trucks')
       .select('id, plate_number, model')
+      .select('id, plate_number, model, fuel_consumption_rate')
       .order('plate_number');
 
     if (trucksError) throw trucksError;
@@ -201,6 +203,7 @@ export async function calculateFuelAnalytics(): Promise<FuelAnalyticsResponse> {
         totalLiters: parseFloat(totalLiters.toFixed(2)),
         totalDistanceKm: parseFloat(totalDistance.toFixed(2)),
         lPer100km: parseFloat(new Decimal(lPer100km).toFixed(2)),
+        configuredRate: (truck as any).fuel_consumption_rate ?? 36.0,
         receiptsCount: receipts.length,
         status,
       });
@@ -351,3 +354,27 @@ export async function detectFuelAnomalies(truckId?: number): Promise<{
     return { success: false, error: message };
   }
 }
+
+/**
+ * Updates a truck's baseline fuel consumption rate (e.g. 36% -> 34.5% based on real tracking).
+ */
+export async function updateTruckFuelConsumptionRate(
+  truckId: number,
+  rate: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const cleanRate = parseFloat(new Decimal(rate).toFixed(2));
+    const { error } = await supabase
+      .from('trucks')
+      .update({ fuel_consumption_rate: cleanRate })
+      .eq('id', truckId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating truck fuel consumption rate:', err);
+    return { success: false, error: err.message || 'فشل في تحديث معدل استهلاك الشاحنة' };
+  }
+}
+

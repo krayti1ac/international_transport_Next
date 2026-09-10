@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type AppTheme = 'light' | 'dark' | 'system';
-export type AppLanguage = 'ar' | 'fr' | 'en';
+export type AppLanguage = 'ar' | 'fr' | 'es';
 
 export interface AppState {
   theme: AppTheme;

@@ -86,7 +86,7 @@ export function calculateTreasuryBalance(
 
 export function formatDate(date: string | Date, locale: string = 'ar'): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'fr' ? 'fr-FR' : 'en-US', {
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'fr' ? 'fr-FR' : locale === 'es' ? 'es-ES' : 'en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

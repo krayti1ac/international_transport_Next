@@ -4,9 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Layers } from 'lucide-react';
+import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Fuel, Ship } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { useLanguage } from '@/components/language-provider';
+import Decimal from 'decimal.js';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 
@@ -86,6 +87,10 @@ export function TripFormModal({
     ferry_localizador: '',
     ferry_company_import: 'Baleària / FRS',
     ferry_localizador_import: '',
+    ferry_cost: 4500,
+    triptik_cost: 500,
+    transit_almeria_cost: 1200,
+    marsa_maroc_cost: 800,
     goods_description_export: '',
     goods_description_import: '',
     weight_export: undefined,
@@ -95,6 +100,18 @@ export function TripFormModal({
     unloading_latitude: undefined,
     unloading_longitude: undefined,
   });
+
+  const totalTripPortFees = useMemo(() => {
+    try {
+      const f = new Decimal(formData.ferry_cost ?? 0);
+      const tr = new Decimal(formData.triptik_cost ?? 0);
+      const ta = new Decimal(formData.transit_almeria_cost ?? 0);
+      const m = new Decimal(formData.marsa_maroc_cost ?? 0);
+      return f.plus(tr).plus(ta).plus(m).toFixed(2);
+    } catch {
+      return '0.00';
+    }
+  }, [formData.ferry_cost, formData.triptik_cost, formData.transit_almeria_cost, formData.marsa_maroc_cost]);
 
   // Deduplicate drivers by name to avoid repeated entries in the dropdown,
   // prioritizing currently selected driver if active.
@@ -126,6 +143,10 @@ export function TripFormModal({
         cmr_import_number: initialData.cmr_import_number || '',
         goods_description_export: initialData.goods_description_export || '',
         goods_description_import: initialData.goods_description_import || '',
+        ferry_cost: initialData.ferry_cost ?? 4500,
+        triptik_cost: initialData.triptik_cost ?? 500,
+        transit_almeria_cost: initialData.transit_almeria_cost ?? 1200,
+        marsa_maroc_cost: initialData.marsa_maroc_cost ?? 800,
       });
     } else {
       const ts = Date.now().toString().slice(-5);
@@ -153,6 +174,10 @@ export function TripFormModal({
         ferry_localizador: '',
         ferry_company_import: 'Baleària / FRS',
         ferry_localizador_import: '',
+        ferry_cost: 4500,
+        triptik_cost: 500,
+        transit_almeria_cost: 1200,
+        marsa_maroc_cost: 800,
         goods_description_export: '',
         goods_description_import: '',
         shipping_latitude: undefined,
@@ -177,38 +202,187 @@ export function TripFormModal({
     }));
   };
 
+  const computeRoutePriceForTruck = (selectedRoute: TransportRoute, truckId?: number) => {
+    const selectedTruck = availableTrucks.find((t) => t.id === truckId);
+    const truckFuelRate = selectedTruck?.fuel_consumption_rate ?? selectedRoute.fuel_consumption_rate ?? 36.0;
+    const fuelPrice = selectedRoute.fuel_price_per_liter ?? 13.0;
+    const roadKm = selectedRoute.road_distance_km ?? selectedRoute.distance_km ?? 0;
+
+    const fuelDec = new Decimal(roadKm).dividedBy(100).times(new Decimal(truckFuelRate)).times(new Decimal(fuelPrice));
+    const ferryDec = new Decimal(selectedRoute.ferry_cost ?? 0);
+    const triptikDec = new Decimal(selectedRoute.triptik_cost ?? 0);
+    const transitDec = new Decimal(selectedRoute.transit_almeria_cost ?? 0);
+    const marsaDec = new Decimal(selectedRoute.marsa_maroc_cost ?? 0);
+    const customsDec = new Decimal(selectedRoute.customs_cost ?? 0);
+    const otherDec = new Decimal(selectedRoute.other_expenses ?? 0);
+
+    const sumDec = fuelDec
+      .plus(ferryDec)
+      .plus(triptikDec)
+      .plus(transitDec)
+      .plus(marsaDec)
+      .plus(customsDec)
+      .plus(otherDec);
+
+    const finalTotal = sumDec.greaterThan(0) ? sumDec : new Decimal(selectedRoute.cost || 0);
+
+    return {
+      totalCost: parseFloat(finalTotal.toFixed(2)),
+      fuelCost: parseFloat(fuelDec.toFixed(2)),
+      ferryCost: parseFloat(ferryDec.toFixed(2)),
+      triptikCost: parseFloat(triptikDec.toFixed(2)),
+      transitAlmeriaCost: parseFloat(transitDec.toFixed(2)),
+      marsaMarocCost: parseFloat(marsaDec.toFixed(2)),
+      truckFuelRate,
+    };
+  };
+
   const handleTruckChange = (truckIdStr: string) => {
     const tId = parseInt(truckIdStr);
     const selectedTruck = trucks.find((t) => t.id === tId);
 
-    setFormData((prev) => ({
-      ...prev,
-      truck_id: tId || undefined,
-      driver_id: prev.driver_id || selectedTruck?.default_driver_id || undefined,
-      trailer_id: prev.trailer_id || selectedTruck?.default_trailer_id || undefined,
-    }));
+    setFormData((prev) => {
+      const next: Partial<TripOrder> = {
+        ...prev,
+        truck_id: tId || undefined,
+        driver_id: prev.driver_id || selectedTruck?.default_driver_id || undefined,
+        trailer_id: prev.trailer_id || selectedTruck?.default_trailer_id || undefined,
+      };
+
+      // Recalculate export price if route was already chosen
+      if (prev.route_export) {
+        const selectedExportRoute = outboundRoutes.find(
+          (r) => `${r.origin} → ${r.destination}` === prev.route_export || r.name === prev.route_export
+        );
+        if (selectedExportRoute) {
+          const breakdown = computeRoutePriceForTruck(selectedExportRoute, tId);
+          next.price_export = breakdown.totalCost;
+        }
+      }
+
+      // Recalculate import price if route was already chosen
+      if (prev.route_import) {
+        const selectedImportRoute = returnRoutes.find(
+          (r) => `${r.origin} → ${r.destination}` === prev.route_import || r.name === prev.route_import
+        );
+        if (selectedImportRoute) {
+          const breakdown = computeRoutePriceForTruck(selectedImportRoute, tId);
+          next.price_import = breakdown.totalCost;
+        }
+      }
+
+      const exp = new Decimal(next.price_export || 0);
+      const imp = new Decimal(next.price_import || 0);
+      next.price = exp.plus(imp).toNumber();
+
+      return next;
+    });
+  };
+
+  const handleRouteExportChange = (routeStr: string) => {
+    const selectedRoute = outboundRoutes.find(
+      (r) => `${r.origin} → ${r.destination}` === routeStr || r.name === routeStr
+    );
+
+    setFormData((prev) => {
+      const next: Partial<TripOrder> = { ...prev, route_export: routeStr };
+
+      if (selectedRoute) {
+        // Auto-populate export price if route has cost
+        if (selectedRoute.cost !== undefined && selectedRoute.cost !== null) {
+          const exp = new Decimal(selectedRoute.cost);
+          const imp = new Decimal(prev.price_import || 0);
+          next.price_export = exp.toNumber();
+          next.price = exp.plus(imp).toNumber();
+        }
+        const breakdown = computeRoutePriceForTruck(selectedRoute, prev.truck_id);
+        const exp = new Decimal(breakdown.totalCost);
+        const imp = new Decimal(prev.price_import || 0);
+        next.price_export = exp.toNumber();
+        next.price = exp.plus(imp).toNumber();
+
+        // Pass along maritime expenses
+        next.ferry_cost = breakdown.ferryCost;
+        next.triptik_cost = breakdown.triptikCost;
+        next.transit_almeria_cost = breakdown.transitAlmeriaCost;
+        next.marsa_maroc_cost = breakdown.marsaMarocCost;
+
+        // Auto-populate loading GPS
+        if (selectedRoute.origin_latitude !== undefined && selectedRoute.origin_latitude !== null) {
+          next.shipping_latitude = selectedRoute.origin_latitude;
+        }
+        if (selectedRoute.origin_longitude !== undefined && selectedRoute.origin_longitude !== null) {
+          next.shipping_longitude = selectedRoute.origin_longitude;
+        }
+
+        // Default unloading GPS to route destination if not set
+        if (!next.unloading_latitude && selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
+          next.unloading_latitude = selectedRoute.destination_latitude;
+        }
+        if (!next.unloading_longitude && selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
+          next.unloading_longitude = selectedRoute.destination_longitude;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const handleRouteImportChange = (routeStr: string) => {
+    const selectedRoute = returnRoutes.find(
+      (r) => `${r.origin} → ${r.destination}` === routeStr || r.name === routeStr
+    );
+
+    setFormData((prev) => {
+      const next: Partial<TripOrder> = { ...prev, route_import: routeStr };
+
+      if (selectedRoute) {
+        // Auto-populate import price if route has cost
+        if (selectedRoute.cost !== undefined && selectedRoute.cost !== null) {
+          const exp = new Decimal(prev.price_export || 0);
+          const imp = new Decimal(selectedRoute.cost);
+          next.price_import = imp.toNumber();
+          next.price = exp.plus(imp).toNumber();
+        }
+        const breakdown = computeRoutePriceForTruck(selectedRoute, prev.truck_id);
+        const exp = new Decimal(prev.price_export || 0);
+        const imp = new Decimal(breakdown.totalCost);
+        next.price_import = imp.toNumber();
+        next.price = exp.plus(imp).toNumber();
+
+        // Unloading GPS for import leg
+        if (selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
+          next.unloading_latitude = selectedRoute.destination_latitude;
+        }
+        if (selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
+          next.unloading_longitude = selectedRoute.destination_longitude;
+        }
+      }
+
+      return next;
+    });
   };
 
   const handlePriceExportChange = (val: number) => {
     setFormData((prev) => {
-      const exp = val || 0;
-      const imp = prev.price_import || 0;
+      const exp = new Decimal(val || 0);
+      const imp = new Decimal(prev.price_import || 0);
       return {
         ...prev,
-        price_export: exp,
-        price: exp + imp,
+        price_export: exp.toNumber(),
+        price: exp.plus(imp).toNumber(),
       };
     });
   };
 
   const handlePriceImportChange = (val: number) => {
     setFormData((prev) => {
-      const exp = prev.price_export || 0;
-      const imp = val || 0;
+      const exp = new Decimal(prev.price_export || 0);
+      const imp = new Decimal(val || 0);
       return {
         ...prev,
-        price_import: imp,
-        price: exp + imp,
+        price_import: imp.toNumber(),
+        price: exp.plus(imp).toNumber(),
       };
     });
   };
@@ -221,7 +395,9 @@ export function TripFormModal({
       ? `${formData.route_export} ⇄ ${formData.route_import}`
       : formData.route_export || formData.route || 'مسار دولي';
 
-    const totalPrice = (formData.price_export || 0) + (formData.price_import || 0);
+    const exp = new Decimal(formData.price_export || 0);
+    const imp = new Decimal(formData.price_import || 0);
+    const totalPrice = exp.plus(imp).toNumber();
 
     const payload: Partial<TripOrder> = {
       ...formData,
@@ -232,6 +408,10 @@ export function TripFormModal({
       shipping_longitude: formData.shipping_longitude,
       unloading_latitude: formData.unloading_latitude,
       unloading_longitude: formData.unloading_longitude,
+      ferry_cost: formData.ferry_cost,
+      triptik_cost: formData.triptik_cost,
+      transit_almeria_cost: formData.transit_almeria_cost,
+      marsa_maroc_cost: formData.marsa_maroc_cost,
     };
 
     try {
@@ -356,9 +536,17 @@ export function TripFormModal({
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('مسار الذهاب (Route Aller) *', 'Itinéraire Aller (Route Aller) *')}</label>
+                    <label className="text-sm font-medium text-foreground flex items-center justify-between">
+                      <span>{t('مسار الذهاب (Route Aller) *', 'Itinéraire Aller (Route Aller) *')}</span>
+                      {formData.route_export && (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-normal">
+                          {t('✓ السعر و GPS تلقائي', '✓ Prix & GPS auto')}
+                        </span>
+                      )}
+                    </label>
                     <select
                       value={formData.route_export || ''}
-                      onChange={(e) => setFormData({ ...formData, route_export: e.target.value })}
+                      onChange={(e) => handleRouteExportChange(e.target.value)}
                       className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
@@ -366,9 +554,26 @@ export function TripFormModal({
                       {outboundRoutes.map((r) => (
                         <option key={r.id} value={`${r.origin} → ${r.destination}`}>
                           {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''}
+                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''} {r.cost ? `— [${r.cost.toLocaleString()} MAD]` : ''}
                         </option>
                       ))}
                     </select>
+                    {formData.route_export && (
+                      <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[11px] space-y-1">
+                        <div className="flex items-center justify-between font-semibold text-foreground">
+                          <span className="flex items-center gap-1">
+                            <Coins className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            {t('سعر الشحن المرجعي للذهاب:', 'Prix de fret Aller :')}
+                          </span>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {(formData.price_export || 0).toLocaleString()} MAD
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground text-[10px]">
+                          {t('يشمل المحروقات (على الطرق البرية فقط وفق معدل الشاحنة)، الباخرة، التريبتك، ترانزيت ألميريا، مرسى المغرب والتعشير', 'Comprend carburant routier selon le camion, bateau, triptyque, transit, port et dédouanement')}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -438,6 +643,92 @@ export function TripFormModal({
                       dir="ltr"
                     />
                   </div>
+                </div>
+
+                {/* Unified Port & Maritime Fees Card (الرسوم المينائية ومصاريف العبور الدولي) */}
+                <div className="p-3.5 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Ship className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      {t('الرسوم المينائية ومصاريف العبور الدولي (MAD)', 'Frais portuaires & transit maritime (MAD)')}
+                    </span>
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
+                      {t('مجموع الرسوم:', 'Total frais :')} {totalTripPortFees} MAD <span className="font-sans font-normal text-[10px] text-muted-foreground">({t('قابلة للتعديل', 'modifiables')})</span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground block">
+                        {t('الباخرة / العبارة', 'Billet Bateau / Ferry')}
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.ferry_cost ?? ''}
+                        onChange={(e) => setFormData({ ...formData, ferry_cost: parseFloat(e.target.value) || 0 })}
+                        placeholder="4500.00"
+                        className="h-8 text-xs font-mono"
+                        dir="ltr"
+                      />
+                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 4,500 MAD', 'Défaut: 4 500 MAD')}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground block">
+                        {t('التريبتك (Triptik / CPD)', 'Triptyque (CPD)')}
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.triptik_cost ?? ''}
+                        onChange={(e) => setFormData({ ...formData, triptik_cost: parseFloat(e.target.value) || 0 })}
+                        placeholder="500.00"
+                        className="h-8 text-xs font-mono"
+                        dir="ltr"
+                      />
+                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 500 MAD', 'Défaut: 500 MAD')}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground block">
+                        {t('ترانزيت ألميريا / الجزيرة', 'Transit Almería / Algés.')}
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.transit_almeria_cost ?? ''}
+                        onChange={(e) => setFormData({ ...formData, transit_almeria_cost: parseFloat(e.target.value) || 0 })}
+                        placeholder="1200.00"
+                        className="h-8 text-xs font-mono"
+                        dir="ltr"
+                      />
+                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 1,200 MAD', 'Défaut: 1 200 MAD')}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground block">
+                        {t('مناولة مرسى المغرب', 'Marsa Maroc (Port)')}
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.marsa_maroc_cost ?? ''}
+                        onChange={(e) => setFormData({ ...formData, marsa_maroc_cost: parseFloat(e.target.value) || 0 })}
+                        placeholder="800.00"
+                        className="h-8 text-xs font-mono"
+                        dir="ltr"
+                      />
+                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 800 MAD', 'Défaut: 800 MAD')}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">
+                    {t(
+                      '* يتم تحميل الرسوم المرجعية من المسار ويمكنك تعديل أي بند منها بحرية لهذه الرحلة وفق الفواتير الفعلية أو الموسم.',
+                      '* Valeurs de référence pré-remplies et modifiables selon les factures réelles de ce voyage.'
+                    )}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -537,18 +828,42 @@ export function TripFormModal({
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('مسار العودة (Route Retour)', 'Itinéraire Retour (Route Retour)')}</label>
+                    <label className="text-sm font-medium text-foreground flex items-center justify-between">
+                      <span>{t('مسار العودة (Route Retour)', 'Itinéraire Retour (Route Retour)')}</span>
+                      {formData.route_import && (
+                        <span className="text-[11px] text-blue-600 dark:text-blue-400 font-normal">
+                          {t('✓ السعر و GPS تلقائي', '✓ Prix & GPS auto')}
+                        </span>
+                      )}
+                    </label>
                     <select
                       value={formData.route_import || ''}
-                      onChange={(e) => setFormData({ ...formData, route_import: e.target.value })}
+                      onChange={(e) => handleRouteImportChange(e.target.value)}
                       className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
                       <option value="">{t('-- اختر مسار العودة --', '-- Sélectionner l\'itinéraire Retour --')}</option>
                       {returnRoutes.map((r) => (
                         <option key={r.id} value={`${r.origin} → ${r.destination}`}>
-                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''}
+                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''} {r.cost ? `— [${r.cost.toLocaleString()} MAD]` : ''}
                         </option>
                       ))}
                     </select>
+                    {formData.route_import && (
+                      <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[11px] space-y-1">
+                        <div className="flex items-center justify-between font-semibold text-foreground">
+                          <span className="flex items-center gap-1">
+                            <Coins className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                            {t('سعر الشحن المرجعي للعودة:', 'Prix de fret Retour :')}
+                          </span>
+                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {(formData.price_import || 0).toLocaleString()} MAD
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground text-[10px]">
+                          {t('يشمل المحروقات (على الطرق البرية فقط وفق معدل الشاحنة)، الباخرة، التريبتك، ترانزيت ألميريا، مرسى المغرب والتعشير', 'Comprend carburant routier selon le camion, bateau, triptyque, transit, port et dédouanement')}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

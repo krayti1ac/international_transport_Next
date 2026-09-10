@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.companies (
 );
 
 -- 2. إدراج الشركة الافتراضية الأولى بناءً على إعدادات المنظومة القائمة
-DO $
+DO $$
 DECLARE
   v_company_name TEXT := 'ترانس بودانون الدولية';
   v_logo_url TEXT := NULL;
@@ -37,7 +37,7 @@ BEGIN
         logo_url = COALESCE(EXCLUDED.logo_url, public.companies.logo_url);
 
   PERFORM setval('public.companies_id_seq', GREATEST((SELECT MAX(id) FROM public.companies), 1));
-END $;
+END $$;
 
 -- 3. ربط جدول المستخدمين بالشركة (Users Table)
 ALTER TABLE public.users 
@@ -50,21 +50,21 @@ CREATE INDEX IF NOT EXISTS idx_users_company_id ON public.users (company_id);
 
 -- 4. الدوال المساعدة لعزل المستأجرين (Multi-Tenant Helper Functions)
 CREATE OR REPLACE FUNCTION public.current_company_id()
-RETURNS BIGINT AS $
+RETURNS BIGINT AS $$
   SELECT company_id FROM public.users WHERE id = auth.uid() LIMIT 1;
-$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.is_company_admin()
-RETURNS BOOLEAN AS $
+RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.users 
     WHERE id = auth.uid() 
       AND role = 'admin'
   );
-$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- 5. إضافة عمود company_id والفهارس والقيم التلقائية لكافة الجداول التشغيلية
-DO $
+DO $$
 DECLARE
   operational_tables TEXT[] := ARRAY[
     'trip_orders',
@@ -101,7 +101,7 @@ BEGIN
       EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (company_id)', 'idx_' || t || '_company_id', t);
     END IF;
   END LOOP;
-END $;
+END $$;
 
 -- 6. تفعيل وحماية جدول الشركات RLS
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
@@ -163,7 +163,7 @@ CREATE POLICY "Tenant isolation: Driver update assigned trips"
   );
 
 -- ب. الشاحنات والمقطورات (trucks & trailers)
-DO $
+DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'trucks') THEN
     DROP POLICY IF EXISTS "Tenant isolation: Trucks access" ON public.trucks;
@@ -182,7 +182,7 @@ BEGIN
       USING (company_id = public.current_company_id())
       WITH CHECK (company_id = public.current_company_id());
   END IF;
-END $;
+END $$;
 
 -- ج. الفواتير (invoices)
 DROP POLICY IF EXISTS "Management manage invoices" ON public.invoices;

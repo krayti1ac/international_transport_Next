@@ -7,6 +7,26 @@ export interface Company {
   logo_url?: string | null;
   currency: string;
   is_active: boolean;
+  subscription_cost?: number | string;
+  subscription_start_date?: string | null;
+  subscription_end_date?: string | null;
+  max_devices?: number;
+  active_devices_count?: number;
+  email_domain?: string | null;
+  created_at: string;
+}
+
+export interface CompanyDevice {
+  id: number;
+  company_id: number;
+  device_id: string;
+  device_name: string;
+  device_type: 'desktop' | 'mobile' | 'tablet';
+  os?: string | null;
+  browser?: string | null;
+  ip_address?: string | null;
+  is_active: boolean;
+  last_active_at: string;
   created_at: string;
 }
 
@@ -18,9 +38,10 @@ export interface User {
   created_at: string;
   theme_mode?: 'light' | 'dark' | 'system';
   mfa_enabled?: boolean;
-  preferred_language?: 'ar' | 'fr' | 'en';
+  preferred_language?: 'ar' | 'fr' | 'es';
   company_id?: number | null;
   company?: Company;
+  avatar_url?: string | null;
 }
 
 export interface Client {
@@ -58,6 +79,7 @@ export interface Client {
   billing_city: string;
   billing_postal_code: string;
   billing_country: string;
+  logo_url?: string | null;
 }
 
 export interface Driver {
@@ -76,6 +98,7 @@ export interface Driver {
   visa_number?: string;
   visa_expiry_date?: string;
   has_valid_visa: boolean;
+  photo_url?: string | null;
   created_at?: string;
 }
 
@@ -94,6 +117,7 @@ export interface Truck {
   purchase_price?: number;
   weight_capacity?: number;
   power?: number;
+  fuel_consumption_rate?: number;
 }
 
 export interface Trailer {
@@ -118,6 +142,18 @@ export interface TransportRoute {
   destination_longitude?: number;
   distance_km?: number;
   estimated_days?: number;
+  cost?: number;
+  fuel_cost?: number;
+  fuel_price_per_liter?: number;
+  fuel_consumption_rate?: number;
+  customs_cost?: number;
+  other_expenses?: number;
+  ferry_cost?: number;
+  triptik_cost?: number;
+  transit_almeria_cost?: number;
+  marsa_maroc_cost?: number;
+  road_distance_km?: number;
+  ferry_distance_km?: number;
   is_active: boolean;
   created_at: string;
 }
@@ -155,6 +191,10 @@ export interface TripOrder {
   ferry_localizador?: string;
   ferry_company_import?: string;
   ferry_localizador_import?: string;
+  ferry_cost?: number;
+  triptik_cost?: number;
+  transit_almeria_cost?: number;
+  marsa_maroc_cost?: number;
   goods_description_export?: string;
   goods_description_import?: string;
   weight_export?: number;
@@ -516,6 +556,20 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface Provider {
+  id: number;
+  company_id?: number | null;
+  name: string;
+  type: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  logo_url?: string | null;
+  photo_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface AuditLog {
   id: number;
   user_id: string;
@@ -679,5 +733,30 @@ export interface ForexGainLossEntry {
   realized_gain_loss: number;
   entry_type: 'gain' | 'loss';
   notes?: string;
-  created_at?: string;
+  created_at?: string | null;
+}
+
+export interface FiscalYear {
+  id: number;
+  company_id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_current: boolean;
+  is_closed: boolean;
+  opening_balance_mad: number;
+  opening_balance_eur: number;
+  closed_at?: string | null;
+  created_at: string;
+}
+
+export type PeriodFilterMode = 'custom_range' | 'year_month';
+
+export interface SelectedPeriod {
+  startDate: string;
+  endDate: string;
+  fiscalYearId?: number;
+  year?: number;
+  month?: number | null;
+  label: string;
 }

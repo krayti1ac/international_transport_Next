@@ -102,12 +102,40 @@ export default function GeneralDashboard() {
     refetch();
   };
 
-  const currentDateFormatted = new Date().toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const currentDateFormatted = new Date().toLocaleDateString(
+    locale === 'ar' ? 'ar-MA' : locale === 'es' ? 'es-ES' : 'fr-FR',
+    {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }
+  );
+
+  const localizedMonthlyData = useMemo(() => {
+    const monthMap: Record<string, { es: string; fr: string }> = {
+      'يناير': { es: 'Ene', fr: 'Janv' },
+      'فبراير': { es: 'Feb', fr: 'Févr' },
+      'مارس': { es: 'Mar', fr: 'Mars' },
+      'أبريل': { es: 'Abr', fr: 'Avr' },
+      'مايو': { es: 'May', fr: 'Mai' },
+      'يونيو': { es: 'Jun', fr: 'Juin' },
+      'يوليو': { es: 'Jul', fr: 'Juil' },
+      'أغسطس': { es: 'Ago', fr: 'Août' },
+      'سبتمبر': { es: 'Sep', fr: 'Sept' },
+      'أكتوبر': { es: 'Oct', fr: 'Oct' },
+      'نوفمبر': { es: 'Nov', fr: 'Nov' },
+      'ديسمبر': { es: 'Dic', fr: 'Déc' },
+    };
+    return monthlyRevenueData.map((item) => ({
+      ...item,
+      month: locale === 'es'
+        ? (monthMap[item.month]?.es || item.month)
+        : locale === 'fr'
+        ? (monthMap[item.month]?.fr || item.month)
+        : item.month,
+    }));
+  }, [monthlyRevenueData, locale]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
@@ -193,7 +221,7 @@ export default function GeneralDashboard() {
           </div>
           <div className="relative z-10">
             <div className="text-3xl font-extrabold font-mono text-foreground flex items-baseline gap-1.5" dir="ltr">
-              {stats.totalRevenueMAD.toLocaleString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
+              {stats.totalRevenueMAD.toLocaleString(locale === 'ar' ? 'ar-MA' : locale === 'es' ? 'es-ES' : 'fr-FR')}
               <span className="text-xs font-normal text-muted-foreground">{t('د.م.', 'MAD')}</span>
             </div>
             {stats.totalRevenueEUR > 0 && (
@@ -351,7 +379,7 @@ export default function GeneralDashboard() {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyRevenueData} margin={{ top: 15, right: 10, left: 10, bottom: 5 }}>
+                  <BarChart data={localizedMonthlyData} margin={{ top: 15, right: 10, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
                     <XAxis dataKey="month" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis
@@ -427,7 +455,7 @@ export default function GeneralDashboard() {
               {statusDistribution.slice(0, 4).map((item, idx) => (
                 <div key={idx} className="flex items-center gap-2 text-xs">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-muted-foreground truncate">{item.name}:</span>
+                  <span className="text-muted-foreground truncate">{t(item.name, item.name)}:</span>
                   <span className="font-mono font-bold text-foreground">{item.value}</span>
                 </div>
               ))}
@@ -505,10 +533,10 @@ export default function GeneralDashboard() {
                             )}
                           </td>
                           <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground">
-                            {trip.departure_date ? new Date(trip.departure_date).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR') : '—'}
+                            {trip.departure_date ? new Date(trip.departure_date).toLocaleDateString(locale === 'ar' ? 'ar-MA' : locale === 'es' ? 'es-ES' : 'fr-FR') : '—'}
                           </td>
                           <td className="px-4 py-3.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400" dir="ltr">
-                            {trip.price ? `${trip.price.toLocaleString(locale === 'ar' ? 'ar-MA' : 'fr-FR')} ${t('د.م.', 'MAD')}` : '—'}
+                            {trip.price ? `${trip.price.toLocaleString(locale === 'ar' ? 'ar-MA' : locale === 'es' ? 'es-ES' : 'fr-FR')} ${t('د.م.', 'MAD')}` : '—'}
                           </td>
                           <td className="px-4 py-3.5 text-center">
                             <Badge variant={statusInfo.badgeVariant} className="text-[10px] px-2.5 py-0.5 rounded-full">

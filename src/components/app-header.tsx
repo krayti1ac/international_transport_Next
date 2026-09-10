@@ -9,6 +9,7 @@ import { navigationGroups } from '@/lib/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Button } from '@/components/ui/button';
+import { UserAvatar } from '@/components/users/UserAvatar';
 import {
   Menu,
   X,
@@ -24,25 +25,35 @@ interface AppHeaderProps {
   onToggleSidebar?: () => void;
 }
 
-const ROLE_CONFIG: Record<string, { ar: string; fr: string; badgeClass: string }> = {
+const ROLE_CONFIG: Record<string, { ar: string; fr: string; es: string; badgeClass: string }> = {
   super_admin: {
     ar: 'مدير عام',
     fr: 'Super Admin',
+    es: 'Superadministrador',
+    badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  },
+  'super-admin': {
+    ar: 'مدير عام',
+    fr: 'Super Admin',
+    es: 'Superadministrador',
     badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
   },
   admin: {
     ar: 'مدير النظام',
     fr: 'Administrateur',
+    es: 'Administrador del Sistema',
     badgeClass: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
   },
   secretary: {
     ar: 'سكرتارية وإدارة',
     fr: 'Secrétariat',
+    es: 'Secretaría y Gestión',
     badgeClass: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
   },
   driver: {
     ar: 'كابتن / سائق',
     fr: 'Chauffeur',
+    es: 'Conductor',
     badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
   },
 };
@@ -71,16 +82,24 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
 
   const pageTitle = useMemo(() => {
     if (currentItem) {
-      return locale === 'fr' ? currentItem.titleFr || currentItem.title : currentItem.title;
+      return locale === 'es'
+        ? currentItem.titleEs || currentItem.titleFr || currentItem.title
+        : locale === 'fr'
+        ? currentItem.titleFr || currentItem.title
+        : currentItem.title;
     }
-    return t('لوحة التحكم', 'Tableau de bord', 'Dashboard');
+    return t('لوحة التحكم', 'Tableau de bord', 'Panel de control');
   }, [currentItem, locale, t]);
 
   const groupLabel = useMemo(() => {
     if (currentGroup) {
-      return locale === 'fr' ? currentGroup.labelFr || currentGroup.label : currentGroup.label;
+      return locale === 'es'
+        ? currentGroup.labelEs || currentGroup.labelFr || currentGroup.label
+        : locale === 'fr'
+        ? currentGroup.labelFr || currentGroup.label
+        : currentGroup.label;
     }
-    return t('الرئيسية', 'Accueil', 'Home');
+    return t('الرئيسية', 'Accueil', 'Inicio');
   }, [currentGroup, locale, t]);
 
   const handleSignOut = async () => {
@@ -102,6 +121,7 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
   const roleInfo = ROLE_CONFIG[effectiveRole] || {
     ar: effectiveRole || 'مستخدم',
     fr: effectiveRole || 'Utilisateur',
+    es: effectiveRole || 'Usuario',
     badgeClass: 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30',
   };
 
@@ -122,7 +142,7 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
             size="icon"
             className="lg:hidden text-foreground hover:bg-muted shrink-0 w-9 h-9 rounded-xl border border-border/50"
             onClick={onToggleSidebar}
-            aria-label={sidebarOpen ? t('إغلاق القائمة', 'Fermer le menu') : t('فتح القائمة', 'Ouvrir le menu')}
+            aria-label={sidebarOpen ? t('إغلاق القائمة', 'Fermer le menu', 'Cerrar menú') : t('فتح القائمة', 'Ouvrir le menu', 'Abrir menú')}
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </Button>
@@ -163,8 +183,8 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
           variant="ghost"
           size="icon"
           onClick={handleSignOut}
-          title={t('تسجيل الخروج', 'Déconnexion', 'Sign out')}
-          aria-label={t('تسجيل الخروج', 'Déconnexion', 'Sign out')}
+          title={t('تسجيل الخروج', 'Déconnexion', 'Cerrar sesión')}
+          aria-label={t('تسجيل الخروج', 'Déconnexion', 'Cerrar sesión')}
           className="w-9 h-9 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all shadow-2xs flex items-center justify-center cursor-pointer scale-95 sm:scale-100"
         >
           <Power className="w-4 h-4 stroke-[2.5]" />
@@ -176,7 +196,7 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
             className={`hidden xl:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${roleInfo.badgeClass}`}
           >
             <Shield className="w-3 h-3" />
-            {locale === 'fr' ? roleInfo.fr : roleInfo.ar}
+            {locale === 'es' ? roleInfo.es : locale === 'fr' ? roleInfo.fr : roleInfo.ar}
           </span>
         )}
 
@@ -186,6 +206,14 @@ export function AppHeader({ userRole, sidebarOpen = false, onToggleSidebar }: Ap
             <div className="w-6 h-6 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-xs">
               {initial}
             </div>
+            <UserAvatar
+              name={displayName}
+              email={user?.email}
+              avatarUrl={(user as any)?.avatar_url}
+              userId={user?.id}
+              size="xs"
+              shape="rounded"
+            />
             <span className="text-xs font-semibold text-foreground max-w-[100px] lg:max-w-[140px] truncate">
               {displayName}
             </span>
