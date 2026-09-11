@@ -1,9 +1,7 @@
-'use client';
-
+import type { Metadata } from 'next';
 import { SuperAdminScreenIssuesView } from '@/features/super-admin/components/SuperAdminScreenIssuesView';
 
-export { SuperAdminScreenIssuesView };
-export const metadata = {
+export const metadata: Metadata = {
   title: 'تتبع مشاكل الشاشات والإدخال | Trans Bodanon Super Admin',
 };
 
