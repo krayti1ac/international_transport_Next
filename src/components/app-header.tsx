@@ -47,14 +47,14 @@ interface AppHeaderProps {
 
 const ROLE_CONFIG: Record<string, { ar: string; fr: string; es: string; badgeClass: string; textClass: string }> = {
   super_admin: {
-    ar: 'مدير عام',
+    ar: 'مشرف عام',
     fr: 'Super Admin',
     es: 'Superadministrador',
     badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
     textClass: 'text-rose-600 dark:text-rose-400',
   },
   'super-admin': {
-    ar: 'مدير عام',
+    ar: 'مشرف عام',
     fr: 'Super Admin',
     es: 'Superadministrador',
     badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',

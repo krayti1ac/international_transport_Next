@@ -1247,11 +1247,7 @@ export function SuperAdminCompaniesView() {
               <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
                 <tr>
                   <th className="p-3.5 pe-4">الشركة والمستأجر</th>
-                  <th className="p-3.5">رقم ICE</th>
-                  <th className="p-3.5">العملة</th>
-                  <th className="p-3.5">الاشتراك السنوي</th>
-                  <th className="p-3.5">فترة التفعيل</th>
-                  <th className="p-3.5">حالة الصلاحية</th>
+                  <th className="p-3.5">فترة التفعيل والصلاحية</th>
                   <th className="p-3.5">الأجهزة والتراخيص</th>
                   <th className="p-3.5 text-center">الحالة التشغيلية</th>
                   <th className="p-3.5 text-center ps-4">إجراءات</th>
@@ -1297,43 +1293,26 @@ export function SuperAdminCompaniesView() {
                         </div>
                       </td>
 
-                      {/* ICE */}
-                      <td className="p-3.5 font-mono text-muted-foreground whitespace-nowrap">
-                        {comp.ice || 'غير محدد'}
-                      </td>
-
-                      {/* Currency */}
-                      <td className="p-3.5 font-mono font-bold text-primary whitespace-nowrap">
-                        {comp.currency}
-                      </td>
-
-                      {/* Annual Subscription Cost */}
-                      <td className="p-3.5 font-mono font-bold text-foreground whitespace-nowrap">
-                        <span className="bg-primary/5 px-2 py-1 rounded-md border border-primary/20">
-                          {formatMoney(comp.subscription_cost, comp.currency)} / سنوياً
-                        </span>
-                      </td>
-
-                      {/* Activation Range */}
+                      {/* Activation Range & Validity Status (Merged) */}
                       <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1 font-mono text-[11px]" dir="ltr">
-                          <span className="text-foreground">
-                            {comp.subscription_start_date || 'غير محدد'}
-                          </span>
-                          <span className="text-muted-foreground font-sans text-xs">⬅</span>
-                          <span className="font-bold text-primary">
-                            {comp.subscription_end_date || 'غير محدد'}
-                          </span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1 font-mono text-[11px]" dir="ltr">
+                            <span className="text-foreground">
+                              {comp.subscription_start_date || 'غير محدد'}
+                            </span>
+                            <span className="text-muted-foreground font-sans text-xs">⬅</span>
+                            <span className="font-bold text-primary">
+                              {comp.subscription_end_date || 'غير محدد'}
+                            </span>
+                          </div>
+                          <div>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${subStatus.color} inline-block`}
+                            >
+                              {subStatus.text}
+                            </span>
+                          </div>
                         </div>
-                      </td>
-
-                      {/* Subscription Status */}
-                      <td className="p-3.5 whitespace-nowrap">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${subStatus.color} inline-block`}
-                        >
-                          {subStatus.text}
-                        </span>
                       </td>
 
                       {/* Devices Quota */}
@@ -1382,17 +1361,6 @@ export function SuperAdminCompaniesView() {
                       {/* Actions */}
                       <td className="p-3.5 text-center ps-4 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenDevices(comp)}
-                            className="h-7 px-2 text-[11px] gap-1 font-bold text-violet-700 dark:text-violet-300 border-violet-500/30 hover:bg-violet-500/10 rounded-lg shadow-xs"
-                            title="عرض الأجهزة والتراخيص المفعلة"
-                          >
-                            <Monitor className="w-3 h-3 text-violet-600" />
-                            <span>عرض الأجهزة</span>
-                          </Button>
-
                           <Button
                             size="sm"
                             variant="outline"
@@ -1518,33 +1486,8 @@ export function SuperAdminCompaniesView() {
                   </CardHeader>
 
                   <CardContent className="pt-4 space-y-3.5 text-xs">
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-2 bg-muted/30 p-2.5 rounded-xl border border-border/50">
-                      <div>
-                        <span className="text-[11px] text-muted-foreground block">رقم ICE:</span>
-                        <span className="font-mono font-medium text-foreground text-xs">
-                          {comp.ice || 'غير محدد'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[11px] text-muted-foreground block">العملة:</span>
-                        <span className="font-mono font-bold text-primary text-xs">
-                          {comp.currency}
-                        </span>
-                      </div>
-                    </div>
-
                     {/* Subscription Details */}
-                    <div className="space-y-2 border-t border-border/60 pt-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
-                          <CreditCard className="w-3.5 h-3.5 text-primary" />
-                          <span>تكلفة الاشتراك السنوي:</span>
-                        </span>
-                        <span className="font-mono font-bold text-foreground text-xs bg-primary/5 px-2 py-0.5 rounded-md border border-primary/20">
-                          {formatMoney(comp.subscription_cost, comp.currency)} / سنوياً
-                        </span>
-                      </div>
+                    <div className="space-y-2">
 
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
@@ -1573,13 +1516,6 @@ export function SuperAdminCompaniesView() {
                           >
                             {subStatus.text}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenRenew(comp)}
-                            className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
-                          >
-                            تجديد
-                          </button>
                         </div>
                       </div>
                     </div>

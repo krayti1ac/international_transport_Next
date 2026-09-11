@@ -1188,6 +1188,7 @@
   "reports": {
     "title": "Rapports",
     "generalDashboard": "Tableau de bord général",
+    "secretaryDashboard": "Tableau de bord secrétariat & opérations",
     "executiveDashboard": "Tableau de bord exécutif avancé",
     "comprehensiveReports": "Rapports complets",
     "tripProfitability": "Rapport de rentabilité des trajets",

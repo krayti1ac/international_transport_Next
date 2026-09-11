@@ -27,12 +27,12 @@ import {
 export const navigationGroups: SidebarGroup[] = [
   {
     id: 'super-admin',
-    label: 'المزود الرئيسي',
+    label: 'الإشراف العام',
     labelFr: 'Super Admin',
     labelEs: 'Superadministrador',
-    icon: <Building2 className="w-4 h-4" />,
+    icon: <ShieldCheck className="w-4 h-4" />,
     defaultOpen: true,
-    roles: ['super_admin', 'admin'],
+    roles: ['super_admin'],
     items: [
       {
         title: 'إدارة الشركات والاشتراكات',
@@ -40,7 +40,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Gestión de empresas y suscripciones',
         href: '/super-admin/companies',
         icon: <Building2 className="w-4 h-4" />,
-        roles: ['super_admin', 'admin'],
+        roles: ['super_admin'],
       },
       {
         title: 'تتبع مشاكل الإدخال والشاشات',
@@ -48,7 +48,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Seguimiento de problemas y pantallas',
         href: '/super-admin/screen-issues',
         icon: <Bug className="w-4 h-4 text-amber-500" />,
-        roles: ['super_admin', 'admin'],
+        roles: ['super_admin'],
       },
     ],
   },
@@ -137,15 +137,15 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Combustible y consumo',
         href: '/fuel-analytics',
         icon: <Fuel className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
-        title: 'سندات الصيانة',
-        titleFr: 'Bon de réparation',
-        titleEs: 'Vales de reparación',
+        title: 'سندات الصيانة والوقود',
+        titleFr: 'Bon de réparation / carburant',
+        titleEs: 'Vales de reparación / combustible',
         href: '/fuel-receipt',
         icon: <FileText className="w-4 h-4" />,
-        roles: ['admin'],
+        roles: ['admin', 'secretary'],
       },
       {
         title: 'نفقات العبّارات',
@@ -221,7 +221,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Conciliación bancaria',
         href: '/bank-reconciliation',
         icon: <Calculator className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
         title: 'صرف العملات',
@@ -255,7 +255,7 @@ export const navigationGroups: SidebarGroup[] = [
     labelFr: 'Rapports',
     labelEs: 'Informes',
     icon: <BarChart3 className="w-4 h-4" />,
-    roles: ['admin', 'secretary'],
+    roles: ['admin'],
     items: [
       {
         title: 'التقارير',
@@ -263,7 +263,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Informes generales',
         href: '/reports',
         icon: <BarChart3 className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
         title: 'تقارير متقدمة',
@@ -271,7 +271,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Informes avanzados',
         href: '/advanced-reports',
         icon: <BarChart3 className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
         title: 'ربحية الرحلات',
@@ -279,15 +279,15 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Rentabilidad de viajes',
         href: '/trip-profitability',
         icon: <Calculator className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
         title: 'لوحة المدراء',
         titleFr: 'Direction',
-        titleEs: 'Panel de dirección',
+        titleEs: 'Panel de direction',
         href: '/executive-dashboard',
         icon: <LayoutDashboard className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
     ],
   },

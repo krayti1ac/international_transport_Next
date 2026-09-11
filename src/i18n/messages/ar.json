@@ -1188,6 +1188,7 @@
   "reports": {
     "title": "التقارير والإحصائيات",
     "generalDashboard": "لوحة التحكم العامة",
+    "secretaryDashboard": "لوحة مهام السكرتارية والعمليات",
     "executiveDashboard": "اللوحة القيادية التنفيذية المتقدمة",
     "comprehensiveReports": "التقارير الشاملة",
     "tripProfitability": "تقرير ربحية الرحلات (P&L)",

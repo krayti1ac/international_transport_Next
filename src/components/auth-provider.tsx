@@ -276,7 +276,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return { error: 'ØªÙ… ØªØ¹Ø·ÙŠÙ„ Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨ Ù…Ù† Ù‚ÙØ¨Ù„ Ø§Ù„Ø¥Ø¯Ø§Ø±Ø©ØŒ ÙŠØ±Ø¬Ù‰ Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„Ù…Ø³Ø¤ÙˆÙ„' };
             }
 
-            const comp = await fetchCompany(localUser.company_id || 1);
+            const comp = localUser.role === 'super_admin' ? null : await fetchCompany(localUser.company_id || 1);
             setCompany(comp);
             setAuthStoreCompany(comp);
 
@@ -290,7 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const loggedInUser: User = {
               ...localUser,
-              company_id: localUser.company_id || (comp?.id ?? 1),
+              company_id: localUser.role === 'super_admin' ? null : (localUser.company_id || (comp?.id ?? 1)),
               company: comp || undefined,
               is_active: true,
             };
@@ -312,7 +312,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             loginUserAction({ email: cleanEmail, password, licenseNumber }).catch(() => {});
 
-            registerDevice(comp?.id || 1, licenseNumber, localUser.id).catch(() => {});
+            if (localUser.role !== 'super_admin') {
+              registerDevice(comp?.id || 1, licenseNumber, localUser.id).catch(() => {});
+            }
 
             return { user: loggedInUser, role: localUser.role, company: comp };
           }

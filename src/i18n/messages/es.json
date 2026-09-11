@@ -1188,6 +1188,7 @@
   "reports": {
     "title": "Informes y Estadísticas",
     "generalDashboard": "Panel General de Control",
+    "secretaryDashboard": "Panel de secretaría y operaciones",
     "executiveDashboard": "Panel Ejecutivo Avanzado",
     "comprehensiveReports": "Informes Completos y Análisis",
     "tripProfitability": "Rentabilidad de Viajes",

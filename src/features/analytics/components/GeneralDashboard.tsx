@@ -40,7 +40,9 @@ import {
   Legend,
 } from 'recharts';
 import { useLanguage } from '@/components/language-provider';
+import { useAuth } from '@/components/auth-provider';
 import { useDashboardDataQuery } from '@/lib/query/hooks';
+import SecretaryDashboard from '@/features/secretary/components/SecretaryDashboard';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -67,6 +69,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function GeneralDashboard() {
+  const { user, role } = useAuth();
+  const effectiveRole = role || user?.role;
+
   const { t, dir, locale } = useLanguage();
   const { data: dashboardData, isLoading, refetch, isRefetching } = useDashboardDataQuery();
 
@@ -136,6 +141,10 @@ export default function GeneralDashboard() {
         : item.month,
     }));
   }, [monthlyRevenueData, locale]);
+
+  if (effectiveRole === 'secretary') {
+    return <SecretaryDashboard />;
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>

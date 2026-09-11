@@ -139,16 +139,22 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    if (!isActive) {
+if (!isActive) {
       const url = request.nextUrl.clone();
       url.pathname = locale === routing.defaultLocale ? '/login' : `/${locale}/login`;
       url.searchParams.set('deactivated', 'true');
       return NextResponse.redirect(url);
     }
 
-    if (!userRole) userRole = 'driver';
-
-    if (userRole === 'admin') return response;
+    if (userRole === 'admin') {
+      // Tenant admins cannot access super-admin paths
+      if (relativePath.startsWith('/super-admin')) {
+        const url = request.nextUrl.clone();
+        url.pathname = locale === routing.defaultLocale ? '/dashboard' : `/${locale}/dashboard`;
+        return NextResponse.redirect(url);
+      }
+      return response;
+    }
 
     if (userRole === 'super_admin') {
       const isAllowed = relativePath.startsWith('/super-admin');
@@ -161,11 +167,11 @@ export async function middleware(request: NextRequest) {
     }
 
     const secretaryAllowedPaths = [
-      '/dashboard', '/trips', '/trip-profitability', '/truck-tracking',
-      '/fleet', '/treasury', '/clients', '/invoices', '/reports', '/maintenance',
+      '/dashboard', '/trips', '/truck-tracking',
+      '/fleet', '/fuel-receipt', '/treasury', '/clients', '/invoices', '/maintenance',
       '/driver-settlements', '/geofence-zones', '/geofence-alerts',
       '/whatsapp-notifications', '/chat', '/documents', '/emergency-advance-requests',
-      '/users',
+      '/users', '/forex', '/ferry-expenses',
     ];
     const driverAllowedPaths = [
       '/driver-tasks', '/driver-advances', '/fuel-receipt',

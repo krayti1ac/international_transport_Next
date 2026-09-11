@@ -12,10 +12,12 @@ import {
   PanelRightOpen,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldCheck,
 } from "lucide-react";
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/components/language-provider";
+import { useAuth } from "@/components/auth-provider";
 import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export interface SidebarItem {
@@ -65,6 +67,9 @@ export function Sidebar({
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const { dir, locale, t } = useLanguage();
+  const { user, role: authRole } = useAuth();
+  const effectiveRole = userRole || authRole || user?.role || '';
+  const isSuperAdmin = effectiveRole === 'super_admin' || effectiveRole === 'super-admin';
   const { companyName, logoUrl } = useCompanyBranding();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isClient = React.useSyncExternalStore(emptySubscribe, () => true, () => false);
@@ -278,9 +283,13 @@ export function Sidebar({
             <div
               className="relative cursor-pointer group/brand"
               onClick={onToggleCollapse}
-              title={companyName}
+              title={isSuperAdmin ? t('لوحة الإشراف العام', 'Supervision Centrale', 'Super Admin') : companyName}
             >
-              {logoUrl ? (
+              {isSuperAdmin ? (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-600 via-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-rose-900/30 transition-transform group-hover/brand:scale-105">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+              ) : logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={logoUrl}
@@ -502,42 +511,60 @@ export function Sidebar({
         {/* Brand Header */}
         <div className="p-3.5 border-b border-[var(--sidebar-border)] flex items-center justify-between bg-[var(--sidebar-header-bg)] transition-colors duration-200">
           <div className="flex items-center gap-2.5 min-w-0">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt={`${t('شعار', 'Logo', 'Logo')} ${companyName}`}
-                className="w-8 h-8 rounded-lg object-contain bg-[var(--sidebar-bg)] border border-[var(--sidebar-border)] shrink-0"
-              />
+            {isSuperAdmin ? (
+              <>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-600 via-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-rose-900/30 shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-sm font-bold font-amiri tracking-wide text-[var(--sidebar-fg)] leading-tight truncate">
+                    {t('لوحة الإشراف العام', 'Supervision Centrale', 'Super Admin')}
+                  </h1>
+                  <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">
+                    {t('إدارة المنصة والشركات', 'Gestion Multi-Entreprises', 'Platform Management')}
+                  </p>
+                </div>
+              </>
             ) : (
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-purple-900/30 shrink-0">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 32 32"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5"
-                  aria-hidden="true"
-                >
-                  <path d="M2 18.5a2 2 0 0 1 2-2h11.5v6H4a2 2 0 0 1-2-2v-2Z" />
-                  <path d="M15.5 12h6l3.5 4.5h-2v3h-7.5v-7.5Z" />
-                  <circle cx="7" cy="22" r="1.6" fill="currentColor" stroke="none" />
-                  <circle cx="20" cy="22" r="1.6" fill="currentColor" stroke="none" />
-                  <circle cx="26.5" cy="22" r="1.6" fill="currentColor" stroke="none" />
-                </svg>
-              </div>
+              <>
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logoUrl}
+                    alt={`${t('شعار', 'Logo', 'Logo')} ${companyName}`}
+                    className="w-8 h-8 rounded-lg object-contain bg-[var(--sidebar-bg)] border border-[var(--sidebar-border)] shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-purple-900/30 shrink-0">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 32 32"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-5 h-5"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 18.5a2 2 0 0 1 2-2h11.5v6H4a2 2 0 0 1-2-2v-2Z" />
+                      <path d="M15.5 12h6l3.5 4.5h-2v3h-7.5v-7.5Z" />
+                      <circle cx="7" cy="22" r="1.6" fill="currentColor" stroke="none" />
+                      <circle cx="20" cy="22" r="1.6" fill="currentColor" stroke="none" />
+                      <circle cx="26.5" cy="22" r="1.6" fill="currentColor" stroke="none" />
+                    </svg>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h1 className="text-sm font-bold font-amiri tracking-wide text-[var(--sidebar-fg)] leading-tight truncate">
+                    {companyName}
+                  </h1>
+                  <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">
+                    {t('المنظومة اللوجستية الدولية', 'Plateforme Logistique Internationale', 'International Logistics Platform')}
+                  </p>
+                </div>
+              </>
             )}
-            <div className="min-w-0">
-              <h1 className="text-sm font-bold font-amiri tracking-wide text-[var(--sidebar-fg)] leading-tight truncate">
-                {companyName}
-              </h1>
-              <p className="text-[10px] text-[var(--sidebar-fg-muted)] font-medium truncate">
-                {t('المنظومة اللوجستية الدولية', 'Plateforme Logistique Internationale', 'International Logistics Platform')}
-              </p>
-            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">

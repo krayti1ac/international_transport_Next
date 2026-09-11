@@ -48,3 +48,6 @@ test-results/
 
 # Supabase local temp
 supabase/.temp/
+
+# Local IDE/tool configs
+.kilo/

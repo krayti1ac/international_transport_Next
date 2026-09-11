@@ -21,10 +21,13 @@ const DEFAULTS: CompanyBranding = {
 };
 
 export function useCompanyBranding(): CompanyBranding {
-  const { company, companyId, refreshCompany } = useAuth();
+  const { company, companyId, role, user, refreshCompany } = useAuth();
   const [liveOverride, setLiveOverride] = useState<CompanyBranding | null>(null);
 
+  const isSuperAdmin = role === 'super_admin' || user?.role === 'super_admin';
+
   useEffect(() => {
+    if (isSuperAdmin) return;
     const supabase = createClient();
     let cancelled = false;
 
@@ -87,7 +90,17 @@ export function useCompanyBranding(): CompanyBranding {
       supabase.removeChannel(channel);
       window.removeEventListener('company-settings-updated', onLocalUpdate);
     };
-  }, [company, companyId, refreshCompany]);
+  }, [company, companyId, refreshCompany, isSuperAdmin]);
+
+  if (isSuperAdmin) {
+    return {
+      companyName: '',
+      logoUrl: null,
+      ice: null,
+      currency: 'MAD',
+      companyId: null,
+    };
+  }
 
   if (liveOverride && liveOverride.companyId === (companyId || 1)) {
     return liveOverride;
