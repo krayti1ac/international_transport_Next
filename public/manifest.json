@@ -1,17 +1,41 @@
 {
-  "name": "نظام النقل الدولي - بوابة السائق",
-  "short_name": "TransIntl",
-  "description": "تطبيق إدارة الرحلات والمهام ووصولات الوقود الميدانية",
-  "start_url": "/driver-tasks",
+  "name": "Trans Bodanon - نظام النقل الدولي",
+  "short_name": "Trans Bodanon",
+  "description": "نظام إدارة النقل الدولي والعمليات اللوجستية",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#090d16",
   "theme_color": "#1d4ed8",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "categories": ["business", "productivity", "logistics"],
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { formatCurrency } from '@/lib/forex';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
-  Truck,
   TrendingUp,
   Clock,
   CheckCircle2,

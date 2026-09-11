@@ -11,7 +11,6 @@ import {
   PlusCircle,
   RefreshCw,
   FileCheck2,
-  Truck,
   Layers,
   Sparkles,
   ShieldCheck,

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { AppHeader } from '@/components/app-header';
 import { OfflineSyncBadge } from '@/components/offline-sync-badge';
+import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { navigationGroups } from '@/lib/navigation';
 import { useLanguage } from '@/components/language-provider';
 
@@ -18,6 +19,30 @@ export function AppShell({
   const pathname = usePathname();
   const { dir } = useLanguage();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('tms_sidebar_collapsed');
+      if (saved === 'true') {
+        setIsCollapsed(true);
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  const handleToggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('tms_sidebar_collapsed', String(next));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background" dir={dir}>
@@ -47,6 +72,8 @@ export function AppShell({
           currentPath={pathname}
           userRole={userRole}
           onItemClick={() => setSidebarOpen(false)}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={handleToggleCollapse}
         />
       </div>
 
@@ -56,14 +83,19 @@ export function AppShell({
           userRole={userRole}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={handleToggleCollapse}
         />
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4 sm:p-6 max-w-7xl mx-auto">{children}</div>
+          <div className="p-3 sm:p-5 lg:p-6 max-w-[1920px] w-full mx-auto">{children}</div>
         </main>
       </div>
 
       {/* Offline sync status floating indicator */}
       <OfflineSyncBadge />
+
+      {/* PWA install prompt */}
+      <PwaInstallPrompt />
     </div>
   );
 }

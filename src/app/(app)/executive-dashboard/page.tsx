@@ -2,7 +2,8 @@ import { getExecutiveMetrics } from '@/features/analytics/services/executive-met
 import { ExecutiveCharts } from '@/features/analytics/components/ExecutiveCharts';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/forex';
-import { LayoutDashboard, TrendingUp, AlertCircle, Truck, Activity } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { LayoutDashboard, TrendingUp, AlertCircle, Activity } from 'lucide-react';
 import { useFiscalStore } from '@/lib/stores/fiscal-store';
 
 export const dynamic = 'force-dynamic';

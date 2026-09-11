@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/components/language-provider';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   Loader2,
   CheckCircle2,
   MapPin,
-  Truck,
   User,
   Calendar,
   Search,

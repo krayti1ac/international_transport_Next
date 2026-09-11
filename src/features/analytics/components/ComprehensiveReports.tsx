@@ -21,6 +21,7 @@ import {
   fallbackArray,
 } from '@/lib/default-data';
 import type { TripOrder, Invoice, Truck, Driver, Client } from '@/types/database';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import {
   FileSpreadsheet,
   Printer,
@@ -28,7 +29,6 @@ import {
   Filter,
   RefreshCw,
   TrendingUp,
-  Truck as TruckIcon,
   Users,
   Wallet,
   Receipt,

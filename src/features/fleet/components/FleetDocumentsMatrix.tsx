@@ -16,7 +16,6 @@ import {
   Clock,
   Plus,
   Search,
-  Truck as TruckIcon,
   Layers,
   FileText,
   ExternalLink,
@@ -24,6 +23,7 @@ import {
   XCircle,
   HelpCircle,
 } from 'lucide-react';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import type { FleetDocument, Truck as TruckType, Trailer as TrailerType } from '@/types/database';
 import {
   type FleetMatrixRow,

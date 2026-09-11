@@ -8,7 +8,15 @@ export const createCompanySchema = z.object({
   subscription_start_date: z.string().optional().nullable(),
   subscription_end_date: z.string().optional().nullable(),
   max_devices: z.coerce.number().int().min(1, 'الحد الأدنى للأجهزة هو جهاز واحد').default(5),
-  email_domain: z.string().trim().optional().nullable(),
+  email_domain: z
+    .string()
+    .trim()
+    .transform((val) => val.replace(/^@+/, ''))
+    .refine((val) => val.length >= 3, 'نطاق البريد الإلكتروني للمؤسسة مطلوب (مثال: domain.com)')
+    .refine(
+      (val) => /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val),
+      'صيغة نطاق البريد غير صالحة، يجب أن ينتهي بنطاق مثل .com أو .ma'
+    ),
 });
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
@@ -22,7 +30,16 @@ export const updateCompanySchema = z.object({
   subscription_start_date: z.string().optional().nullable(),
   subscription_end_date: z.string().optional().nullable(),
   max_devices: z.coerce.number().int().min(1, 'الحد الأدنى للأجهزة هو جهاز واحد').default(5),
-  email_domain: z.string().trim().optional().nullable(),
+  email_domain: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((val) => (val ? val.replace(/^@+/, '') : val))
+    .refine(
+      (val) => !val || /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val),
+      'صيغة نطاق البريد غير صالحة، يجب أن ينتهي بنطاق مثل .com أو .ma'
+    ),
   is_active: z.boolean().optional(),
 });
 

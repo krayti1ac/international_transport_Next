@@ -46,4 +46,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260918_add_provider_logo_url.sql` — Add provider logo_url and photo_url columns to public.providers table.
 - `supabase/migrations/20260919_add_route_cost_and_pricing.sql` — Add route freight cost, fuel calculation parameters (fuel price, consumption rate, fuel cost) and customs/other expenses to public.transport_routes.
 - `supabase/migrations/20260920_add_truck_fuel_and_route_ferry.sql` — Add truck fuel_consumption_rate (default 36%), route ferry_cost, road_distance_km, and ferry_distance_km.
+- `supabase/migrations/20260924_add_user_is_active_column.sql` — Add user is_active column and check_user_active_status security trigger function.
+- `supabase/migrations/20260926_system_screen_issues.sql` — System Screen Issues and Data Entry Anomaly Tracker for Super Admin (`system_screen_issues` table, indexes, RLS policies).
 

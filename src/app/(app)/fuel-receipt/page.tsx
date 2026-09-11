@@ -12,6 +12,8 @@ import { saveToOfflineQueue, getOfflineQueue, processOfflineQueue } from '@/lib/
 import { processFuelReceiptOCR } from '@/features/fleet/services/ocr.actions';
 import { OfflineSyncBadge } from '@/components/offline-sync-badge';
 import { useLanguage } from '@/components/language-provider';
+import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
+import Decimal from 'decimal.js';
 
 export default function FuelReceiptScanPage() {
   const { t, dir } = useLanguage();
@@ -33,6 +35,11 @@ export default function FuelReceiptScanPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
+  const { reportValidation, reportSubmissionError } = useAutoIssueReporter({
+    screenName: 'تسجيل وصل وقود (OCR)',
+    screenRoute: '/fuel-receipt',
+    componentName: 'FuelReceiptScanPage',
+  });
 
   const handleSyncQueue = async () => {
     if (!navigator.onLine || isSyncing) return;
@@ -145,7 +152,33 @@ export default function FuelReceiptScanPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !date) {
+      reportValidation({
+        fieldName: !amount ? 'amount' : 'date',
+        rejectedValue: !amount ? amount : date,
+        validationRule: 'المبلغ والتاريخ حقول إلزامية لحفظ إيصال الوقود',
+        errorMessage: 'يرجى إدخال المبلغ والتاريخ قبل محاولة الحفظ',
+        formData: { amount, date, station, liters, currency },
+      });
       toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال المبلغ والتاريخ', 'Veuillez renseigner le montant et la date'), variant: 'destructive' });
+      return;
+    }
+
+    let parsedAmount: number;
+    try {
+      const dec = new Decimal(amount);
+      if (dec.lessThanOrEqualTo(0) || !dec.isFinite()) {
+        throw new Error('قيمة المبلغ غير صالحة');
+      }
+      parsedAmount = dec.toNumber();
+    } catch {
+      reportValidation({
+        fieldName: 'amount',
+        rejectedValue: amount,
+        validationRule: 'يجب أن يكون المبلغ رقماً موجباً أكبر من صفر',
+        errorMessage: 'صيغة المبلغ المدخل غير صحيحة أو أقل من الصفر',
+        formData: { amount, date, station, liters, currency },
+      });
+      toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال مبلغ صحيح', 'Veuillez saisir un montant valide'), variant: 'destructive' });
       return;
     }
 
@@ -173,7 +206,7 @@ export default function FuelReceiptScanPage() {
         }
         saveToOfflineQueue({
           truck_id: assignedTruckId,
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           currency,
           date,
           notes: notesDetails,
@@ -200,7 +233,7 @@ export default function FuelReceiptScanPage() {
           truck_id: assignedTruckId,
           type: 'fuel',
           expense_type: 'fuel',
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           currency,
           maintenance_date: date,
           notes: finalNotes,
@@ -220,6 +253,11 @@ export default function FuelReceiptScanPage() {
       setConfidence(null);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : t('فشل حفظ الإيصال', 'Échec de l\'enregistrement du reçu');
+      reportSubmissionError({
+        operationName: 'تسجيل وصل وقود (truck_maintenance)',
+        error,
+        formData: { amount, date, station, liters, currency },
+      });
       toast({ title: t('خطأ في الحفظ', 'Erreur d\'enregistrement'), description: message, variant: 'destructive' });
     } finally {
       setLoading(false);

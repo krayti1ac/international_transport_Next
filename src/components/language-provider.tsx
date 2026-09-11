@@ -95,12 +95,12 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       try {
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
-        const currentUserId = userKey || session?.user?.id;
-        if (currentUserId) {
+        // Only update if we have a valid authenticated session (userKey might be email on login page)
+        if (session?.user?.id) {
           await supabase
             .from('users')
             .update({ preferred_language: newLocale })
-            .eq('id', currentUserId);
+            .eq('id', session.user.id);
         }
         if (session?.user?.email) {
           localStorage.setItem(`user_lang_${session.user.email.trim().toLowerCase()}`, newLocale);

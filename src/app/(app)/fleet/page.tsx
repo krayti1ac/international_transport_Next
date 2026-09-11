@@ -8,10 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import {
   Plus,
   Search,
-  Truck as TruckIcon,
   Warehouse,
   Edit2,
   Trash2,
@@ -308,7 +308,7 @@ export default function FleetPage() {
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-            <Warehouse className="w-5 h-5" />
+            <TrailerIcon className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -336,7 +336,7 @@ export default function FleetPage() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Warehouse className="w-3.5 h-3.5" />
+            <TrailerIcon className="w-3.5 h-3.5" />
             <span>{t('المقطورات', 'Remorques')} ({trailers.length})</span>
           </button>
         </div>
@@ -487,7 +487,7 @@ export default function FleetPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-                            <Warehouse className="w-4 h-4" />
+                            <TrailerIcon className="w-4 h-4" />
                           </div>
                           <div>
                             <div className="mb-0.5">
@@ -702,7 +702,7 @@ export default function FleetPage() {
                     {/* Right: Plate & Model */}
                     <div className="flex items-center gap-3 min-w-[220px]">
                       <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                        <Warehouse className="w-4 h-4" />
+                        <TrailerIcon className="w-4 h-4" />
                       </div>
                       <div>
                         <div className="mb-0.5">

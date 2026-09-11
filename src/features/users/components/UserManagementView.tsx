@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   Users,
   ShieldCheck,
@@ -11,12 +12,14 @@ import {
   Trash2,
   Mail,
   User as UserIcon,
-  Truck,
   FileText,
   Loader2,
   AlertTriangle,
   Upload,
   Sparkles,
+  Power,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { UserAvatar } from '@/components/users/UserAvatar';
 import { PRESET_USER_AVATARS, saveUserPhotoLocal, resolveUserPhoto } from '@/lib/user-photos';
@@ -25,6 +28,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -40,14 +50,35 @@ import { useUsersQuery, usersKeys } from '../services/users.queries';
 import {
   createUserAction,
   updateUserAction,
-  deleteUserAction,
+  toggleUserActiveAction,
 } from '../services/users.actions';
 import type { User, UserRole } from '@/types/database';
 
 export function UserManagementView() {
   const { dir, t } = useLanguage();
   const { user: currentUser, role: userRole, company: currentCompany } = useAuth();
-  const isSuperAdmin = userRole === 'super_admin' || currentUser?.role === 'super_admin';
+  const [cookieRole, setCookieRole] = useState('');
+  const [isClientMounted, setIsClientMounted] = useState(false);
+
+  useEffect(() => {
+    setIsClientMounted(true);
+    try {
+      const cookie = document.cookie.split('; ').find((r) => r.startsWith('app_user_session='));
+      if (cookie) {
+        const val = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        setCookieRole((val.role || '').toLowerCase().trim());
+      }
+    } catch {}
+  }, []);
+
+  const effectiveRole = useMemo(() => {
+    const fromAuth = (userRole || currentUser?.role || '').toLowerCase().trim();
+    if (fromAuth) return fromAuth;
+    return cookieRole;
+  }, [userRole, currentUser?.role, cookieRole]);
+
+  const isSuperAdmin = effectiveRole === 'super_admin';
+  const isSecretary = effectiveRole === 'secretary';
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -58,6 +89,18 @@ export function UserManagementView() {
     }
     return 'transbodanon.com';
   }, [companyEmailDomain]);
+
+  // Available roles when editing:
+  // Secretary can only change roles to secretary or driver (never admin or super_admin)
+  const availableRoles = useMemo<UserRole[]>(() => {
+    if (isSuperAdmin) {
+      return ['super_admin', 'admin', 'secretary', 'driver'];
+    }
+    if (isSecretary) {
+      return ['secretary', 'driver'];
+    }
+    return ['admin', 'secretary', 'driver'];
+  }, [isSuperAdmin, isSecretary]);
 
   const { data: users = [], isLoading } = useUsersQuery();
 
@@ -73,7 +116,7 @@ export function UserManagementView() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    role: 'secretary' as UserRole,
+    role: 'driver' as UserRole,
     password: '',
     preferred_language: 'ar' as 'ar' | 'fr' | 'es',
     avatar_url: '',
@@ -110,11 +153,6 @@ export function UserManagementView() {
       }) || null
     );
   }, [formData.email, formData.role, companyDomain, users, editingUser]);
-
-  // Delete modal state
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   // Role details config
   const roleConfig: Record<
@@ -153,9 +191,40 @@ export function UserManagementView() {
 
   // Only super_admin can see super_admin accounts in the user management list
   const visibleUsers = useMemo(() => {
-    if (isSuperAdmin) return users;
-    return users.filter((u) => u.role !== 'super_admin');
-  }, [users, isSuperAdmin]);
+    let list = [...users];
+    if (isClientMounted) {
+      try {
+        const raw = localStorage.getItem('registered_users');
+        if (raw) {
+          const reg: User[] = JSON.parse(raw);
+          reg.forEach((ru) => {
+            const idx = list.findIndex(
+              (u) => u.id === ru.id || u.email?.toLowerCase() === ru.email?.toLowerCase()
+            );
+            if (idx !== -1) {
+              list[idx] = { ...list[idx], ...ru };
+            } else {
+              list.push(ru);
+            }
+          });
+        }
+      } catch {}
+
+      // Apply any status overrides from 1-click toggles
+      list = list.map((u) => {
+        const key = `user_status_${u.id}`;
+        const emailKey = `user_status_${u.email?.toLowerCase()}`;
+        const saved = localStorage.getItem(key) || localStorage.getItem(emailKey);
+        if (saved !== null) {
+          return { ...u, is_active: saved === 'true' };
+        }
+        return u;
+      });
+    }
+
+    if (isSuperAdmin) return list;
+    return list.filter((u) => u.role !== 'super_admin');
+  }, [users, isSuperAdmin, isClientMounted]);
 
   // Filtered users
   const filteredUsers = useMemo(() => {
@@ -186,7 +255,7 @@ export function UserManagementView() {
     setFormData({
       name: '',
       email: '',
-      role: 'secretary',
+      role: 'driver',
       password: '',
       preferred_language: 'ar',
       avatar_url: '',
@@ -196,6 +265,18 @@ export function UserManagementView() {
   };
 
   const handleOpenEditModal = (userToEdit: User) => {
+    if (isSecretary && (userToEdit.role === 'admin' || userToEdit.role === 'super_admin')) {
+      toast({
+        title: t('غير مسموح', 'Non autorisé'),
+        description: t(
+          'لا يمكن للسكرتارية الوصول إلى بيانات حساب المدير أو تعديلها',
+          'Accès aux données du compte administrateur non autorisé'
+        ),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setEditingUser(userToEdit);
     let usernamePart = userToEdit.email || '';
     if (companyDomain && usernamePart.toLowerCase().endsWith(`@${companyDomain}`)) {
@@ -212,6 +293,96 @@ export function UserManagementView() {
     });
     setShowPresets(false);
     setModalOpen(true);
+  };
+
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
+
+  const handleToggleActive = async (targetUser: User) => {
+    const isSelf =
+      currentUser?.id === targetUser.id ||
+      currentUser?.email?.toLowerCase() === targetUser.email?.toLowerCase();
+
+    if (isSelf) {
+      toast({
+        title: t('تنبيه', 'Attention'),
+        description: t(
+          'لا يمكنك تعطيل حسابك الشخصي المسجل به حالياً',
+          'Vous ne pouvez pas désactiver votre propre compte'
+        ),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const isTargetAdmin = targetUser.role === 'admin' || targetUser.role === 'super_admin';
+    if (isSecretary && isTargetAdmin) {
+      toast({
+        title: t('غير مسموح', 'Non autorisé'),
+        description: t(
+          'لا يمكن للسكرتارية تعطيل أو تعديل حالة حساب المدير',
+          'La secrétaire ne peut pas modifier le statut du compte administrateur'
+        ),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const currentStatus = targetUser.is_active !== false;
+    const newStatus = !currentStatus;
+
+    setTogglingActiveId(targetUser.id);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`user_status_${targetUser.id}`, String(newStatus));
+        if (targetUser.email) {
+          localStorage.setItem(`user_status_${targetUser.email.toLowerCase()}`, String(newStatus));
+        }
+        try {
+          const raw = localStorage.getItem('registered_users');
+          if (raw) {
+            const reg: User[] = JSON.parse(raw);
+            const updated = reg.map((ru) =>
+              ru.id === targetUser.id || ru.email?.toLowerCase() === targetUser.email?.toLowerCase()
+                ? { ...ru, is_active: newStatus }
+                : ru
+            );
+            localStorage.setItem('registered_users', JSON.stringify(updated));
+          }
+        } catch {}
+      }
+      const res = await toggleUserActiveAction(targetUser.id, newStatus);
+      queryClient.invalidateQueries({ queryKey: usersKeys.list() });
+      if (res.success) {
+        toast({
+          title: newStatus
+            ? t('تم تفعيل الحساب', 'Compte activé')
+            : t('تم إلغاء تفعيل الحساب', 'Compte désactivé'),
+          description: newStatus
+            ? t(
+                `تم تفعيل حساب ${targetUser.name} بنجاح`,
+                `Le compte de ${targetUser.name} est maintenant actif`
+              )
+            : t(
+                `تم تحويل حساب ${targetUser.name} إلى "غير مفعل" بنجاح، وسيتم منعه من تسجيل الدخول`,
+                `Le compte de ${targetUser.name} est maintenant inactif et bloqué`
+              ),
+        });
+      } else {
+        toast({
+          title: t('خطأ', 'Erreur'),
+          description: res.error || t('فشل تحديث حالة الحساب', 'Échec de mise à jour du statut'),
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: t('خطأ', 'Erreur'),
+        description: t('حدث خطأ غير متوقع', 'Une erreur est survenue'),
+        variant: 'destructive',
+      });
+    } finally {
+      setTogglingActiveId(null);
+    }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -270,7 +441,60 @@ export function UserManagementView() {
 
         if (formData.avatar_url) {
           saveUserPhotoLocal(editingUser.id, formData.avatar_url, formData.name, finalEmail);
+          if (res.data?.id) {
+            saveUserPhotoLocal(res.data.id, formData.avatar_url, formData.name, finalEmail);
+          }
         }
+
+        try {
+          const raw = localStorage.getItem('registered_users');
+          let reg: User[] = raw ? JSON.parse(raw) : [];
+          const idx = reg.findIndex(
+            (u) => u.id === editingUser.id || u.email?.toLowerCase() === editingUser.email?.toLowerCase()
+          );
+          const updatedUserObj: User = {
+            ...editingUser,
+            id: res.data?.id || editingUser.id,
+            name: formData.name.trim(),
+            email: finalEmail,
+            role: formData.role,
+            preferred_language: formData.preferred_language,
+            avatar_url: formData.avatar_url || null,
+          };
+          if (idx !== -1) {
+            reg[idx] = updatedUserObj;
+          } else {
+            reg.push(updatedUserObj);
+          }
+          localStorage.setItem('registered_users', JSON.stringify(reg));
+
+          if (formData.password) {
+            localStorage.setItem(`cred_${finalEmail.toLowerCase()}`, formData.password);
+          }
+        } catch {}
+
+        const resolvedId = res.data?.id || editingUser.id;
+        queryClient.setQueryData(usersKeys.list(), (old: User[] | undefined) => {
+          if (!old) return old;
+          return old.map((u) => {
+            if (
+              u.id === editingUser.id ||
+              u.id === resolvedId ||
+              u.email?.toLowerCase() === finalEmail.toLowerCase()
+            ) {
+              return {
+                ...u,
+                id: resolvedId,
+                name: formData.name.trim(),
+                email: finalEmail,
+                role: formData.role,
+                preferred_language: formData.preferred_language,
+                avatar_url: formData.avatar_url || null,
+              };
+            }
+            return u;
+          });
+        });
 
         toast({
           title: t('تم التحديث بنجاح', 'Mis à jour avec succès'),
@@ -310,45 +534,6 @@ export function UserManagementView() {
       });
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!userToDelete) return;
-
-    if (currentUser && currentUser.id === userToDelete.id) {
-      toast({
-        title: t('غير مسموح', 'Non autorisé'),
-        description: t('لا يمكنك حذف حسابك المسجل به حالياً', 'Vous ne pouvez pas supprimer votre propre compte'),
-        variant: 'destructive',
-      });
-      setDeleteModalOpen(false);
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      const res = await deleteUserAction(userToDelete.id);
-      if (!res.success) {
-        throw new Error(res.error || 'فشل حذف المستخدم');
-      }
-
-      toast({
-        title: t('تم الحذف', 'Supprimé'),
-        description: t('تم حذف المستخدم بنجاح', 'Utilisateur supprimé avec succès'),
-      });
-
-      queryClient.invalidateQueries({ queryKey: usersKeys.list() });
-      setDeleteModalOpen(false);
-      setUserToDelete(null);
-    } catch (err: any) {
-      toast({
-        title: t('خطأ', 'Erreur'),
-        description: err.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -535,6 +720,7 @@ export function UserManagementView() {
                   <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs">
                     <th className="py-3 px-4 text-start font-semibold">{t('المستخدم', 'Utilisateur')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('الدور والصلاحية', 'Rôle & Accès')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('حالة الحساب', 'Statut du compte')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('اللغة المفضلة', 'Langue')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('تاريخ الإنشاء', 'Date de création')}</th>
                     <th className="py-3 px-4 text-end font-semibold">{t('الإجراءات', 'Actions')}</th>
@@ -545,6 +731,9 @@ export function UserManagementView() {
                     const isSelf = currentUser?.id === u.id || currentUser?.email?.toLowerCase() === u.email?.toLowerCase();
                     const cfg = roleConfig[u.role] || roleConfig.secretary;
                     const RoleIcon = cfg.icon;
+                    const isActive = u.is_active !== false;
+                    const isTargetAdmin = u.role === 'admin' || u.role === 'super_admin';
+                    const isSecretaryBlocked = isSecretary && isTargetAdmin;
 
                     return (
                       <tr key={u.id} className="hover:bg-muted/30 transition-colors">
@@ -589,6 +778,50 @@ export function UserManagementView() {
                           </div>
                         </td>
 
+                        {/* Account Status with 1-Click Toggle */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {isSecretaryBlocked ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 cursor-default select-none"
+                              title={t(
+                                'حساب مدير النظام محمي ضد التعطيل',
+                                'Compte administrateur protégé contre la désactivation',
+                                'Cuenta de administrador protegida contra desactivación'
+                              )}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{isActive ? t('مُفعّل (نشط)', 'Actif') : t('غير مُفعّل', 'Inactif')}</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleActive(u)}
+                              disabled={isSelf || togglingActiveId === u.id}
+                              title={
+                                isSelf
+                                  ? t('لا يمكن تعديل حالة حسابك الشخصي', 'Impossible de modifier votre propre statut')
+                                  : isActive
+                                  ? t('انقر لتعطيل الحساب ومنعه من تسجيل الدخول', 'Cliquer pour désactiver le compte')
+                                  : t('انقر لتفعيل الحساب والسماح له بالدخول', 'Cliquer pour activer le compte')
+                              }
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+                                isActive
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30'
+                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/30'
+                              } ${isSelf ? 'cursor-not-allowed opacity-75' : 'cursor-pointer shadow-2xs hover:scale-105 active:scale-95'}`}
+                            >
+                              {togglingActiveId === u.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : isActive ? (
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5" />
+                              )}
+                              <span>{isActive ? t('مُفعّل (نشط)', 'Actif') : t('غير مُفعّل', 'Inactif')}</span>
+                            </button>
+                          )}
+                        </td>
+
                         <td className="py-3.5 px-4 text-xs text-muted-foreground">
                           {u.preferred_language === 'fr' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-foreground font-medium">
@@ -606,31 +839,58 @@ export function UserManagementView() {
                         </td>
 
                         <td className="py-3.5 px-4 text-end">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenEditModal(u)}
-                              className="h-8 w-8 p-0 rounded-lg hover:bg-primary/10 hover:text-primary"
-                              title={t('تعديل البيانات', 'Modifier')}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
+                          {isSecretaryBlocked ? (
+                            <div className="flex items-center justify-end">
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-medium text-xs border border-purple-500/20 select-none"
+                                title={t(
+                                  'لا يمكن للسكرتارية الوصول إلى بيانات حساب المدير أو تعديلها',
+                                  'Accès aux données du compte administrateur non autorisé'
+                                )}
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                <span>{t('محمي (مدير النظام)', 'Protégé (Admin)')}</span>
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Quick 1-click activate/deactivate power button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleActive(u)}
+                                disabled={isSelf || togglingActiveId === u.id}
+                                className={`h-8 w-8 p-0 rounded-lg ${
+                                  isActive
+                                    ? 'text-emerald-600 hover:text-rose-600 hover:bg-rose-500/10'
+                                    : 'text-rose-600 hover:text-emerald-600 hover:bg-emerald-500/10'
+                                }`}
+                                title={
+                                  isSelf
+                                    ? t('لا يمكن تعديل حالة حسابك الشخصي', 'Impossible de modifier votre propre statut')
+                                    : isActive
+                                    ? t('تعطيل الحساب', 'Désactiver le compte')
+                                    : t('تفعيل الحساب', 'Activer le compte')
+                                }
+                              >
+                                {togglingActiveId === u.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Power className="w-4 h-4" />
+                                )}
+                              </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setUserToDelete(u);
-                                setDeleteModalOpen(true);
-                              }}
-                              disabled={isSelf}
-                              className="h-8 w-8 p-0 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 disabled:opacity-40"
-                              title={isSelf ? t('لا يمكن حذف حسابك', 'Impossible de supprimer votre compte') : t('حذف المستخدم', 'Supprimer')}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEditModal(u)}
+                                className="h-8 w-8 p-0 rounded-lg hover:bg-primary/10 hover:text-primary"
+                                title={t('تعديل البيانات', 'Modifier')}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -901,42 +1161,91 @@ export function UserManagementView() {
             </div>
 
             {/* Role Selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-foreground">
-                {t('الدور والصلاحيات في المنظومة', 'Rôle & Permissions')} *
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {(['super_admin', 'admin', 'secretary', 'driver'] as UserRole[]).map((r) => {
-                  const cfg = roleConfig[r];
-                  const Icon = cfg.icon;
-                  const isSelected = formData.role === r;
-
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, role: r })}
-                      className={`p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer text-center relative ${
-                        isSelected
-                          ? 'border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30'
-                          : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.badgeClass}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-foreground">{cfg.label}</p>
-                        <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 leading-tight">
-                          {cfg.desc}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
+            {!editingUser ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  {t('الدور والصلاحيات في المنظومة', 'Rôle & Permissions')} *
+                </label>
+                <div className="flex items-center justify-between h-11 px-3 rounded-xl bg-muted/40 border border-input">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${roleConfig.driver.badgeClass}`}>
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs text-foreground">{roleConfig.driver.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{roleConfig.driver.desc}</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 whitespace-nowrap">
+                    {t('افتراضي لكل حساب جديد', 'Par défaut')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {t(
+                    'يتم تسجيل أي حساب جديد تلقائياً بصلاحية سائق، ويمكن للسكرتارية تعديله لاحقاً إلى سكرتارية أو إبقائه سائق.',
+                    'Tout nouveau compte est enregistré comme chauffeur. Le rôle peut être modifié ultérieurement en secrétaire ou conservé chauffeur.'
+                  )}
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  {t('الدور والصلاحيات في المنظومة', 'Rôle & Permissions')} *
+                </label>
+
+                <Select
+                  value={formData.role}
+                  onValueChange={(val) => setFormData({ ...formData, role: val as UserRole })}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-background border-input">
+                    <SelectValue placeholder={t('اختر الدور والصلاحية', 'Sélectionnez un rôle')}>
+                      {(() => {
+                        const cfg = roleConfig[formData.role] || roleConfig.secretary;
+                        const Icon = cfg.icon;
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${cfg.badgeClass}`}>
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="font-semibold text-xs text-foreground">{cfg.label}</span>
+                            <span className="text-[11px] text-muted-foreground hidden sm:inline-block ms-1">
+                              — {cfg.desc}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {availableRoles.map((r) => {
+                      const cfg = roleConfig[r];
+                      const Icon = cfg.icon;
+                      return (
+                        <SelectItem key={r} value={r} className="rounded-lg py-2.5 cursor-pointer">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${cfg.badgeClass}`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="text-start">
+                              <p className="font-semibold text-xs text-foreground">{cfg.label}</p>
+                              <p className="text-[10px] text-muted-foreground line-clamp-1">{cfg.desc}</p>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {isSecretary && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t(
+                      'يمكن للسكرتارية تعديل الصلاحية إلى سكرتارية أو إبقائها سائق (لا يمكن الترقية إلى مدير النظام).',
+                      'Vous pouvez changer le rôle en secrétaire ou le laisser chauffeur (interdit de promouvoir en administrateur).'
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Preferred Language */}
             <div className="space-y-1.5">
@@ -991,52 +1300,6 @@ export function UserManagementView() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete User Confirmation Dialog */}
-      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold font-amiri text-rose-600 dark:text-rose-400 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              <span>{t('تأكيد حذف المستخدم', "Confirmation de suppression")}</span>
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                `هل أنت متأكد من رغبتك في حذف حساب المستخدم "${userToDelete?.name || userToDelete?.email}" نهائياً من المنظومة؟`,
-                `Êtes-vous sûr de vouloir supprimer définitivement l'utilisateur "${userToDelete?.name || userToDelete?.email}" ?`
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="flex flex-row justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteModalOpen(false)}
-              disabled={deleting}
-              className="rounded-xl"
-            >
-              {t('إلغاء', 'Annuler')}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleConfirmDelete}
-              disabled={deleting}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl"
-            >
-              {deleting ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{t('جاري الحذف...', 'Suppression...')}</span>
-                </div>
-              ) : (
-                t('تأكيد الحذف', 'Confirmer la suppression')
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

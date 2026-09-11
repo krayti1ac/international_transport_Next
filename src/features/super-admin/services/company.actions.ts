@@ -10,6 +10,7 @@ import {
   type UpdateCompanyInput,
 } from '../schemas/company.schema';
 import type { Company, CompanyDevice } from '@/types/database';
+import { generateLicenseNumber } from '@/lib/license';
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -164,6 +165,14 @@ export async function ensureCompanyAdminAccount(
           const found = list?.users?.find((u) => u.email?.toLowerCase() === adminEmail);
           if (found) {
             authUserId = found.id;
+            await adminClient.auth.admin.updateUserById(found.id, {
+              password: defaultPassword,
+              user_metadata: {
+                name: adminName,
+                role: 'admin',
+                company_id: companyId,
+              },
+            });
           }
         }
       } catch (authErr) {
@@ -183,6 +192,7 @@ export async function ensureCompanyAdminAccount(
       role: 'admin' as const,
       company_id: companyId,
       preferred_language: 'ar' as const,
+      is_active: true,
       created_at: new Date().toISOString(),
     };
 
@@ -226,6 +236,34 @@ export async function createCompanyAction(
       return { success: false, error: 'غير مصرح لك بتأسيس شركات جديدة' };
     }
 
+    const cleanDomain = parsed.data.email_domain
+      ? parsed.data.email_domain.replace(/^@+/, '').trim().toLowerCase()
+      : '';
+
+    if (!cleanDomain) {
+      return {
+        success: false,
+        error: 'نطاق البريد الإلكتروني للمؤسسة مطلوب (مثال: domain.com)',
+      };
+    }
+
+    // Check if email_domain already exists for another company (strictly enforce uniqueness across companies)
+    const adminClient = getAdminClient();
+    const queryClient = adminClient || supabase;
+
+    const { data: existingDomainComp } = await queryClient
+      .from('companies')
+      .select('id, name, email_domain')
+      .ilike('email_domain', cleanDomain)
+      .maybeSingle();
+
+    if (existingDomainComp) {
+      return {
+        success: false,
+        error: `نطاق البريد الإلكتروني (@${cleanDomain}) مسجل بالفعل لشركة "${existingDomainComp.name}". نطاق البريد فريد للمؤسسة ولا يمكن تكراره من شركة لأخرى.`,
+      };
+    }
+
     const fullPayload = {
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
@@ -234,7 +272,7 @@ export async function createCompanyAction(
       subscription_start_date: parsed.data.subscription_start_date || null,
       subscription_end_date: parsed.data.subscription_end_date || null,
       max_devices: parsed.data.max_devices ?? 5,
-      email_domain: parsed.data.email_domain || null,
+      email_domain: cleanDomain,
       is_active: true,
     };
 
@@ -343,6 +381,32 @@ export async function updateCompanyAction(
       return { success: false, error: 'غير مصرح لك بتعديل بيانات الشركة' };
     }
 
+    const cleanDomain =
+      parsed.data.email_domain !== undefined
+        ? parsed.data.email_domain
+          ? parsed.data.email_domain.replace(/^@+/, '').trim().toLowerCase()
+          : null
+        : undefined;
+
+    const adminClient = getAdminClient();
+    const queryClient = adminClient || supabase;
+
+    if (cleanDomain && parsed.data.id) {
+      const { data: existingDomainComp } = await queryClient
+        .from('companies')
+        .select('id, name, email_domain')
+        .ilike('email_domain', cleanDomain)
+        .neq('id', parsed.data.id)
+        .maybeSingle();
+
+      if (existingDomainComp) {
+        return {
+          success: false,
+          error: `نطاق البريد الإلكتروني (@${cleanDomain}) مسجل بالفعل لشركة "${existingDomainComp.name}". نطاق البريد فريد للمؤسسة ولا يمكن تكراره من شركة لأخرى.`,
+        };
+      }
+    }
+
     const fullPayload = {
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
@@ -351,7 +415,7 @@ export async function updateCompanyAction(
       subscription_start_date: parsed.data.subscription_start_date || null,
       subscription_end_date: parsed.data.subscription_end_date || null,
       max_devices: parsed.data.max_devices ?? 5,
-      email_domain: parsed.data.email_domain !== undefined ? parsed.data.email_domain : null,
+      email_domain: cleanDomain !== undefined ? cleanDomain : null,
       ...(parsed.data.is_active !== undefined ? { is_active: parsed.data.is_active } : {}),
     };
 
@@ -525,6 +589,172 @@ export async function toggleDeviceStatusAction(
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'فشل في تحديث حالة الجهاز';
+    return { success: false, error: message };
+  }
+}
+
+export async function createCompanyDeviceAction(
+  companyId: number,
+  device: {
+    device_id: string;
+    device_name: string;
+    device_type?: 'desktop' | 'mobile' | 'tablet';
+    os?: string | null;
+    browser?: string | null;
+    ip_address?: string | null;
+  }
+): Promise<{ success: boolean; data?: CompanyDevice; error?: string }> {
+  const licenseNumber = generateLicenseNumber(companyId, device.device_id);
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('company_devices')
+      .insert({
+        company_id: companyId,
+        device_id: device.device_id,
+        device_name: device.device_name,
+        device_type: device.device_type || 'desktop',
+        os: device.os || null,
+        browser: device.browser || null,
+        ip_address: device.ip_address || null,
+        is_active: true,
+        license_number: licenseNumber,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        const { data: adminData, error: adminError } = await adminClient
+          .from('company_devices')
+          .insert({
+            company_id: companyId,
+            device_id: device.device_id,
+            device_name: device.device_name,
+            device_type: device.device_type || 'desktop',
+            os: device.os || null,
+            browser: device.browser || null,
+            ip_address: device.ip_address || null,
+            is_active: true,
+            license_number: licenseNumber,
+          })
+          .select('*')
+          .single();
+
+        if (!adminError && adminData) {
+          revalidatePath('/super-admin/companies');
+          return { success: true, data: adminData as CompanyDevice };
+        }
+      }
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/super-admin/companies');
+    return { success: true, data: data as CompanyDevice };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل في إضافة الجهاز';
+    return { success: false, error: message };
+  }
+}
+
+export async function deleteCompanyDeviceAction(
+  deviceId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('company_devices')
+      .delete()
+      .eq('id', deviceId);
+
+    if (error) {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        const { error: adminError } = await adminClient
+          .from('company_devices')
+          .delete()
+          .eq('id', deviceId);
+        if (!adminError) {
+          revalidatePath('/super-admin/companies');
+          return { success: true };
+        }
+      }
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/super-admin/companies');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل في حذف الجهاز';
+    return { success: false, error: message };
+  }
+}
+
+export async function replaceStaleDeviceAction(
+  companyId: number,
+  deviceId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    const { data: targetDevice } = await supabase
+      .from('company_devices')
+      .select('id, is_active')
+      .eq('company_id', companyId)
+      .eq('id', deviceId)
+      .maybeSingle();
+
+    if (!targetDevice) {
+      return { success: false, error: 'الجهاز غير موجود' };
+    }
+
+    if (!targetDevice.is_active) {
+      return { success: false, error: 'الجهاز غير نشط بالفعل' };
+    }
+
+    const { data: company } = await supabase
+      .from('companies')
+      .select('max_devices')
+      .eq('id', companyId)
+      .maybeSingle();
+
+    const maxDevices = company?.max_devices ?? 5;
+    const { count } = await supabase
+      .from('company_devices')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('is_active', true);
+
+    const activeCount = count ?? 0;
+    if (activeCount <= maxDevices) {
+      return { success: false, error: 'لا يوجد تجاوز للحد الأقصى للأجهزة' };
+    }
+
+    const { error } = await supabase
+      .from('company_devices')
+      .update({ is_active: false })
+      .eq('id', deviceId);
+
+    if (error) {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        const { error: adminError } = await adminClient
+          .from('company_devices')
+          .update({ is_active: false })
+          .eq('id', deviceId);
+        if (adminError) {
+          return { success: false, error: adminError.message };
+        }
+      } else {
+        return { success: false, error: error.message };
+      }
+    }
+
+    revalidatePath('/super-admin/companies');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل في استبدال الجهاز';
     return { success: false, error: message };
   }
 }

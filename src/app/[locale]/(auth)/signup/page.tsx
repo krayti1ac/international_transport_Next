@@ -10,13 +10,16 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Truck, User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
   const router = useRouter();
@@ -27,21 +30,40 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (password !== confirmPassword) {
+      toast({
+        title: locale === 'ar' ? 'خطأ في كلمة المرور' : t('common.error'),
+        description: locale === 'ar' ? 'كلمة المرور وتأكيدها غير متطابقين، يرجى إعادة التحقق' : 'Passwords do not match',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: locale === 'ar' ? 'كلمة المرور قصيرة' : t('common.error'),
+        description: locale === 'ar' ? 'كلمة المرور يجب أن لا تقل عن 6 أحرف' : 'Password must be at least 6 characters',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
-    const { error } = await signUp(email, password, name);
+    const { error } = await signUp(email, password, name, confirmPassword);
     if (error) {
       toast({
-        title: t('common.error'),
+        title: locale === 'ar' ? 'تنبيه التسجيل' : t('common.error'),
         description: error,
         variant: 'destructive',
       });
     } else {
       toast({
-        title: t('common.success'),
-        description: 'تم إنشاء الحساب بنجاح',
+        title: locale === 'ar' ? 'تم إنشاء الحساب وترخيص الهاتف بنجاح' : t('common.success'),
+        description: locale === 'ar' ? 'تم ربط حساب السائق وترخيص هاتفه بالمنظومة بنجاح' : 'Driver account and mobile device registered successfully',
       });
-      router.push(`/${locale}/login`);
+      router.push('/login');
     }
     setLoading(false);
   };
@@ -58,14 +80,14 @@ export default function SignUpPage() {
             <Truck className="w-7 h-7" />
           </div>
           <CardTitle className="text-2xl font-bold font-amiri text-foreground tracking-wide">
-            {locale === 'ar' ? 'إنشاء حساب جديد' : t('auth.signup')}
+            {locale === 'ar' ? 'إنشاء حساب جديد (سائق)' : t('auth.signup')}
           </CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
-            {locale === 'ar' ? 'أدخل بياناتك للانضمام إلى النظام' : 'Enter your details to join'}
+            {locale === 'ar' ? 'أدخل بياناتك للانضمام إلى أسطول النقل الدولي' : 'Enter your details to join the transport fleet'}
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 pt-2">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Name Field */}
             <div className="space-y-1.5 text-right">
               <label className="text-sm font-semibold text-foreground/90">{locale === 'ar' ? 'الاسم الكامل' : 'Full Name'}</label>
@@ -74,7 +96,7 @@ export default function SignUpPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="محمد أحمد"
+                  placeholder="كمال (Kamal)"
                   required
                   className="pr-10 pl-3 h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500"
                 />
@@ -84,13 +106,13 @@ export default function SignUpPage() {
 
             {/* Email Field */}
             <div className="space-y-1.5 text-right">
-              <label className="text-sm font-semibold text-foreground/90">{t('auth.email')}</label>
+              <label className="text-sm font-semibold text-foreground/90">{locale === 'ar' ? 'البريد الإلكتروني المهني' : t('auth.email')}</label>
               <div className="relative flex items-center">
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="example@domain.com"
+                  placeholder="kamal@transbodanon.com"
                   required
                   dir="ltr"
                   className="pr-10 pl-3 h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500"
@@ -124,6 +146,31 @@ export default function SignUpPage() {
               </div>
             </div>
 
+            {/* Confirm Password Field */}
+            <div className="space-y-1.5 text-right">
+              <label className="text-sm font-semibold text-foreground/90">{locale === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
+              <div className="relative flex items-center">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  dir="ltr"
+                  className="pr-10 pl-10 h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500"
+                />
+                <Lock className="w-5 h-5 text-muted-foreground absolute right-3 pointer-events-none" />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute left-3 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md focus:outline-none"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
             {/* Submit Button */}
             <Button
               type="submit"
@@ -136,14 +183,14 @@ export default function SignUpPage() {
                   <span>{t('common.loading')}</span>
                 </div>
               ) : (
-                locale === 'ar' ? 'إنشاء الحساب' : t('auth.signup')
+                locale === 'ar' ? 'إنشاء الحساب وترخيص الهاتف' : t('auth.signup')
               )}
             </Button>
 
             {/* Login Link */}
             <div className="text-center text-xs sm:text-sm text-muted-foreground pt-3 border-t border-border/40">
               {locale === 'ar' ? 'لديك حساب بالفعل؟ ' : 'Already have an account? '}
-              <Link href={`/${locale}/login`} className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-semibold hover:underline mr-1">
+               <Link href="/login" className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-semibold hover:underline mr-1">
                 {locale === 'ar' ? 'تسجيل الدخول' : t('auth.login')}
               </Link>
             </div>

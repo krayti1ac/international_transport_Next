@@ -22,12 +22,12 @@ import {
   LayoutGrid,
   List,
   Calendar,
-  Truck as TruckIcon,
   User as UserIcon,
   Eye,
   ArrowRight,
   Sparkles,
 } from 'lucide-react';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import { CMRPrintModal } from '@/components/cmr-print-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { TripFormModal } from '@/components/trip-form-modal';
@@ -58,6 +58,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 
 const KANBAN_STAGES = [
   { id: 'pendingAssignment', labelAr: 'قيد التعيين', labelFr: 'En attente', labelEs: 'Pendiente de asignar', icon: ClipboardList, color: 'bg-amber-500', badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' },
@@ -86,22 +87,22 @@ function KanbanColumn({ stage, trips, drivers, trucks, trailers, onTripClick, on
   const stageLabel = locale === 'es' ? (stage.labelEs || stage.labelFr) : locale === 'fr' ? stage.labelFr : stage.labelAr;
 
   return (
-    <div className="flex flex-col min-w-[280px] bg-muted/20 border border-border/70 rounded-2xl p-3">
-      <div className="flex items-center justify-between mb-3 p-2.5 bg-card/80 backdrop-blur-xs rounded-xl border border-border shadow-2xs">
-        <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-lg ${stage.color} text-white shadow-xs`}>
-            <Icon className="w-4 h-4" />
+    <div className="flex flex-col w-full min-w-0 bg-muted/20 border border-border/70 rounded-2xl p-2.5 shadow-2xs">
+      <div className="flex items-center justify-between mb-2.5 p-2 bg-card/80 backdrop-blur-xs rounded-xl border border-border shadow-2xs">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className={`p-1.5 rounded-lg ${stage.color} text-white shadow-xs shrink-0`}>
+            <Icon className="w-3.5 h-3.5" />
           </div>
-          <p className="text-xs font-bold text-foreground font-amiri">{stageLabel}</p>
+          <p className="text-xs font-bold text-foreground font-amiri truncate">{stageLabel}</p>
         </div>
-        <span className="px-2 py-0.5 rounded-full text-xs font-bold font-mono bg-muted text-foreground border border-border">
+        <span className="px-2 py-0.5 rounded-full text-xs font-bold font-mono bg-muted text-foreground border border-border shrink-0">
           {trips.length}
         </span>
       </div>
 
       <div
         ref={setNodeRef}
-        className={`flex-1 space-y-2.5 p-1 rounded-xl transition-colors ${
+        className={`flex-1 space-y-2.5 p-0.5 rounded-xl transition-colors ${
           isOver ? 'bg-primary/10 ring-2 ring-primary/30 ring-dashed' : 'bg-transparent'
         }`}
         style={{ minHeight: '350px' }}
@@ -122,9 +123,9 @@ function KanbanColumn({ stage, trips, drivers, trucks, trailers, onTripClick, on
         ))}
 
         {trips.length === 0 && (
-          <div className="h-32 flex flex-col items-center justify-center border border-dashed border-border/80 rounded-xl text-center p-4 text-xs text-muted-foreground">
+          <div className="h-28 flex flex-col items-center justify-center border border-dashed border-border/80 rounded-xl text-center p-3 text-xs text-muted-foreground">
             <span>{t('لا توجد رحلات', 'Aucun voyage')}</span>
-            <span className="text-[10px] text-muted-foreground/60 mt-1">{t('اسحب رحلة إلى هنا', 'Glissez un voyage ici')}</span>
+            <span className="text-[10px] text-muted-foreground/60 mt-0.5">{t('اسحب رحلة إلى هنا', 'Glissez un voyage ici')}</span>
           </div>
         )}
       </div>
@@ -156,10 +157,12 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
   const assignedTrailer = trailers.find((tr) => tr.id === trip.trailer_id);
   const stageLabel = locale === 'fr' ? stage.labelFr : stage.labelAr;
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-    zIndex: isDragging ? 1000 : undefined,
-  } : undefined;
+  const style = transform
+    ? {
+        transform: CSS.Translate.toString(transform),
+        zIndex: isDragging ? 1000 : undefined,
+      }
+    : undefined;
 
   return (
     <div
@@ -168,39 +171,39 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
       {...listeners}
       {...attributes}
       onClick={onTripClick}
-      className={`bg-card border border-border/80 rounded-xl p-3.5 shadow-2xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${
-        isDragging ? 'shadow-xl ring-2 ring-primary opacity-90 scale-105' : ''
+      className={`bg-card border border-border/80 rounded-xl p-3 shadow-2xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${
+        isDragging ? 'shadow-xl ring-2 ring-primary opacity-90 scale-105 z-50' : ''
       }`}
     >
-      <div className="space-y-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <span className="text-xs font-bold text-foreground font-amiri line-clamp-1 block">
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-bold text-foreground font-amiri truncate block" title={trip.route_export || trip.route || ''}>
               {trip.route_export || trip.route || (locale === 'fr' ? `Voyage #${trip.id}` : `رحلة #${trip.id}`)}
             </span>
-            <span className="text-[10px] font-mono text-muted-foreground">
+            <span className="text-[10px] font-mono text-muted-foreground truncate block">
               #{trip.id} {trip.cmr_number ? `• CMR: ${trip.cmr_number}` : ''}
             </span>
           </div>
-          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${stage.badgeClass}`}>
+          <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-semibold border shrink-0 ${stage.badgeClass}`}>
             {stageLabel}
           </span>
         </div>
 
-        <div className="space-y-1.5 text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px]">
-              <UserIcon className="w-3 h-3 text-muted-foreground/70" />
+        <div className="space-y-1.5 text-xs text-muted-foreground bg-muted/30 p-2 rounded-lg border border-border/50">
+          <div className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1 text-[11px] shrink-0">
+              <UserIcon className="w-3 h-3 text-muted-foreground/70 shrink-0" />
               {t('السائق:', 'Chauffeur :')}
             </span>
-            <span className="font-semibold text-foreground truncate max-w-[120px]">
+            <span className="font-semibold text-foreground truncate text-end text-[11px] max-w-[105px]">
               {assignedDriver?.name || t('غير مسند', 'Non assigné')}
             </span>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px]">
-              <TruckIcon className="w-3 h-3 text-muted-foreground/70" />
+          <div className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1 text-[11px] shrink-0">
+              <TruckIcon className="w-3 h-3 text-muted-foreground/70 shrink-0" />
               {t('الشاحنة:', 'Camion :')}
             </span>
             <div className="flex items-center gap-1 flex-wrap justify-end">
@@ -215,41 +218,41 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px]">
-              <Calendar className="w-3 h-3 text-muted-foreground/70" />
+          <div className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1 text-[11px] shrink-0">
+              <Calendar className="w-3 h-3 text-muted-foreground/70 shrink-0" />
               {t('الانطلاق:', 'Départ :')}
             </span>
-            <span className="font-mono text-foreground text-[11px]">{trip.departure_date || '—'}</span>
+            <span className="font-mono text-foreground text-[10px] truncate">{trip.departure_date || '—'}</span>
           </div>
 
           <div className="flex items-center justify-between pt-1 border-t border-border/40 font-mono">
-            <span className="text-[11px] text-muted-foreground font-sans">{t('القيمة:', 'Montant :')}</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="text-[10px] text-muted-foreground font-sans">{t('القيمة:', 'Montant :')}</span>
+            <span className="font-bold text-[11px] text-emerald-600 dark:text-emerald-400">
               {(trip.price || 0).toLocaleString()} {trip.price_type || 'MAD'}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between pt-0.5 gap-1">
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 rounded-lg flex items-center gap-1"
+            className="h-6.5 px-2 text-[11px] text-primary hover:text-primary hover:bg-primary/10 rounded-lg flex items-center gap-1"
             onClick={(e) => { e.stopPropagation(); onTripClick(); }}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-3 h-3" />
             <span>{t('التفاصيل', 'Détails')}</span>
           </Button>
 
-          <div className="flex gap-1">
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+          <div className="flex gap-0.5">
+            <Button size="sm" variant="ghost" className="h-6.5 w-6.5 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
               <Edit2 className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" onClick={(e) => { e.stopPropagation(); onPrint(); }}>
+            <Button size="sm" variant="ghost" className="h-6.5 w-6.5 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" onClick={(e) => { e.stopPropagation(); onPrint(); }}>
               <Printer className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10" onClick={(e) => { e.stopPropagation(); onShare(); }}>
+            <Button size="sm" variant="ghost" className="h-6.5 w-6.5 p-0 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10" onClick={(e) => { e.stopPropagation(); onShare(); }}>
               <Share2 className="w-3 h-3" />
             </Button>
           </div>
@@ -478,10 +481,23 @@ export default function TripsHubScreen() {
         <TripsKanbanSkeleton />
       ) : viewMode === 'kanban' ? (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
-            {KANBAN_STAGES.map((stage) => (
-              <KanbanColumn key={stage.id} stage={stage} trips={groupedTrips[stage.id] || []} drivers={drivers} trucks={trucks} trailers={trailers} onTripClick={setSelectedTrip} onEditTrip={(t) => { setEditingTrip(t); setIsFormModalOpen(true); }} onPrintCMR={setActiveCMRTrip} onShare={(t) => shareTrackingWhatsApp(t, clients.find(c => c.id === t.client_id)?.phone)} />
-            ))}
+          <div className="w-full overflow-x-auto pb-6 pt-1 scrollbar-thin scrollbar-thumb-border/80 scrollbar-track-transparent">
+            <div className="grid grid-cols-5 gap-3 w-full min-w-[1020px] 2xl:min-w-0 items-start">
+              {KANBAN_STAGES.map((stage) => (
+                <KanbanColumn
+                  key={stage.id}
+                  stage={stage}
+                  trips={groupedTrips[stage.id] || []}
+                  drivers={drivers}
+                  trucks={trucks}
+                  trailers={trailers}
+                  onTripClick={setSelectedTrip}
+                  onEditTrip={(t) => { setEditingTrip(t); setIsFormModalOpen(true); }}
+                  onPrintCMR={setActiveCMRTrip}
+                  onShare={(t) => shareTrackingWhatsApp(t, clients.find(c => c.id === t.client_id)?.phone)}
+                />
+              ))}
+            </div>
           </div>
         </DndContext>
       ) : (

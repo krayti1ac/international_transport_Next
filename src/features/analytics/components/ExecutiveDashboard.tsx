@@ -22,12 +22,12 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   TrendingUp,
   DollarSign,
   Wallet,
   Receipt,
-  Truck,
   Car,
   Landmark,
   AlertCircle,

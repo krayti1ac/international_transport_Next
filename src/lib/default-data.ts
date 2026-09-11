@@ -829,7 +829,7 @@ export const DEFAULT_INVOICES: Invoice[] = [
 
 export const DEFAULT_USERS: User[] = [
   {
-    id: '00000000-0000-0000-0000-000000000001',
+    id: '2654c12b-47ec-4661-a834-112f24c042bb',
     email: 'admin@transbodanon.com',
     role: 'admin',
     name: 'Admin Trans Bodanon',
@@ -839,17 +839,17 @@ export const DEFAULT_USERS: User[] = [
     preferred_language: 'ar',
   },
   {
-    id: '00000000-0000-0000-0000-000000000002',
+    id: 'f769936c-f853-4ec4-ac85-876913d2b2d0',
     email: 'iman@transbodanon.com',
     role: 'secretary',
     name: 'إيمان',
     created_at: '2025-01-01T08:00:00Z',
     theme_mode: 'light',
     mfa_enabled: false,
-    preferred_language: 'fr',
+    preferred_language: 'ar',
   },
   {
-    id: '00000000-0000-0000-0000-000000000003',
+    id: 'ba5b7597-9ffc-42ec-ba51-92415bbe5a14',
     email: 'hamza@transbodanon.com',
     role: 'driver',
     name: 'حمزة',

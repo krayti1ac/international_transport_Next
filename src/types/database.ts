@@ -19,6 +19,7 @@ export interface Company {
 export interface CompanyDevice {
   id: number;
   company_id: number;
+  user_id?: string | null;
   device_id: string;
   device_name: string;
   device_type: 'desktop' | 'mobile' | 'tablet';
@@ -28,6 +29,7 @@ export interface CompanyDevice {
   is_active: boolean;
   last_active_at: string;
   created_at: string;
+  license_number?: string | null;
 }
 
 export interface User {
@@ -42,6 +44,7 @@ export interface User {
   company_id?: number | null;
   company?: Company;
   avatar_url?: string | null;
+  is_active?: boolean;
 }
 
 export interface Client {
@@ -759,4 +762,56 @@ export interface SelectedPeriod {
   year?: number;
   month?: number | null;
   label: string;
+}
+
+export type ScreenIssueType =
+  | 'validation_error'
+  | 'form_submission_failed'
+  | 'input_format_mismatch'
+  | 'calculation_anomaly'
+  | 'user_reported_issue'
+  | 'db_constraint_rejection';
+
+export type ScreenIssueSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type ScreenIssueStatus = 'open' | 'investigating' | 'resolved' | 'ignored';
+
+export interface SystemScreenIssue {
+  id: string;
+  company_id?: number | null;
+  company_name?: string | null;
+  user_id?: string | null;
+  user_name?: string | null;
+  user_email?: string | null;
+  user_role?: UserRole | string | null;
+  device_id: string;
+  license_number?: string | null;
+  device_type?: 'desktop' | 'mobile' | 'tablet' | string;
+  device_info?: {
+    userAgent?: string;
+    os?: string;
+    browser?: string;
+    screenResolution?: string;
+    language?: string;
+    direction?: string;
+    platform?: string;
+    [key: string]: unknown;
+  } | null;
+  screen_route: string;
+  screen_name: string;
+  component_name?: string | null;
+  issue_type: ScreenIssueType;
+  severity: ScreenIssueSeverity;
+  status: ScreenIssueStatus;
+  error_message: string;
+  error_stack?: string | null;
+  field_name?: string | null;
+  validation_errors?: Record<string, unknown> | null;
+  input_payload?: Record<string, unknown> | null;
+  user_description?: string | null;
+  ai_diagnostic_prompt?: string | null;
+  ai_solution_notes?: string | null;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  created_at: string;
+  updated_at: string;
 }

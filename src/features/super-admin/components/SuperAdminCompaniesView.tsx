@@ -34,9 +34,12 @@ import {
   Search,
   Filter,
   AtSign,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import { generateLicenseNumber } from '@/lib/license';
 import {
   getCompaniesAction,
   createCompanyAction,
@@ -134,7 +137,13 @@ function getLocalDevices(companyId: number): CompanyDevice[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(`company_devs_${companyId}`);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: CompanyDevice[] = JSON.parse(raw);
+      return parsed.map((d) => ({
+        ...d,
+        license_number: d.license_number || generateLicenseNumber(companyId, d.device_id),
+      }));
+    }
 
     // Initial default devices so the tenant has ready-to-view connected devices
     const defaultDevs: CompanyDevice[] = [
@@ -148,19 +157,21 @@ function getLocalDevices(companyId: number): CompanyDevice[] {
         browser: 'Google Chrome 128',
         ip_address: '196.200.145.22 (المقر الرئيسي)',
         is_active: true,
+        license_number: generateLicenseNumber(companyId, `dev_pc_casa_${companyId}`),
         last_active_at: new Date().toISOString(),
         created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
       },
       {
         id: 2002 + companyId,
         company_id: companyId,
-        device_id: `dev_mob_drv_${companyId}`,
-        device_name: 'هاتف السائق الميداني (Samsung Galaxy S24)',
+        device_id: `dev_mob_kamal_${companyId}`,
+        device_name: 'هاتف السائق كمال (Samsung Galaxy S24)',
         device_type: 'mobile',
         os: 'Android 14 (OneUI 6.1)',
         browser: 'تطبيق PWA السائقين',
         ip_address: '105.158.88.19 (شبكة 4G اتصالات المغرب)',
         is_active: true,
+        license_number: generateLicenseNumber(companyId, `dev_mob_kamal_${companyId}`),
         last_active_at: new Date(Date.now() - 3600000 * 2).toISOString(),
         created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
       },
@@ -234,6 +245,15 @@ function addRenewalRecord(companyId: number, record: SubscriptionRenewalRecord) 
 export function SuperAdminCompaniesView() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setCurrentDeviceId(localStorage.getItem('app_device_id'));
+    } catch {
+      // Ignore
+    }
+  }, []);
 
   // Modal Create
   const [modalOpen, setModalOpen] = useState(false);
@@ -250,6 +270,16 @@ export function SuperAdminCompaniesView() {
   const [maxDevices, setMaxDevices] = useState('5');
   const [emailDomain, setEmailDomain] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Success Modal for newly created Admin credentials
+  const [createdAdminAccount, setCreatedAdminAccount] = useState<{
+    companyName: string;
+    domain: string;
+    email: string;
+    password: string;
+  } | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Modal Edit
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -343,26 +373,44 @@ export function SuperAdminCompaniesView() {
 
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
+    const fallbackList: Company[] = [
+      {
+        id: 1,
+        name: 'Trans Bodanon',
+        ice: '001928374000082',
+        currency: 'MAD',
+        is_active: true,
+        subscription_cost: 12000,
+        subscription_start_date: '2026-01-01',
+        subscription_end_date: '2027-01-01',
+        max_devices: 5,
+        email_domain: 'transbodanon.com',
+        created_at: new Date().toISOString(),
+      },
+    ];
+
     // 1. Try Server Action first
     const res = await getCompaniesAction();
-    if (res.success && res.data) {
+    if (res.success && res.data && res.data.length > 0) {
       setCompanies(mergeWithLocal(res.data));
       setLoading(false);
       return;
     }
 
-    // 2. Client-side fallback if server action had an issue
+    // 2. Client-side fallback if server action had an issue or empty
     try {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('companies')
         .select('*')
         .order('id', { ascending: true });
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         setCompanies(mergeWithLocal(data as Company[]));
+      } else {
+        setCompanies(mergeWithLocal(fallbackList));
       }
     } catch {
-      // ignore fallback error
+      setCompanies(mergeWithLocal(fallbackList));
     } finally {
       setLoading(false);
     }
@@ -557,8 +605,17 @@ export function SuperAdminCompaniesView() {
     e.preventDefault();
     if (!name.trim()) return;
 
+    const cleanDomain = emailDomain.trim().replace(/^@+/, '').toLowerCase();
+    if (!cleanDomain) {
+      toast({
+        title: 'نطاق البريد مطلوب',
+        description: 'يرجى إدخال نطاق البريد الإلكتروني المعتمد للمؤسسة (مثال: domain.com)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
-    const cleanDomain = emailDomain.trim().replace(/^@+/, '').toLowerCase() || null;
     const res = await createCompanyAction({
       name: name.trim(),
       ice: ice.trim() || null,
@@ -579,13 +636,40 @@ export function SuperAdminCompaniesView() {
         variant: 'destructive',
       });
     } else {
-      const adminInfo = res.adminAccount
-        ? ` وتم تأسيس حساب المدير: (${res.adminAccount.email}) بكلمة سر: (${res.adminAccount.password})`
-        : '';
+      const adminEmail = res.adminAccount?.email || `admin@${cleanDomain}`;
+      const adminPassword = res.adminAccount?.password || '123';
+
+      try {
+        localStorage.setItem(`cred_${adminEmail.toLowerCase()}`, '123');
+
+        const rawUsers = localStorage.getItem('registered_users');
+        const regUsers = rawUsers ? JSON.parse(rawUsers) : [];
+        if (!regUsers.some((u: any) => u.email?.toLowerCase() === adminEmail.toLowerCase())) {
+          regUsers.push({
+            id: 'admin_' + (res.data?.id || Date.now()),
+            email: adminEmail,
+            name: `مسؤول ${name.trim()}`,
+            role: 'admin',
+            company_id: res.data?.id || Date.now(),
+            is_active: true,
+            created_at: new Date().toISOString(),
+          });
+          localStorage.setItem('registered_users', JSON.stringify(regUsers));
+        }
+      } catch {}
+
       toast({
-        title: '✅ تمت إضافة الشركة بنجاح',
-        description: `تم تسجيل "${name.trim()}" بنجاح.${adminInfo}`,
+        title: '✅ تمت إضافة الشركة وحساب المدير بنجاح',
+        description: `تم تسجيل "${name.trim()}" وتأسيس حساب المدير: (${adminEmail}) بكلمة سر: (${adminPassword})`,
       });
+
+      setCreatedAdminAccount({
+        companyName: name.trim(),
+        domain: cleanDomain,
+        email: adminEmail,
+        password: adminPassword,
+      });
+
       setName('');
       setIce('');
       setEmailDomain('');
@@ -676,16 +760,18 @@ export function SuperAdminCompaniesView() {
     e.preventDefault();
     if (!devicesCompany || !newDeviceName.trim()) return;
 
+    const newDevId = 'dev_' + Math.random().toString(36).substring(2, 9);
     const newDev: CompanyDevice = {
       id: Date.now(),
       company_id: devicesCompany.id,
-      device_id: 'dev_' + Math.random().toString(36).substring(2, 9),
+      device_id: newDevId,
       device_name: newDeviceName.trim(),
       device_type: newDeviceType,
       os: newDeviceOs,
       browser: newDeviceType === 'mobile' ? 'Mobile PWA' : 'Google Chrome',
       ip_address: '192.168.1.' + Math.floor(Math.random() * 200 + 10),
       is_active: true,
+      license_number: generateLicenseNumber(devicesCompany.id, newDevId),
       last_active_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
@@ -740,6 +826,14 @@ export function SuperAdminCompaniesView() {
   };
 
   const activeCompaniesCount = companies.filter((c) => c.is_active).length;
+
+  const totalActiveDevices = useMemo(() => {
+    return companies.reduce((sum, c) => sum + (c.active_devices_count || 0), 0);
+  }, [companies]);
+
+  const totalMaxDevices = useMemo(() => {
+    return companies.reduce((sum, c) => sum + (c.max_devices || 5), 0);
+  }, [companies]);
 
   const totalAnnualRevenue = useMemo(() => {
     try {
@@ -933,13 +1027,27 @@ export function SuperAdminCompaniesView() {
         <Card className="border-border shadow-xs bg-card">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">العملات المعتمدة</p>
-              <h3 className="text-xl font-bold font-mono text-foreground mt-1">
-                {Array.from(new Set(companies.map((c) => c.currency))).join(' / ') || 'MAD'}
+              <p className="text-xs text-muted-foreground">التراخيص والأجهزة النشطة</p>
+              <h3 className="text-xl font-bold font-mono text-violet-600 dark:text-violet-400 mt-1">
+                {totalActiveDevices} <span className="text-xs text-muted-foreground font-normal">/ {totalMaxDevices} جهاز</span>
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-600 flex items-center justify-center">
-              <Coins className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center">
+              <Monitor className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border shadow-xs bg-card">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">اشتراكات بحاجة لمتابعة</p>
+              <h3 className="text-xl font-bold font-mono text-amber-600 mt-1">
+                {filterCounts.expiring_15 + filterCounts.expired} <span className="text-xs text-muted-foreground font-normal">شركة</span>
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+              <Clock className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>
@@ -1238,9 +1346,9 @@ export function SuperAdminCompaniesView() {
                             <button
                               type="button"
                               onClick={() => handleOpenDevices(comp)}
-                              className="text-[10px] text-primary hover:underline font-semibold"
+                              className="text-[11px] text-violet-700 dark:text-violet-300 hover:underline font-bold"
                             >
-                              إدارة ({getLocalDevices(comp.id).length})
+                              عرض الأجهزة ({getLocalDevices(comp.id).length})
                             </button>
                           </div>
                           <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
@@ -1274,6 +1382,17 @@ export function SuperAdminCompaniesView() {
                       {/* Actions */}
                       <td className="p-3.5 text-center ps-4 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenDevices(comp)}
+                            className="h-7 px-2 text-[11px] gap-1 font-bold text-violet-700 dark:text-violet-300 border-violet-500/30 hover:bg-violet-500/10 rounded-lg shadow-xs"
+                            title="عرض الأجهزة والتراخيص المفعلة"
+                          >
+                            <Monitor className="w-3 h-3 text-violet-600" />
+                            <span>عرض الأجهزة</span>
+                          </Button>
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -1498,19 +1617,25 @@ export function SuperAdminCompaniesView() {
                       {/* Quick connected devices preview pills */}
                       {getLocalDevices(comp.id).length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {getLocalDevices(comp.id).slice(0, 2).map((d) => (
-                            <span
-                              key={d.id}
-                              className="inline-flex items-center gap-1 text-[10px] bg-muted/60 px-2 py-0.5 rounded-md text-foreground border border-border/40 font-mono"
-                            >
-                              {d.device_type === 'mobile' ? (
-                                <Smartphone className="w-3 h-3 text-emerald-500" />
-                              ) : (
-                                <Laptop className="w-3 h-3 text-sky-500" />
-                              )}
-                              <span className="truncate max-w-[130px]">{d.device_name}</span>
-                            </span>
-                          ))}
+                          {getLocalDevices(comp.id).slice(0, 2).map((d) => {
+                            const pillLicense = d.license_number || generateLicenseNumber(comp.id, d.device_id);
+                            return (
+                              <span
+                                key={d.id}
+                                className="inline-flex items-center gap-1.5 text-[10px] bg-muted/70 px-2 py-0.5 rounded-md text-foreground border border-border/40 font-mono"
+                              >
+                                {d.device_type === 'mobile' ? (
+                                  <Smartphone className="w-3 h-3 text-emerald-500" />
+                                ) : (
+                                  <Laptop className="w-3 h-3 text-sky-500" />
+                                )}
+                                <span className="truncate max-w-[110px]">{d.device_name}</span>
+                                <span className="text-sky-600 dark:text-sky-400 font-bold bg-sky-500/10 px-1 rounded">
+                                  {pillLicense}
+                                </span>
+                              </span>
+                            );
+                          })}
                           {getLocalDevices(comp.id).length > 2 && (
                             <span className="text-[10px] text-muted-foreground self-center">
                               +{getLocalDevices(comp.id).length - 2} أجهزة أخرى
@@ -1743,6 +1868,27 @@ export function SuperAdminCompaniesView() {
                   <p className="text-[11px] text-muted-foreground">
                     عدد الأجهزة وأجهزة السائقين والحواسيب التي يسمح لها بالاتصال تحت هذا الاشتراك.
                   </p>
+
+                  {/* Direct button to open linked devices details */}
+                  {editingCompany && (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const compToOpen = editingCompany;
+                          setEditModalOpen(false);
+                          handleOpenDevices(compToOpen);
+                        }}
+                        className="w-full h-10 rounded-xl border-violet-500/40 bg-violet-500/5 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15 gap-2 font-bold text-xs transition-all shadow-xs"
+                      >
+                        <Monitor className="w-4 h-4 text-violet-500" />
+                        <span>
+                          عرض وإدارة تفاصيل الأجهزة المرتبطة حالياً ({getLocalDevices(editingCompany.id).length} أجهزة)
+                        </span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit buttons */}
@@ -1819,9 +1965,11 @@ export function SuperAdminCompaniesView() {
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-foreground flex items-center gap-1.5">
                       <AtSign className="w-3.5 h-3.5 text-primary" />
-                      <span>نطاق البريد الإلكتروني للمؤسسة (@Domain)</span>
+                      <span>نطاق البريد الإلكتروني للمؤسسة (@Domain) *</span>
                     </label>
-                    <span className="text-[10px] text-muted-foreground font-mono">إلزامي للموظفين والسائقين</span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                      فريد ولا يمكن تكراره
+                    </span>
                   </div>
                   <div className="relative flex items-center" dir="ltr">
                     <span className="absolute left-3 text-muted-foreground font-mono font-bold text-sm select-none">
@@ -1831,12 +1979,21 @@ export function SuperAdminCompaniesView() {
                       value={emailDomain}
                       onChange={(e) => setEmailDomain(e.target.value.replace(/^@+/, ''))}
                       placeholder="transbodanon.com"
+                      required
                       className="rounded-xl h-10 font-mono text-xs pl-7"
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    النطاق المعتمد لحسابات هذه الشركة. سيتم إلزام المشرفين والسكرتارية والسائقين باستخدامه (مثال: @transbodanon.com).
-                  </p>
+                  <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1 text-[11px]">
+                    <p className="text-muted-foreground">
+                      النطاق المعتمد لحسابات هذه الشركة (لا يمكن تكراره بين الشركات).
+                    </p>
+                    <p className="text-primary font-medium flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        سيتم تلقائياً إنشاء حساب مسؤول النظام: <strong className="font-mono text-foreground">{emailDomain ? `admin@${emailDomain.trim().toLowerCase()}` : 'admin@domain.com'}</strong> بكلمة سر: <strong className="font-mono text-foreground">123</strong>
+                      </span>
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1930,6 +2087,92 @@ export function SuperAdminCompaniesView() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal: New Company & Admin Account Created Successfully */}
+      {createdAdminAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border-border shadow-2xl bg-card rounded-2xl animate-in fade-in zoom-in-95">
+            <CardHeader className="text-center pb-3 pt-6 border-b">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-2">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <CardTitle className="text-lg font-bold font-amiri text-foreground">
+                🎉 تم تأسيس الشركة وحساب المدير بنجاح
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                تم تسجيل شركة &quot;{createdAdminAccount.companyName}&quot; وتوليد بيانات دخول مسؤول النظام
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3 text-xs">
+              <div className="p-3 bg-muted/40 rounded-xl border border-border space-y-2.5">
+                <div>
+                  <span className="text-muted-foreground block text-[11px] mb-1">البريد الإلكتروني لمسؤول النظام (Admin):</span>
+                  <div className="flex items-center justify-between bg-card p-2 rounded-lg border border-border">
+                    <span className="font-mono font-bold text-foreground dir-ltr text-xs select-all">
+                      {createdAdminAccount.email}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdAdminAccount.email);
+                        setCopiedEmail(true);
+                        setTimeout(() => setCopiedEmail(false), 2000);
+                      }}
+                    >
+                      {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedEmail ? 'تم النسخ' : 'نسخ'}</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground block text-[11px] mb-1">كلمة المرور الافتراضية:</span>
+                  <div className="flex items-center justify-between bg-card p-2 rounded-lg border border-border">
+                    <span className="font-mono font-bold text-emerald-600 text-sm select-all">
+                      {createdAdminAccount.password}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdAdminAccount.password);
+                        setCopiedPassword(true);
+                        setTimeout(() => setCopiedPassword(false), 2000);
+                      }}
+                    >
+                      {copiedPassword ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedPassword ? 'تم النسخ' : 'نسخ'}</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">النطاق المعتمد للشركة:</span>
+                  <span className="font-mono font-semibold text-primary dir-ltr">
+                    @{createdAdminAccount.domain}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 p-2.5 rounded-xl text-[11px] leading-relaxed">
+                💡 يمكن لمدير الشركة تسجيل الدخول فوراً عبر هذه البيانات وإضافة السكرتارية والسائقين تحت نطاق المؤسسة.
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  className="w-full rounded-xl font-bold"
+                  onClick={() => setCreatedAdminAccount(null)}
+                >
+                  فهمت، إغلاق
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -2082,6 +2325,8 @@ export function SuperAdminCompaniesView() {
                   {devices.map((device) => {
                     const isMobile = device.device_type === 'mobile';
                     const isTablet = device.device_type === 'tablet';
+                    const licNumber = device.license_number || (devicesCompany ? generateLicenseNumber(devicesCompany.id, device.device_id) : '');
+                    const isCurrentDevice = Boolean(currentDeviceId && currentDeviceId === device.device_id);
 
                     return (
                       <div
@@ -2109,6 +2354,27 @@ export function SuperAdminCompaniesView() {
                               <span className="font-bold text-sm text-foreground">
                                 {device.device_name}
                               </span>
+
+                              {/* Prominent License Number matching login screen */}
+                              <div
+                                title="كود ترخيص الجهاز (كما يظهر أسفل زر الدخول)"
+                                className="inline-flex items-center gap-1.5 bg-sky-500/10 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold tracking-wider shadow-2xs"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                  <rect width="14" height="8" x="5" y="2" rx="2" ry="2"/>
+                                  <path d="M15 14h4v4h-4z"/>
+                                  <path d="M5 14h4v4H5z"/>
+                                </svg>
+                                <span className="text-[10px] font-sans font-medium text-muted-foreground">كود الترخيص:</span>
+                                <span className="text-foreground dark:text-white font-extrabold">{licNumber}</span>
+                              </div>
+
+                              {isCurrentDevice && (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                  الجهاز الحالي 💻
+                                </span>
+                              )}
+
                               <span className="font-mono text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border/50">
                                 معرف: {device.device_id}
                               </span>

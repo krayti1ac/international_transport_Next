@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   Building, Phone, MapPin, Mail, FileText,
-  Truck, Calculator, Receipt, Landmark, RefreshCw
+  Calculator, Receipt, Landmark, RefreshCw
 } from 'lucide-react';
 import type { Client, Invoice, TripOrder } from '@/types/database';
 import { useLanguage } from '@/components/language-provider';

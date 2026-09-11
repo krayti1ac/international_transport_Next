@@ -3,10 +3,10 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/forex';
 import type { ExecutiveKpiSummary } from '../services/executive-metrics.actions';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   TrendingUp,
   DollarSign,
-  Truck,
   AlertOctagon,
   Gauge,
   CheckCircle2,

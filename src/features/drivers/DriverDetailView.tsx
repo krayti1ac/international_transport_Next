@@ -9,12 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { PaySalaryDialog } from '@/components/payroll/PaySalaryDialog';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import {
     ArrowRight,
     User,
     Phone,
     ShieldCheck,
-    Truck as TruckIcon,
     Container,
     CreditCard,
     Wallet,

@@ -1,7 +1,7 @@
 import type { SidebarGroup } from '@/components/sidebar';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   LayoutDashboard,
-  Truck,
   MapPin,
   Users,
   FileText,
@@ -16,6 +16,7 @@ import {
   Fuel,
   ClipboardList,
   AlertTriangle,
+  Bug,
   ShieldCheck,
   BarChart3,
   Globe,
@@ -31,15 +32,23 @@ export const navigationGroups: SidebarGroup[] = [
     labelEs: 'Superadministrador',
     icon: <Building2 className="w-4 h-4" />,
     defaultOpen: true,
-    roles: ['super_admin'],
+    roles: ['super_admin', 'admin'],
     items: [
       {
-        title: 'إدارة الشركات',
-        titleFr: 'Gestion des entreprises',
-        titleEs: 'Gestión de empresas',
+        title: 'إدارة الشركات والاشتراكات',
+        titleFr: 'Gestion des entreprises & abonnements',
+        titleEs: 'Gestión de empresas y suscripciones',
         href: '/super-admin/companies',
         icon: <Building2 className="w-4 h-4" />,
-        roles: ['super_admin'],
+        roles: ['super_admin', 'admin'],
+      },
+      {
+        title: 'تتبع مشاكل الإدخال والشاشات',
+        titleFr: 'Suivi des anomalies & saisie',
+        titleEs: 'Seguimiento de problemas y pantallas',
+        href: '/super-admin/screen-issues',
+        icon: <Bug className="w-4 h-4 text-amber-500" />,
+        roles: ['super_admin', 'admin'],
       },
     ],
   },
@@ -136,7 +145,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Vales de reparación',
         href: '/fuel-receipt',
         icon: <FileText className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
+        roles: ['admin'],
       },
       {
         title: 'نفقات العبّارات',
@@ -188,7 +197,7 @@ export const navigationGroups: SidebarGroup[] = [
     labelFr: 'Finance & Facturation',
     labelEs: 'Finanzas y Facturación',
     icon: <DollarSign className="w-4 h-4" />,
-    roles: ['admin', 'secretary'],
+    roles: ['admin', 'secretary', 'driver'],
     items: [
       {
         title: 'الفواتير',
@@ -220,6 +229,22 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Cambio de divisas',
         href: '/forex',
         icon: <Globe className="w-4 h-4" />,
+        roles: ['admin', 'secretary'],
+      },
+      {
+        title: 'طلبات السلف العاجلة',
+        titleFr: 'Demandes avance',
+        titleEs: 'Solicitudes de anticipo urgente',
+        href: '/emergency-advance-requests',
+        icon: <AlertTriangle className="w-4 h-4" />,
+        roles: ['admin', 'secretary', 'driver'],
+      },
+      {
+        title: 'تسويات السائق',
+        titleFr: 'Règlements',
+        titleEs: 'Liquidaciones del conductor',
+        href: '/driver-settlements',
+        icon: <Calculator className="w-4 h-4" />,
         roles: ['admin', 'secretary'],
       },
     ],
@@ -357,7 +382,7 @@ export const navigationGroups: SidebarGroup[] = [
     labelEs: 'Conductor',
     icon: <ClipboardList className="w-4 h-4" />,
     defaultOpen: true,
-    roles: ['driver', 'admin', 'secretary'],
+    roles: ['driver'],
     items: [
       {
         title: 'مهام السائق',
@@ -391,22 +416,6 @@ export const navigationGroups: SidebarGroup[] = [
         icon: <FileText className="w-4 h-4" />,
         roles: ['driver'],
       },
-      {
-        title: 'طلبات السلف العاجلة',
-        titleFr: 'Demandes avance',
-        titleEs: 'Solicitudes de anticipo urgente',
-        href: '/emergency-advance-requests',
-        icon: <AlertTriangle className="w-4 h-4" />,
-        roles: ['driver', 'admin', 'secretary'],
-      },
-      {
-        title: 'تسويات السائق',
-        titleFr: 'Règlements',
-        titleEs: 'Liquidaciones del conductor',
-        href: '/driver-settlements',
-        icon: <Calculator className="w-4 h-4" />,
-        roles: ['admin', 'secretary'],
-      },
     ],
   },
   {
@@ -415,7 +424,7 @@ export const navigationGroups: SidebarGroup[] = [
     labelFr: 'Paramètres',
     labelEs: 'Configuración',
     icon: <Settings className="w-4 h-4" />,
-    roles: ['admin'],
+    roles: ['admin', 'secretary'],
     items: [
       {
         title: 'إعدادات النظام',
@@ -431,7 +440,7 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Usuarios y permisos',
         href: '/users',
         icon: <Users className="w-4 h-4" />,
-        roles: ['admin'],
+        roles: ['admin', 'secretary'],
       },
       {
         title: 'سجل التدقيق',

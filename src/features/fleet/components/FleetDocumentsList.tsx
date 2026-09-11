@@ -6,18 +6,20 @@ import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   FileText,
   Search,
-  RefreshCw,
   Clock,
   Eye,
+  Download,
+  CheckCircle2,
+  RefreshCw,
   Archive,
   ArchiveRestore,
   Trash2,
   Calendar,
   DollarSign,
-  Truck,
   ExternalLink,
   ShieldCheck,
   AlertTriangle,

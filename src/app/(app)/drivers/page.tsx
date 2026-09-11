@@ -8,13 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import {
   Plus,
   Search,
   User,
   Users,
   UserCheck,
-  Truck as TruckIcon,
   Phone,
   ShieldCheck,
   AlertTriangle,

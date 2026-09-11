@@ -10,6 +10,7 @@ import { X, Save, FileText } from 'lucide-react';
 import type { Invoice, Client, TripOrder } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_TRIPS, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
+import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -37,6 +38,11 @@ export function InvoiceFormModal({
   const [loading, setLoading] = useState(false);
   const [systemTvaRate, setSystemTvaRate] = useState<string>('20');
   const supabase = useMemo(() => createClient(), []);
+  const { reportValidation, reportSubmissionError, reportCalculationAnomaly } = useAutoIssueReporter({
+    screenName: 'إنشاء وتعديل الفواتير',
+    screenRoute: '/invoices',
+    componentName: 'InvoiceFormModal',
+  });
 
   const [formData, setFormData] = useState<Partial<Invoice>>(
     initialData || {
@@ -96,19 +102,28 @@ export function InvoiceFormModal({
 
   // Recalculate TVA and TTC with strict Decimal.js
   const handleHTChange = (htVal: string, tvaRateVal: string) => {
-    const ht = new Decimal(htVal || 0);
-    const rate = new Decimal(tvaRateVal || 0);
-    const tva = ht.times(rate).dividedBy(100);
-    const ttc = ht.plus(tva);
+    try {
+      const ht = new Decimal(htVal || 0);
+      const rate = new Decimal(tvaRateVal || 0);
+      const tva = ht.times(rate).dividedBy(100);
+      const ttc = ht.plus(tva);
 
-    setFormData((prev) => ({
-      ...prev,
-      ht_amount: htVal,
-      tva_rate: tvaRateVal,
-      tva_amount: tva.toFixed(2),
-      ttc_amount: ttc.toFixed(2),
-      total_amount: ttc.toFixed(2),
-    }));
+      setFormData((prev) => ({
+        ...prev,
+        ht_amount: htVal,
+        tva_rate: tvaRateVal,
+        tva_amount: tva.toFixed(2),
+        ttc_amount: ttc.toFixed(2),
+        total_amount: ttc.toFixed(2),
+      }));
+    } catch {
+      reportCalculationAnomaly({
+        formula: 'HT + (HT * TVA / 100)',
+        inputs: { htVal, tvaRateVal },
+        calculatedResult: 'Error',
+        expectedResult: 'Valid Decimal TTC',
+      });
+    }
   };
 
   const handleClientChange = (clientIdStr: string) => {
@@ -161,10 +176,63 @@ export function InvoiceFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.client_id) {
+      reportValidation({
+        fieldName: 'client_id',
+        rejectedValue: formData.client_id,
+        validationRule: 'العميل حقل إلزامي لإنشاء الفاتورة',
+        errorMessage: 'يرجى اختيار العميل قبل حفظ الفاتورة',
+        formData,
+      });
+      return;
+    }
+
+    if (!formData.invoice_number) {
+      reportValidation({
+        fieldName: 'invoice_number',
+        rejectedValue: formData.invoice_number,
+        validationRule: 'رقم الفاتورة إلزامي',
+        errorMessage: 'يرجى تحديد أو توليد رقم الفاتورة',
+        formData,
+      });
+      return;
+    }
+
+    try {
+      const totalDec = new Decimal(formData.total_amount || '0');
+      if (totalDec.lessThanOrEqualTo(0) || !totalDec.isFinite()) {
+        reportValidation({
+          fieldName: 'total_amount',
+          rejectedValue: formData.total_amount,
+          validationRule: 'المبلغ الإجمالي يجب أن يكون رقماً موجباً أكبر من 0',
+          errorMessage: 'إجمالي الفاتورة يجب أن يكون رقماً موجباً أكبر من الصفر',
+          formData,
+        });
+        return;
+      }
+    } catch {
+      reportValidation({
+        fieldName: 'total_amount',
+        rejectedValue: formData.total_amount,
+        validationRule: 'المبلغ الإجمالي غير صالح',
+        errorMessage: 'صيغة إجمالي الفاتورة غير صالحة حسابياً',
+        formData,
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       await onSave(formData);
       onClose();
+    } catch (error: unknown) {
+      reportSubmissionError({
+        operationName: 'حفظ الفاتورة (InvoiceFormModal: onSave)',
+        error,
+        formData,
+      });
+      throw error;
     } finally {
       setLoading(false);
     }

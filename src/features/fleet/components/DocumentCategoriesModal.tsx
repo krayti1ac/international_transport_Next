@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   FolderCog,
   Plus,
+  FolderPlus,
   Edit2,
   Trash2,
   Check,
@@ -19,7 +21,6 @@ import {
   FileText,
   Search,
   RefreshCw,
-  Truck,
   Layers,
   Lock,
 } from 'lucide-react';

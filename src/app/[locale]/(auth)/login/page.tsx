@@ -20,15 +20,19 @@ import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageToggle } from '@/components/language-toggle';
 import { useLanguage } from '@/components/language-provider';
-import { Truck, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
+import { getOrCreateDeviceId, generateLicenseNumber } from '@/lib/license';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Forgot password modal state
@@ -44,12 +48,31 @@ export default function LoginPage() {
   const locale = pathname.split('/')[1] || 'ar';
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('deactivated') === 'true') {
+        toast({
+          title: locale === 'ar' ? 'حساب معطل' : t('common.error'),
+          description: 'تم تعطيل هذا الحساب من قِبل الإدارة، يرجى مراجعة المسؤول',
+          variant: 'destructive',
+        });
+      }
+    }
+
     const savedEmail = localStorage.getItem('saved_login_email');
     if (savedEmail) {
       setEmail(savedEmail);
       setRememberMe(true);
+      const savedLicense = localStorage.getItem(`device_license_${savedEmail}`);
+      if (savedLicense) {
+        setLicenseNumber(savedLicense);
+      }
+    } else {
+      const deviceId = getOrCreateDeviceId();
+      const generatedLicense = generateLicenseNumber(1, deviceId);
+      setLicenseNumber(generatedLicense);
     }
-  }, []);
+  }, [locale, t, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +84,7 @@ export default function LoginPage() {
       localStorage.removeItem('saved_login_email');
     }
 
-    const { role, error } = await signIn(email, password);
+    const { role, error } = await signIn(email, password, licenseNumber);
     if (error) {
       toast({
         title: t('common.error'),
@@ -71,7 +94,7 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       const targetRoute = role ? ROLE_DEFAULT_REDIRECT[role] : '/dashboard';
-      router.push(`/${locale}${targetRoute}`);
+      window.location.href = targetRoute;
     }
   };
 
@@ -90,7 +113,7 @@ export default function LoginPage() {
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/${locale}/login`,
+        redirectTo: `${window.location.origin}/login`,
       });
 
       if (error) {
@@ -120,9 +143,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-200 dark:from-[#070a12] dark:via-blue-950/20 dark:to-[#090d16] relative transition-colors" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <div className={`absolute top-4 ${locale === 'ar' ? 'left-4' : 'right-4'} flex items-center gap-2 z-10`}>
-        <LanguageToggle userKey={email.trim() || undefined} />
+        <LanguageToggle />
         <ThemeToggle />
       </div>
+
+      {/* PWA install prompt for unauthenticated users */}
+      <PwaInstallPrompt />
 
       <Card className="w-full max-w-md shadow-2xl border-border/80 dark:border-slate-800/80 bg-card/95 dark:bg-[#0c1322]/95 backdrop-blur-md rounded-2xl sm:rounded-3xl overflow-hidden">
         <CardHeader className="space-y-2 text-center pb-3 pt-6">
@@ -181,50 +207,60 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Options Row: Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between text-xs sm:text-sm pt-1">
-              <label className="flex items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-input bg-card accent-sky-500 h-4 w-4 cursor-pointer"
-                />
-                <span>{locale === 'ar' ? 'تذكرني' : 'Remember me'}</span>
-              </label>
+              {/* Options Row: Remember Me & Forgot Password */}
+             <div className="flex items-center justify-between text-xs sm:text-sm pt-1">
+               <label className="flex items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                 <input
+                   type="checkbox"
+                   checked={rememberMe}
+                   onChange={(e) => setRememberMe(e.target.checked)}
+                   className="rounded border-input bg-card accent-sky-500 h-4 w-4 cursor-pointer"
+                 />
+                 <span>{locale === 'ar' ? 'تذكرني' : 'Remember me'}</span>
+               </label>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setResetEmail(email);
-                  setShowForgotDialog(true);
-                }}
-                className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-medium hover:underline transition-colors focus:outline-none"
-              >
-                {t('auth.forgotPassword')}
-              </button>
+               <button
+                 type="button"
+                 onClick={() => {
+                   setResetEmail(email);
+                   setShowForgotDialog(true);
+                 }}
+                 className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-medium hover:underline transition-colors focus:outline-none"
+               >
+                 {t('auth.forgotPassword')}
+               </button>
+             </div>
+
+             {/* Submit Button */}
+             <Button
+               type="submit"
+               className="w-full h-11 text-base font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md shadow-sky-500/20 rounded-xl transition-all active:scale-[0.99] mt-2"
+               disabled={loading}
+             >
+               {loading ? (
+                 <div className="flex items-center justify-center gap-2">
+                   <Loader2 className="w-5 h-5 animate-spin" />
+                   <span>{t('common.loading')}</span>
+                 </div>
+               ) : (
+                 t('auth.login')
+               )}
+             </Button>
+
+            {/* Device License Number - bottom small hint */}
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-muted-foreground">
+                <rect width="14" height="8" x="5" y="2" rx="2" ry="2"/>
+                <path d="M15 14h4v4h-4z"/>
+                <path d="M5 14h4v4H5z"/>
+              </svg>
+              <span className="text-[11px] text-muted-foreground/80 font-mono tracking-wide">{licenseNumber}</span>
             </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full h-11 text-base font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md shadow-sky-500/20 rounded-xl transition-all active:scale-[0.99] mt-2"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{t('common.loading')}</span>
-                </div>
-              ) : (
-                t('auth.login')
-              )}
-            </Button>
-
-            {/* Register Link */}
+             {/* Register Link */}
             <div className="text-center text-xs sm:text-sm text-muted-foreground pt-3 border-t border-border/40">
               {locale === 'ar' ? 'ليس لديك حساب؟ ' : "Don't have an account? "}
-              <Link href={`/${locale}/signup`} className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-semibold hover:underline mr-1">
+               <Link href="/signup" className="text-sky-500 hover:text-sky-400 dark:text-sky-400 dark:hover:text-sky-300 font-semibold hover:underline mr-1">
                 {locale === 'ar' ? 'إنشاء حساب جديد' : t('auth.signup')}
               </Link>
             </div>

@@ -9,15 +9,18 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Truck, User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 
 export default function SignUpPage() {
   const { t, dir } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
   const router = useRouter();
@@ -25,19 +28,38 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (password !== confirmPassword) {
+      toast({
+        title: t('خطأ في كلمة المرور', 'Erreur de mot de passe'),
+        description: t('كلمة المرور وتأكيدها غير متطابقين، يرجى إعادة التحقق', 'Les mots de passe ne correspondent pas'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: t('كلمة المرور قصيرة', 'Mot de passe trop court'),
+        description: t('كلمة المرور يجب أن لا تقل عن 6 أحرف', 'Le mot de passe doit comporter au moins 6 caractères'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
-    const { error } = await signUp(email, password, name);
+    const { error } = await signUp(email, password, name, confirmPassword);
     if (error) {
       toast({
-        title: t('خطأ في إنشاء الحساب', 'Erreur de création de compte'),
+        title: t('تنبيه التسجيل', 'Alerte inscription'),
         description: error,
         variant: 'destructive',
       });
     } else {
       toast({
-        title: t('تم إنشاء الحساب بنجاح', 'Compte créé avec succès'),
-        description: t('يمكنك الآن تسجيل الدخول', 'Vous pouvez maintenant vous connecter'),
+        title: t('تم إنشاء الحساب وترخيص الهاتف بنجاح', 'Compte et appareil enregistrés avec succès'),
+        description: t('تم ربط حساب السائق وترخيص هاتفه بالمنظومة. يمكنك الآن تسجيل الدخول', 'Le compte chauffeur et son smartphone sont enregistrés.'),
       });
       router.push('/login');
     }
@@ -55,11 +77,11 @@ export default function SignUpPage() {
           <div className="mx-auto w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/25 text-sky-400 flex items-center justify-center shadow-lg shadow-sky-500/10 mb-1">
             <Truck className="w-7 h-7" />
           </div>
-          <CardTitle className="text-2xl font-bold font-amiri text-foreground tracking-wide">{t('إنشاء حساب جديد', 'Créer un compte')}</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">{t('أدخل بياناتك للانضمام إلى النظام', 'Entrez vos informations pour accéder à la plateforme')}</CardDescription>
+          <CardTitle className="text-2xl font-bold font-amiri text-foreground tracking-wide">{t('إنشاء حساب جديد (سائق)', 'Créer un compte (Chauffeur)')}</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">{t('أدخل بياناتك للانضمام إلى أسطول النقل الدولي', 'Rejoignez la flotte de transport international')}</CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 pt-2">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Name Field */}
             <div className="space-y-1.5 text-start">
               <label className="text-sm font-semibold text-foreground/90">{t('الاسم الكامل', 'Nom complet')}</label>
@@ -68,7 +90,7 @@ export default function SignUpPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Mohamed Ahmed"
+                  placeholder="كمال (Kamal)"
                   required
                   className={`${dir === 'rtl' ? 'pr-10 pl-3' : 'pl-10 pr-3'} h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500`}
                 />
@@ -78,13 +100,13 @@ export default function SignUpPage() {
 
             {/* Email Field */}
             <div className="space-y-1.5 text-start">
-              <label className="text-sm font-semibold text-foreground/90">{t('البريد الإلكتروني', 'Adresse e-mail')}</label>
+              <label className="text-sm font-semibold text-foreground/90">{t('البريد الإلكتروني المهني', 'Adresse e-mail professionnelle')}</label>
               <div className="relative flex items-center">
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="example@domain.com"
+                  placeholder="kamal@transbodanon.com"
                   required
                   dir="ltr"
                   className={`${dir === 'rtl' ? 'pr-10 pl-3' : 'pl-10 pr-3'} h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500`}
@@ -118,6 +140,31 @@ export default function SignUpPage() {
               </div>
             </div>
 
+            {/* Confirm Password Field */}
+            <div className="space-y-1.5 text-start">
+              <label className="text-sm font-semibold text-foreground/90">{t('تأكيد كلمة المرور', 'Confirmer le mot de passe')}</label>
+              <div className="relative flex items-center">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  dir="ltr"
+                  className={`${dir === 'rtl' ? 'pr-10 pl-10' : 'pl-10 pr-10'} h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500`}
+                />
+                <Lock className={`w-5 h-5 text-muted-foreground absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} pointer-events-none`} />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className={`absolute ${dir === 'rtl' ? 'left-3' : 'right-3'} text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md focus:outline-none`}
+                  aria-label={showConfirmPassword ? t('إخفاء كلمة المرور', 'Masquer mot de passe') : t('إظهار كلمة المرور', 'Afficher mot de passe')}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
             {/* Submit Button */}
             <Button
               type="submit"
@@ -127,10 +174,10 @@ export default function SignUpPage() {
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{t('جاري الإنشاء...', 'Création en cours...')}</span>
+                  <span>{t('جاري التحقق وترخيص الجهاز...', 'Vérification et licence en cours...')}</span>
                 </div>
               ) : (
-                t('إنشاء الحساب', 'Créer le compte')
+                t('إنشاء الحساب وترخيص الهاتف', 'Créer le compte et activer l’appareil')
               )}
             </Button>
 

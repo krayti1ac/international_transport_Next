@@ -28,13 +28,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { DEFAULT_TRIPS } from '@/lib/default-data';
 import type { Truck, Trailer, Driver, FleetDocument, TripOrder } from '@/types/database';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
 import {
   ArrowRight,
   Trash2,
   Edit2,
   FileText,
   Wrench,
-  Truck as TruckIcon,
   ChevronDown,
   ChevronUp,
   Plus,

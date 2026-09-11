@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import type { TripOrder, Truck, TruckLocation, Client } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { MapPin, Truck as TruckIcon, Navigation, Calendar, Clock, ShieldCheck } from 'lucide-react';
+import { TruckIcon } from '@/components/icons/vehicle-icons';
+import { MapPin, Navigation, Calendar, Clock, ShieldCheck } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 
 const TrackingMap = dynamic(

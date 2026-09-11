@@ -25,14 +25,6 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value, options }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
         },
@@ -42,48 +34,119 @@ export async function middleware(request: NextRequest) {
 
   const {data: {session}} = await supabase.auth.getSession();
 
+  const userSessionCookie = request.cookies.get('app_user_session')?.value;
+  let customSession: { id: string; email: string; name?: string; role: string; is_active?: boolean } | null = null;
+  if (userSessionCookie) {
+    try {
+      customSession = JSON.parse(decodeURIComponent(userSessionCookie));
+    } catch {
+      try {
+        customSession = JSON.parse(userSessionCookie);
+      } catch {}
+    }
+  }
+
+  const hasSession = !!session || !!customSession;
+
   const protectedPaths = [
     '/dashboard', '/trips', '/fleet', '/truck-tracking', '/treasury',
     '/clients', '/invoices', '/advanced-reports', '/whatsapp-notifications',
     '/chat', '/audit-logs', '/settings', '/fuel-receipt', '/driver-tasks',
-    '/chat', '/audit-logs', '/settings', '/users', '/fuel-receipt', '/driver-tasks',
-    '/driver-advances', '/documents', '/reports', '/emergency-advance-requests',
+    '/users', '/driver-advances', '/documents', '/reports', '/emergency-advance-requests',
     '/geofence-zones', '/geofence-alerts', '/trip-profitability', '/maintenance',
     '/driver-settlements', '/super-admin'
   ];
 
   const pathname = request.nextUrl.pathname;
-  const locale = pathname.split('/')[1];
-  const relativePath = '/' + pathname.split('/').slice(2).join('/');
+  const pathSegments = pathname.split('/').filter(Boolean);
+  const potentialLocale = pathSegments[0] || '';
+  const isPrefixed = routing.locales.includes(potentialLocale as any);
+  const locale = isPrefixed ? potentialLocale : routing.defaultLocale;
+  const relativePath = isPrefixed ? '/' + pathSegments.slice(1).join('/') : '/' + pathSegments.join('/');
+
+  if (isPrefixed && !['/login', '/signup', '/super-admin', '/track'].some(p => relativePath === p || relativePath.startsWith(`${p}/`))) {
+    const url = request.nextUrl.clone();
+    url.pathname = relativePath;
+    return NextResponse.redirect(url);
+  }
 
   const isProtectedPath = protectedPaths.some(path => relativePath.startsWith(path));
 
-  if (isProtectedPath && !session) {
+  if (isProtectedPath && !hasSession) {
     const url = request.nextUrl.clone();
-    url.pathname = `/${locale}/login`;
+    url.pathname = locale === routing.defaultLocale ? '/login' : `/${locale}/login`;
     return NextResponse.redirect(url);
   }
 
-  if ((relativePath === '/login' || relativePath === '/signup') && session) {
-    const {data: userProfile} = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+  if ((relativePath === '/login' || relativePath === '/signup') && hasSession) {
+    let effectiveRole = customSession?.role;
+    let isActive = customSession?.is_active !== false;
+
+    if (session) {
+      const {data: userProfile} = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (userProfile) {
+        effectiveRole = userProfile.role;
+        if ((userProfile as any).is_active === false) {
+          isActive = false;
+        }
+      }
+    }
+
+    if (!isActive) {
+      const url = request.nextUrl.clone();
+      url.pathname = locale === routing.defaultLocale ? '/login' : `/${locale}/login`;
+      url.searchParams.set('deactivated', 'true');
+      return NextResponse.redirect(url);
+    }
+
+    let targetPath = '/dashboard';
+    if (effectiveRole === 'super_admin') {
+      targetPath = '/super-admin/companies';
+    } else if (effectiveRole === 'driver') {
+      targetPath = '/driver-tasks';
+    }
 
     const url = request.nextUrl.clone();
-    url.pathname = userProfile?.role === 'super_admin' ? `/${locale}/super-admin/companies` : `/${locale}/dashboard`;
+    url.pathname = locale === routing.defaultLocale ? targetPath : `/${locale}${targetPath}`;
     return NextResponse.redirect(url);
   }
 
-  if (isProtectedPath && session) {
-    const {data: userProfile} = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+  if (isProtectedPath && hasSession) {
+    let userRole = customSession?.role;
+    let isActive = customSession?.is_active !== false;
 
-    const userRole = userProfile?.role;
+    if (session) {
+      const {data: userProfile} = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (userProfile) {
+        userRole = userProfile.role;
+        if ((userProfile as any).is_active === false) {
+          isActive = false;
+        }
+      } else if (!customSession) {
+        const url = request.nextUrl.clone();
+        url.pathname = locale === routing.defaultLocale ? '/login' : `/${locale}/login`;
+        return NextResponse.redirect(url);
+      }
+    }
+
+    if (!isActive) {
+      const url = request.nextUrl.clone();
+      url.pathname = locale === routing.defaultLocale ? '/login' : `/${locale}/login`;
+      url.searchParams.set('deactivated', 'true');
+      return NextResponse.redirect(url);
+    }
+
+    if (!userRole) userRole = 'driver';
 
     if (userRole === 'admin') return response;
 
@@ -91,7 +154,7 @@ export async function middleware(request: NextRequest) {
       const isAllowed = relativePath.startsWith('/super-admin');
       if (!isAllowed) {
         const url = request.nextUrl.clone();
-        url.pathname = `/${locale}/super-admin/companies`;
+        url.pathname = locale === routing.defaultLocale ? '/super-admin/companies' : `/${locale}/super-admin/companies`;
         return NextResponse.redirect(url);
       }
       return response;
@@ -102,6 +165,7 @@ export async function middleware(request: NextRequest) {
       '/fleet', '/treasury', '/clients', '/invoices', '/reports', '/maintenance',
       '/driver-settlements', '/geofence-zones', '/geofence-alerts',
       '/whatsapp-notifications', '/chat', '/documents', '/emergency-advance-requests',
+      '/users',
     ];
     const driverAllowedPaths = [
       '/driver-tasks', '/driver-advances', '/fuel-receipt',
@@ -109,11 +173,12 @@ export async function middleware(request: NextRequest) {
     ];
 
     const allowedPaths = userRole === 'secretary' ? secretaryAllowedPaths : driverAllowedPaths;
-    const isAllowed = allowedPaths.some(path => relativePath === path || relativePath.startsWith(`${path}/`));
+    const isAllowed = allowedPaths.some(path => path === relativePath || relativePath.startsWith(`${path}/`));
 
     if (!isAllowed) {
+      const fallbackTarget = userRole === 'driver' ? '/driver-tasks' : '/dashboard';
       const url = request.nextUrl.clone();
-      url.pathname = `/${locale}/login`;
+      url.pathname = locale === routing.defaultLocale ? fallbackTarget : `/${locale}${fallbackTarget}`;
       return NextResponse.redirect(url);
     }
   }

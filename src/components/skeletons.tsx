@@ -3,30 +3,32 @@ import { Skeleton } from '@/components/ui/skeleton';
 export function TripsKanbanSkeleton() {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {[1, 2, 3, 4, 5].map((col) => (
-          <div key={col} className="bg-muted/30 p-3 rounded-2xl border border-border/50 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-border/40">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-6 rounded-full" />
-            </div>
-            <div className="space-y-2.5">
-              {[1, 2, 3].map((card) => (
-                <div key={card} className="bg-card p-3 rounded-xl border border-border/60 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Skeleton className="h-4 w-14" />
-                    <Skeleton className="h-3 w-10" />
+      <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-border/80">
+        <div className="grid grid-cols-5 gap-3 w-full min-w-[1020px] 2xl:min-w-0 items-start">
+          {[1, 2, 3, 4, 5].map((col) => (
+            <div key={col} className="w-full min-w-0 bg-muted/30 p-2.5 rounded-2xl border border-border/50 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border/40">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-6 rounded-full" />
+              </div>
+              <div className="space-y-2">
+                {[1, 2, 3].map((card) => (
+                  <div key={card} className="bg-card p-2.5 rounded-xl border border-border/60 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Skeleton className="h-4 w-14" />
+                      <Skeleton className="h-3 w-10" />
+                    </div>
+                    <Skeleton className="h-3 w-3/4" />
+                    <div className="flex justify-between pt-1">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-3 w-12" />
+                    </div>
                   </div>
-                  <Skeleton className="h-3 w-3/4" />
-                  <div className="flex justify-between pt-1">
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-3 w-12" />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

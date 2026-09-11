@@ -7,7 +7,8 @@ import { useLanguage } from '@/components/language-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Truck, Users, TrendingUp, Calendar } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { DollarSign, Users, TrendingUp, Calendar } from 'lucide-react';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 

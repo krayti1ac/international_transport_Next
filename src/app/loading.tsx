@@ -1,6 +1,6 @@
 'use client';
 
-import { Truck } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
 import { useLanguage } from '@/components/language-provider';
 
 export default function Loading() {

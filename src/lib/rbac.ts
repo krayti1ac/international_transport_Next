@@ -1,7 +1,7 @@
 import type { UserRole } from '@/types/database';
 
 export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
-  super_admin: ['/super-admin', '/super-admin/companies'],
+  super_admin: ['/super-admin', '/super-admin/companies', '/super-admin/screen-issues'],
   admin: ['*'],
   secretary: [
     '/dashboard',

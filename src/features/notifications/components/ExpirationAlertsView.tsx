@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, User, Truck, Share2, ArrowRight } from 'lucide-react';
+import { Truck } from '@/components/icons/vehicle-icons';
+import { AlertTriangle, User, Share2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/browser';

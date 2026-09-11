@@ -9,9 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { useToast } from '@/hooks/use-toast';
+import { Truck } from '@/components/icons/vehicle-icons';
 import {
   TrendingUp,
-  Truck,
   Route,
   ArrowUpRight,
   PlusCircle,
