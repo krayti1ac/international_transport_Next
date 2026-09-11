@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { generateAiDiagnosticPrompt, sanitizePayload } from './ai-issue-prompt';
+import { runGeminiDiagnostic } from './gemini-diagnostics';
+import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import type {
   SystemScreenIssue,
   ScreenIssueType,
@@ -148,6 +150,37 @@ export async function recordScreenIssueAction(input: RecordScreenIssueInput): Pr
 
     if (error) throw error;
 
+    // إذا كان مستوى الخطأ حرجاً (critical)، نقوم بإرسال تنبيه واتساب فوري وتشخيص آلي
+    if (input.severity === 'critical') {
+      try {
+        const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || '212694585307';
+        const waMessage = `🚨 *[تنبيه خطأ حرج - Trans Bodanon TMS]*\n\n📌 *الشاشة:* ${input.screen_name} (${input.screen_route})\n⚠️ *الخطأ:* ${input.error_message}\n👤 *المستخدم:* ${userName || userEmail || 'غير محدد'}\n🏢 *الشركة:* ${companyName || 'عام'}\n📱 *الجهاز:* ${input.device_type || 'desktop'} (${input.device_id.slice(0, 10)})\n🕒 *الوقت:* ${new Date().toLocaleString('ar-MA')}\n\n🔍 معرّف السجل: #${data.id.slice(0, 8)}`;
+
+        sendWhatsAppCloudMessage({
+          to: adminPhone,
+          message: waMessage,
+        }).catch((err) => console.warn('WhatsApp critical alert send error:', err));
+
+        // تشخيص فوري وحفظه تلقائياً
+        runGeminiDiagnostic(prompt)
+          .then(async (aiRes) => {
+            if (aiRes.success && aiRes.rawText) {
+              await supabase
+                .from('system_screen_issues')
+                .update({
+                  ai_solution_notes: aiRes.rawText,
+                  status: 'investigating',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', data.id);
+            }
+          })
+          .catch((err) => console.warn('Auto Gemini diagnostic error:', err));
+      } catch (critErr) {
+        console.warn('Error triggering critical issue automated actions:', critErr);
+      }
+    }
+
     return {
       success: true,
       issueId: data.id,
@@ -262,3 +295,89 @@ export async function simulateTestIssueAction(scenario: 'fuel' | 'trip' | 'invoi
 
   return await recordScreenIssueAction(scenarios[scenario] || scenarios.fuel);
 }
+
+export async function diagnoseIssueWithGeminiAction(id: string): Promise<{
+  success: boolean;
+  notes?: string;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+
+    // جلب سجل المشكلة والبرومبت المجهز
+    const { data: issue, error: fetchErr } = await supabase
+      .from('system_screen_issues')
+      .select('id, ai_diagnostic_prompt, error_message, status')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !issue) {
+      return { success: false, error: 'تعذر العثور على سجل المشكلة.' };
+    }
+
+    const prompt = issue.ai_diagnostic_prompt || issue.error_message;
+    const aiResult = await runGeminiDiagnostic(prompt);
+
+    if (!aiResult.success || !aiResult.rawText) {
+      return { success: false, error: aiResult.error || 'فشل توليد رد الذكاء الاصطناعي.' };
+    }
+
+    // حفظ رد الذكاء الاصطناعي وتحديث الحالة إلى 'investigating' إن كانت 'open'
+    const newStatus = issue.status === 'open' ? 'investigating' : issue.status;
+    const { error: updateErr } = await supabase
+      .from('system_screen_issues')
+      .update({
+        ai_solution_notes: aiResult.rawText,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (updateErr) throw updateErr;
+
+    return { success: true, notes: aiResult.rawText };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل تنفيذ التشخيص الذكي';
+    return { success: false, error: message };
+  }
+}
+
+export async function sendIssueWhatsAppAlertAction(id: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: issue, error: fetchErr } = await supabase
+      .from('system_screen_issues')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !issue) {
+      return { success: false, error: 'تعذر العثور على سجل المشكلة.' };
+    }
+
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || '212694585307';
+    const message = `🚨 *[تنبيه خطأ شاشة - Trans Bodanon TMS]*\n\n📌 *الشاشة:* ${issue.screen_name} (${issue.screen_route})\n⚠️ *الخطأ:* ${issue.error_message}\n📊 *الأهمية:* ${issue.severity}\n👤 *المستخدم:* ${issue.user_name || issue.user_email || 'غير محدد'}\n🏢 *الشركة:* ${issue.company_name || 'عام'}\n📱 *الجهاز:* ${issue.device_type} (${issue.device_id?.slice(0, 10)})\n🕒 *الوقت:* ${new Date(issue.created_at).toLocaleString('ar-MA')}\n\n🔍 معرّف السجل: #${issue.id.slice(0, 8)}`;
+
+    const res = await sendWhatsAppCloudMessage({
+      to: adminPhone,
+      message,
+    });
+
+    if (!res.success && res.reason === 'Missing API Keys') {
+      return {
+        success: false,
+        error: 'مفاتيح خدمة الواتساب (WHATSAPP_API_TOKEN أو CALLMEBOT_API_KEY) غير معينة في السيرفر.',
+      };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل إرسال التنبيه عبر الواتساب';
+    return { success: false, error: message };
+  }
+}
+
+

@@ -19,6 +19,7 @@ import {
   PlayCircle,
   ShieldCheck,
   Eye,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,8 @@ import {
   updateScreenIssueStatusAction,
   deleteScreenIssueAction,
   simulateTestIssueAction,
+  diagnoseIssueWithGeminiAction,
+  sendIssueWhatsAppAlertAction,
 } from '../services/screen-issues.actions';
 
 const SEVERITY_CONFIG: Record<ScreenIssueSeverity, { label: string; badge: string }> = {
@@ -66,6 +69,8 @@ export function SuperAdminScreenIssuesView() {
   const [aiNotes, setAiNotes] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [diagnosingId, setDiagnosingId] = useState<string | null>(null);
+  const [sendingWhatsAppId, setSendingWhatsAppId] = useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -147,6 +152,71 @@ export function SuperAdminScreenIssuesView() {
       }
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleRunGeminiDiagnosis = async (issueId: string) => {
+    setDiagnosingId(issueId);
+    try {
+      const res = await diagnoseIssueWithGeminiAction(issueId);
+      if (res.success && res.notes) {
+        toast({
+          title: '✨ تم إكمال التشخيص الذكي بنجاح',
+          description: 'تم تحليل سبب الخطأ وتوليد الحل البرمجي والتوجيهات من Gemini.',
+        });
+        setAiNotes(res.notes);
+        if (activeIssue && activeIssue.id === issueId) {
+          setActiveIssue((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ai_solution_notes: res.notes,
+                  status: prev.status === 'open' ? 'investigating' : prev.status,
+                }
+              : null
+          );
+        }
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issueId
+              ? {
+                  ...i,
+                  ai_solution_notes: res.notes,
+                  status: i.status === 'open' ? 'investigating' : i.status,
+                }
+              : i
+          )
+        );
+      } else {
+        toast({
+          title: 'تعذر إتمام التشخيص الذكي',
+          description: res.error || 'حدث خطأ أثناء التواصل مع نموذج Gemini',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setDiagnosingId(null);
+    }
+  };
+
+  const handleSendWhatsAppAlert = async (issueId: string) => {
+    setSendingWhatsAppId(issueId);
+    try {
+      const res = await sendIssueWhatsAppAlertAction(issueId);
+      if (res.success) {
+        toast({
+          title: '📱 تم إرسال تنبيه الواتساب',
+          description: 'تم إرسال إشعار فوري بكافة تفاصيل الخطأ إلى هاتف الإدارة المعتمد.',
+        });
+      } else {
+        toast({
+          title: 'تعذر إرسال الواتساب',
+          description: res.error || 'حدث خطأ أثناء التواصل مع بوابة الواتساب',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setSendingWhatsAppId(null);
     }
   };
 
@@ -423,7 +493,7 @@ export function SuperAdminScreenIssuesView() {
                 </div>
 
                 {/* Card Footer Actions */}
-                <div className="p-3 bg-muted/20 border-t border-border flex items-center justify-between gap-2">
+                <div className="p-3 bg-muted/20 border-t border-border flex items-center justify-between gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
@@ -434,22 +504,52 @@ export function SuperAdminScreenIssuesView() {
                     className="rounded-xl text-xs h-8 gap-1 flex-1 font-semibold"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>تشخيص وتحليل</span>
+                    <span>تشخيص ومعاينة</span>
                   </Button>
 
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => handleCopyPrompt(issue.ai_diagnostic_prompt, issue.id)}
-                    className="rounded-xl text-xs h-8 gap-1 font-bold bg-amber-500 hover:bg-amber-600 text-white"
-                    title="نسخ تقرير الذكاء الاصطناعي"
+                    disabled={diagnosingId === issue.id}
+                    onClick={() => handleRunGeminiDiagnosis(issue.id)}
+                    className="rounded-xl text-xs h-8 gap-1 font-bold bg-purple-600 hover:bg-purple-700 text-white"
+                    title="تشخيص فوري باستخدام Gemini 2.5 Flash"
                   >
-                    {copiedPromptId === issue.id ? (
-                      <Check className="w-3.5 h-3.5" />
+                    {diagnosingId === issue.id ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <Sparkles className="w-3.5 h-3.5" />
                     )}
-                    <span>نسخ برومبت AI</span>
+                    <span>Gemini</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sendingWhatsAppId === issue.id}
+                    onClick={() => handleSendWhatsAppAlert(issue.id)}
+                    className="rounded-xl text-xs h-8 px-2 font-semibold text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                    title="إرسال تنبيه عبر الواتساب للمشرف"
+                  >
+                    {sendingWhatsAppId === issue.id ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyPrompt(issue.ai_diagnostic_prompt, issue.id)}
+                    className="rounded-xl text-xs h-8 px-2.5 font-semibold"
+                    title="نسخ تقرير الذكاء الاصطناعي"
+                  >
+                    {copiedPromptId === issue.id ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
                   </Button>
                 </div>
               </Card>
@@ -508,13 +608,41 @@ export function SuperAdminScreenIssuesView() {
                         </td>
                         <td className="py-3 px-3.5 text-end space-x-1.5 space-x-reverse whitespace-nowrap">
                           <Button
+                            variant="default"
+                            size="sm"
+                            disabled={diagnosingId === issue.id}
+                            onClick={() => handleRunGeminiDiagnosis(issue.id)}
+                            className="h-7 text-xs rounded-lg gap-1 bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                          >
+                            {diagnosingId === issue.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3 h-3" />
+                            )}
+                            <span>Gemini</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={sendingWhatsAppId === issue.id}
+                            onClick={() => handleSendWhatsAppAlert(issue.id)}
+                            className="h-7 text-xs rounded-lg gap-1 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                            title="إرسال تنبيه عبر الواتساب للمشرف"
+                          >
+                            {sendingWhatsAppId === issue.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <MessageSquare className="w-3 h-3" />
+                            )}
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleCopyPrompt(issue.ai_diagnostic_prompt, issue.id)}
                             className="h-7 text-xs rounded-lg gap-1"
                           >
-                            <Sparkles className="w-3 h-3 text-amber-500" />
-                            <span>نسخ البرومبت</span>
+                            <Copy className="w-3 h-3" />
+                            <span>نسخ</span>
                           </Button>
                           <Button
                             variant="outline"
@@ -603,7 +731,36 @@ export function SuperAdminScreenIssuesView() {
                     <Sparkles className="w-4 h-4 text-amber-500" />
                     <span>التقرير الجاهز للذكاء الاصطناعي (AI Diagnostic Prompt):</span>
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={diagnosingId === activeIssue.id}
+                      onClick={() => handleRunGeminiDiagnosis(activeIssue.id)}
+                      className="h-7 text-xs rounded-lg gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                    >
+                      {diagnosingId === activeIssue.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      <span>تشخيص مباشر عبر Gemini</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={sendingWhatsAppId === activeIssue.id}
+                      onClick={() => handleSendWhatsAppAlert(activeIssue.id)}
+                      className="h-7 text-xs rounded-lg gap-1.5 border-emerald-600/40 text-emerald-600 hover:bg-emerald-500/10 font-bold"
+                      title="إرسال إشعار فوري بكافة تفاصيل الخطأ عبر الواتساب للإدارة"
+                    >
+                      {sendingWhatsAppId === activeIssue.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <MessageSquare className="w-3.5 h-3.5" />
+                      )}
+                      <span>تنبيه واتساب</span>
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -614,13 +771,13 @@ export function SuperAdminScreenIssuesView() {
                       <span>تنزيل .md</span>
                     </Button>
                     <Button
-                      variant="default"
+                      variant="outline"
                       size="sm"
                       onClick={() => handleCopyPrompt(activeIssue.ai_diagnostic_prompt, activeIssue.id)}
-                      className="h-7 text-xs rounded-lg gap-1 bg-amber-500 hover:bg-amber-600 text-white font-bold"
+                      className="h-7 text-xs rounded-lg gap-1"
                     >
-                      {copiedPromptId === activeIssue.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      <span>نسخ إلى الحافظة</span>
+                      {copiedPromptId === activeIssue.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      <span>نسخ البرومبت</span>
                     </Button>
                   </div>
                 </div>

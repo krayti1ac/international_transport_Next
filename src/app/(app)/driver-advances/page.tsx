@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DollarSign, Calendar } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
+import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
 
 export default function DriverAdvancesPage() {
   const { t, dir, locale } = useLanguage();
@@ -16,6 +17,13 @@ export default function DriverAdvancesPage() {
   const [cardLayout, setCardLayout] = useCardViewMode('driver_advances', 'grid');
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
+
+  const { reportSubmissionError } = useAutoIssueReporter({
+    screenName: 'سلف ومصروفات السائق',
+    screenRoute: '/driver-advances',
+    componentName: 'DriverAdvancesPage',
+    defaultSeverity: 'medium',
+  });
 
   useEffect(() => {
     const fetchAdvances = async () => {
@@ -30,6 +38,12 @@ export default function DriverAdvancesPage() {
           .single<Driver>();
 
         if (driverError || !driverData) {
+          reportSubmissionError({
+            operationName: 'ربط الحساب الحالي بملف السائق',
+            error: driverError || new Error('Driver profile missing for user_id: ' + session.user.id),
+            formData: { userId: session.user.id },
+            severity: 'medium',
+          });
           toast({
             title: t('خطأ', 'Erreur'),
             description: t('لم يتم العثور على ملف السائق المرتبط بهذا الحساب', 'Aucun profil de conducteur associé à ce compte'),
@@ -59,6 +73,11 @@ export default function DriverAdvancesPage() {
         }
         setAdvances(advancesList);
       } catch (error: any) {
+        reportSubmissionError({
+          operationName: 'جلب قائمة سلف ومصروفات السائق',
+          error,
+          severity: 'medium',
+        });
         const message = error?.message || (error instanceof Error ? error.message : t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue'));
         toast({
           title: t('خطأ', 'Erreur'),
@@ -71,7 +90,7 @@ export default function DriverAdvancesPage() {
     };
 
     fetchAdvances();
-  }, [supabase, toast, t]);
+  }, [supabase, toast, t, reportSubmissionError]);
 
   const getStatusText = (status: string) => {
     switch (status) {

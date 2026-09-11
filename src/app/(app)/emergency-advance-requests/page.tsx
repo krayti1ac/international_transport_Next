@@ -12,6 +12,7 @@ import { Plus, Search, AlertTriangle } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { DEFAULT_DRIVERS, fallbackArray } from '@/lib/default-data';
 import Decimal from 'decimal.js';
+import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
 
 export default function EmergencyAdvanceRequestsPage() {
   const { t, dir, locale } = useLanguage();
@@ -33,6 +34,13 @@ export default function EmergencyAdvanceRequestsPage() {
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
+  const { reportValidation, reportSubmissionError, reportCalculationAnomaly } = useAutoIssueReporter({
+    screenName: 'طلبات السلف الطارئة ومصروفات السائقين',
+    screenRoute: '/emergency-advance-requests',
+    componentName: 'EmergencyAdvanceRequestsPage',
+    defaultSeverity: 'medium',
+  });
+
   // Deduplicate drivers by name to prevent repeated entries in the dropdown,
   // prioritizing currently selected driver if active.
   const uniqueDrivers = useMemo(() => {
@@ -48,6 +56,22 @@ export default function EmergencyAdvanceRequestsPage() {
       (a.name || '').localeCompare(b.name || '', locale === 'ar' ? 'ar' : 'fr', { sensitivity: 'base' })
     );
   }, [drivers, formData.driver_id, locale]);
+
+  const fetchRequests = useCallback(async () => {
+    try {
+      const [reqRes, driversRes] = await Promise.all([
+        supabase.from('emergency_advance_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('drivers').select('*').order('name'),
+      ]);
+
+      setRequests(reqRes.data || []);
+      setDrivers(fallbackArray(driversRes.data, DEFAULT_DRIVERS));
+    } catch {
+      setDrivers(DEFAULT_DRIVERS);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
     fetchRequests();
@@ -101,32 +125,62 @@ export default function EmergencyAdvanceRequestsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, toast, t]);
-
-  const fetchRequests = useCallback(async () => {
-    try {
-      const [reqRes, driversRes] = await Promise.all([
-        supabase.from('emergency_advance_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('drivers').select('*').order('name'),
-      ]);
-
-      setRequests(reqRes.data || []);
-      setDrivers(fallbackArray(driversRes.data, DEFAULT_DRIVERS));
-    } catch {
-      setDrivers(DEFAULT_DRIVERS);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
+  }, [supabase, toast, t, fetchRequests]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.driver_name && !formData.driver_id) {
+      reportValidation({
+        fieldName: 'driver_name',
+        rejectedValue: formData.driver_name,
+        validationRule: 'اختيار أو كتابة اسم السائق إلزامي لتقديم السلفة',
+        errorMessage: 'يرجى تحديد السائق صاحب طلب السلفة الطارئة',
+        formData,
+        severity: 'medium',
+      });
+      toast({ title: t('خطأ', 'Erreur'), description: t('يرجى تحديد اسم السائق', 'Veuillez sélectionner un chauffeur'), variant: 'destructive' });
+      return;
+    }
+
     let amountNum: number;
     try {
       const dec = new Decimal(formData.amount);
-      if (dec.lte(0)) throw new Error();
+      if (dec.lte(0) || !dec.isFinite()) {
+        reportCalculationAnomaly({
+          fieldName: 'amount',
+          formula: 'amount > 0',
+          inputs: { rawAmount: formData.amount },
+          errorMessage: `مبلغ السلفة المدخل "${formData.amount}" غير صالح أو أصغر من أو يساوي 0`,
+          formData,
+          severity: 'medium',
+        });
+        toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال مبلغ صالح أكبر من الصفر', 'Veuillez saisir un montant valide supérieur à zéro'), variant: 'destructive' });
+        return;
+      }
+
+      // رصد ومراقبة المبالغ الشاذة أو الاستثنائية
+      if (dec.greaterThan(50000)) {
+        reportCalculationAnomaly({
+          fieldName: 'amount',
+          formula: 'amount <= 50000',
+          inputs: { rawAmount: formData.amount },
+          errorMessage: `سلفة طارئة بمبلغ استثنائي مرتفع: ${dec.toFixed(2)} ${formData.currency}`,
+          formData,
+          severity: 'high',
+        });
+      }
+
       amountNum = dec.toNumber();
     } catch {
+      reportValidation({
+        fieldName: 'amount',
+        rejectedValue: formData.amount,
+        validationRule: 'صيغة الرقم العشري يجب أن تكون صحيحة دون حروف أو رموز غير رقمية',
+        errorMessage: `صيغة مبلغ السلفة غير صالحة محاسبياً: "${formData.amount}"`,
+        formData,
+        severity: 'medium',
+      });
       toast({ title: t('خطأ', 'Erreur'), description: t('يرجى إدخال مبلغ صالح أكبر من الصفر', 'Veuillez saisir un montant valide supérieur à zéro'), variant: 'destructive' });
       return;
     }
@@ -142,7 +196,15 @@ export default function EmergencyAdvanceRequestsPage() {
         status: 'pending',
       });
 
-      if (error) throw error;
+      if (error) {
+        reportSubmissionError({
+          operationName: 'إرسال طلب سلفة طارئة للسائق',
+          error,
+          formData,
+          severity: 'high',
+        });
+        throw error;
+      }
 
       toast({ title: t('تم إرسال الطلب بنجاح', 'Demande envoyée avec succès') });
       setFormData({ driver_name: '', driver_id: '', amount: '', currency: 'MAD', reason: '', notes: '' });
@@ -164,7 +226,15 @@ export default function EmergencyAdvanceRequestsPage() {
         .update({ status, updated_at: new Date().toISOString() })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        reportSubmissionError({
+          operationName: `تحديث حالة السلفة #${id} إلى ${status}`,
+          error,
+          formData: { id, status },
+          severity: 'medium',
+        });
+        throw error;
+      }
       toast({ title: t('تم تحديث الحالة بنجاح', 'Statut mis à jour avec succès') });
     } catch (error: any) {
       toast({

@@ -4,12 +4,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Fuel, Ship } from 'lucide-react';
+import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Ship } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
+import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
 
 interface TripModalProps {
   isOpen: boolean;
@@ -62,6 +63,13 @@ export function TripFormModal({
   const { dir, t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'fleet'>('export');
+
+  const { reportValidation, reportSubmissionError, reportCalculationAnomaly } = useAutoIssueReporter({
+    screenName: 'إدارة وتسجيل الرحلات الدولية',
+    screenRoute: '/trips',
+    componentName: 'TripFormModal',
+    defaultSeverity: 'medium',
+  });
 
   const [formData, setFormData] = useState<Partial<TripOrder>>({
     route: '',
@@ -389,15 +397,75 @@ export function TripFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // التحقق التلقائي من مسار الرحلة
+    if (!formData.route_export && !formData.route) {
+      reportValidation({
+        fieldName: 'route_export',
+        rejectedValue: formData.route_export,
+        validationRule: 'تحديد مسار التصدير أو المسار العام إلزامي للرحلة',
+        errorMessage: 'يرجى اختيار مسار التصدير أو تحديد مسار للرحلة الدولية',
+        formData: formData as Record<string, unknown>,
+        severity: 'medium',
+      });
+    }
+
+    // التحقق التلقائي من ربط الرحلة بعميل
+    if (!formData.client_id && !formData.client_import_id) {
+      reportValidation({
+        fieldName: 'client_id',
+        rejectedValue: formData.client_id,
+        validationRule: 'العميل إلزامي لربط الرحلة',
+        errorMessage: 'يرجى اختيار عميل التصدير أو عميل الاستيراد لربط الرحلة',
+        formData: formData as Record<string, unknown>,
+        severity: 'medium',
+      });
+    }
+
+    // التحقق من صحة رقم الـ CMR إن وجد
+    const cmrVal = formData.cmr_export_number || formData.cmr_number;
+    if (cmrVal && cmrVal.trim().length < 3) {
+      reportValidation({
+        fieldName: 'cmr_export_number',
+        rejectedValue: cmrVal,
+        validationRule: 'رقم الـ CMR يجب ألا يقل عن 3 خانات',
+        errorMessage: `رقم الـ CMR المدخل "${cmrVal}" قصير جداً أو غير مكتمل`,
+        formData: formData as Record<string, unknown>,
+        severity: 'low',
+      });
+    }
+
+    let totalPrice = 0;
+    try {
+      const exp = new Decimal(formData.price_export || 0);
+      const imp = new Decimal(formData.price_import || 0);
+      if (exp.isNegative() || imp.isNegative()) {
+        reportCalculationAnomaly({
+          fieldName: 'price',
+          formula: 'price_export + price_import',
+          inputs: { price_export: formData.price_export, price_import: formData.price_import },
+          errorMessage: 'لا يمكن أن تكون تسعيرة الشحن سالبة',
+          formData: formData as Record<string, unknown>,
+          severity: 'high',
+        });
+      }
+      totalPrice = exp.plus(imp).toNumber();
+    } catch {
+      reportCalculationAnomaly({
+        fieldName: 'price',
+        formula: 'price_export + price_import',
+        inputs: { price_export: formData.price_export, price_import: formData.price_import },
+        errorMessage: 'فشل جمع تسعيرة التصدير والاستيراد للرحلة',
+        formData: formData as Record<string, unknown>,
+        severity: 'medium',
+      });
+    }
+
     setLoading(true);
 
     const fullRoute = formData.route_export && formData.route_import
       ? `${formData.route_export} ⇄ ${formData.route_import}`
       : formData.route_export || formData.route || 'مسار دولي';
-
-    const exp = new Decimal(formData.price_export || 0);
-    const imp = new Decimal(formData.price_import || 0);
-    const totalPrice = exp.plus(imp).toNumber();
 
     const payload: Partial<TripOrder> = {
       ...formData,
@@ -417,6 +485,14 @@ export function TripFormModal({
     try {
       await onSubmit(payload);
       onClose();
+    } catch (error: unknown) {
+      reportSubmissionError({
+        operationName: 'حفظ دورة الرحلة الدولية (TripFormModal: onSubmit)',
+        error,
+        formData: payload as Record<string, unknown>,
+        severity: 'high',
+      });
+      throw error;
     } finally {
       setLoading(false);
     }
