@@ -20,12 +20,18 @@ import {
   ShieldCheck,
   Eye,
   MessageSquare,
+  FileSpreadsheet,
+  Trash2,
+  CheckSquare,
+  Square,
+  CheckCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { exportToCSV } from '@/lib/export';
 import type {
   SystemScreenIssue,
   ScreenIssueSeverity,
@@ -38,6 +44,8 @@ import {
   simulateTestIssueAction,
   diagnoseIssueWithGeminiAction,
   sendIssueWhatsAppAlertAction,
+  bulkUpdateScreenIssuesStatusAction,
+  bulkDeleteScreenIssuesAction,
 } from '../services/screen-issues.actions';
 
 const SEVERITY_CONFIG: Record<ScreenIssueSeverity, { label: string; badge: string }> = {
@@ -71,6 +79,11 @@ export function SuperAdminScreenIssuesView() {
   const [simulating, setSimulating] = useState(false);
   const [diagnosingId, setDiagnosingId] = useState<string | null>(null);
   const [sendingWhatsAppId, setSendingWhatsAppId] = useState<string | null>(null);
+
+  // Bulk Selection & Tool State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
+  const [showSimMenu, setShowSimMenu] = useState(false);
 
   const { toast } = useToast();
 
@@ -109,8 +122,10 @@ export function SuperAdminScreenIssuesView() {
     const total = issues.length;
     const open = issues.filter((i) => i.status === 'open').length;
     const critical = issues.filter((i) => i.severity === 'critical' || i.severity === 'high').length;
+    const resolved = issues.filter((i) => i.status === 'resolved').length;
+    const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 100;
     const devices = new Set(issues.map((i) => i.device_id)).size;
-    return { total, open, critical, devices };
+    return { total, open, critical, resolved, resolutionRate, devices };
   }, [issues]);
 
   const handleCopyPrompt = async (promptText?: string | null, issueId?: string) => {
@@ -152,7 +167,96 @@ export function SuperAdminScreenIssuesView() {
       }
     } finally {
       setSimulating(false);
+      setShowSimMenu(false);
     }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === filteredIssues.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredIssues.map((i) => i.id)));
+    }
+  };
+
+  const handleBulkStatusChange = async (newStatus: ScreenIssueStatus) => {
+    if (selectedIds.size === 0) return;
+    setIsBulkLoading(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      const res = await bulkUpdateScreenIssuesStatusAction(idsArray, newStatus);
+      if (res.success) {
+        toast({
+          title: '✅ تم التحديث المجمع بنجاح',
+          description: `تم نقل ${res.count || idsArray.length} سجل إلى: ${STATUS_CONFIG[newStatus].label}`,
+        });
+        setSelectedIds(new Set());
+        fetchIssues();
+      } else {
+        toast({ title: 'خطأ', description: res.error, variant: 'destructive' });
+      }
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} سجل بشكل نهائي؟`)) return;
+    setIsBulkLoading(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      const res = await bulkDeleteScreenIssuesAction(idsArray);
+      if (res.success) {
+        toast({
+          title: '🗑️ تم الحذف المجمع بنجاح',
+          description: `تم حذف ${res.count || idsArray.length} سجل من قاعدة البيانات.`,
+        });
+        setSelectedIds(new Set());
+        fetchIssues();
+      } else {
+        toast({ title: 'خطأ', description: res.error, variant: 'destructive' });
+      }
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (filteredIssues.length === 0) {
+      toast({ title: 'تنبيه', description: 'لا توجد سجلات لتصديرها حالياً.' });
+      return;
+    }
+
+    exportToCSV(
+      filteredIssues,
+      [
+        { header: 'المعرف', key: (i) => i.id.slice(0, 8) },
+        { header: 'تاريخ التسجيل', key: (i) => new Date(i.created_at).toLocaleString('ar-MA') },
+        { header: 'الشاشة', key: 'screen_name' },
+        { header: 'المسار', key: 'screen_route' },
+        { header: 'الخطأ', key: 'error_message' },
+        { header: 'الحقل', key: (i) => i.field_name || '' },
+        { header: 'المستخدم', key: (i) => i.user_name || i.user_email || '' },
+        { header: 'الشركة', key: (i) => i.company_name || '' },
+        { header: 'الأهمية', key: (i) => SEVERITY_CONFIG[i.severity]?.label || i.severity },
+        { header: 'الحالة', key: (i) => STATUS_CONFIG[i.status]?.label || i.status },
+        { header: 'نوع الجهاز', key: 'device_type' },
+        { header: 'معرف الجهاز', key: 'device_id' },
+        { header: 'حل الذكاء الاصطناعي', key: (i) => i.ai_solution_notes || '' },
+      ],
+      'system_screen_issues_report'
+    );
+    toast({ title: '📊 تم تصدير التقرير بنجاح' });
   };
 
   const handleRunGeminiDiagnosis = async (issueId: string) => {
@@ -289,25 +393,66 @@ export function SuperAdminScreenIssuesView() {
             <span>تحديث</span>
           </Button>
 
-          {/* Test Simulation Controls */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="rounded-xl gap-1.5 h-9 text-xs border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+            title="تصدير السجلات إلى ملف Excel / CSV"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>تصدير CSV</span>
+          </Button>
+
+          {/* Test Simulation Controls Menu */}
           <div className="relative inline-flex">
             <Button
               variant="outline"
               size="sm"
               disabled={simulating}
-              onClick={() => handleSimulate('fuel')}
+              onClick={() => setShowSimMenu(!showSimMenu)}
               className="rounded-xl gap-1.5 h-9 text-xs border-dashed border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
-              title="محاكاة تسجيل خطأ في شاشة الوقود"
+              title="محاكاة تسجيل أخطاء تجريبية"
             >
               <PlayCircle className="w-3.5 h-3.5" />
               <span>محاكاة خطأ تجريبي</span>
             </Button>
+
+            {showSimMenu && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 w-52 bg-card border border-border rounded-xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 text-xs">
+                <p className="text-[10px] font-bold text-muted-foreground px-2 py-1">اختر سيناريو المحاكاة:</p>
+                <button
+                  type="button"
+                  onClick={() => handleSimulate('fuel')}
+                  className="w-full text-start px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground flex items-center justify-between"
+                >
+                  <span>⛽ وصل وقود (OCR)</span>
+                  <span className="text-[10px] text-amber-600 font-bold">متوسط</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulate('trip')}
+                  className="w-full text-start px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground flex items-center justify-between"
+                >
+                  <span>🚚 تكرار رقم الـ CMR</span>
+                  <span className="text-[10px] text-orange-600 font-bold">عالي</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulate('invoice')}
+                  className="w-full text-start px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground flex items-center justify-between"
+                >
+                  <span>🧾 تعارض حساب الضريبة TTC</span>
+                  <span className="text-[10px] text-rose-600 font-bold">حرج</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
         <Card className="border-border shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -347,6 +492,18 @@ export function SuperAdminScreenIssuesView() {
         <Card className="border-border shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
+              <p className="text-[11px] text-muted-foreground font-semibold">معدل الحل</p>
+              <h3 className="text-2xl font-bold font-mono text-emerald-600 mt-0.5">{stats.resolutionRate}%</h3>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+              <CheckCheck className="w-4 h-4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border shadow-xs col-span-2 sm:col-span-1">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
               <p className="text-[11px] text-muted-foreground font-semibold">الأجهزة المتأثرة</p>
               <h3 className="text-2xl font-bold font-mono text-blue-600 mt-0.5">{stats.devices}</h3>
             </div>
@@ -356,6 +513,80 @@ export function SuperAdminScreenIssuesView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-4 z-40 bg-card border-2 border-primary/40 rounded-2xl p-3.5 shadow-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs">
+              {selectedIds.size}
+            </span>
+            <div>
+              <p className="text-xs font-bold text-foreground">
+                تم تحديد {selectedIds.size} سجل مشكلة
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                تطبيق إجراء مجمع فوري على كافة المشاكل المحددة
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              disabled={isBulkLoading}
+              onClick={() => handleBulkStatusChange('resolved')}
+              className="h-8 text-xs rounded-xl gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>إغلاق وحل المحدد</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isBulkLoading}
+              onClick={() => handleBulkStatusChange('investigating')}
+              className="h-8 text-xs rounded-xl gap-1.5 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>نقل لقيد التشخيص</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isBulkLoading}
+              onClick={() => handleBulkStatusChange('ignored')}
+              className="h-8 text-xs rounded-xl gap-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>استبعاد</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isBulkLoading}
+              onClick={handleBulkDelete}
+              className="h-8 text-xs rounded-xl gap-1.5 text-rose-600 hover:bg-rose-500/10"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف المحدد</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedIds(new Set())}
+              className="h-8 text-xs rounded-xl text-muted-foreground"
+            >
+              إلغاء التحديد
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <Card className="border-border shadow-xs">
@@ -445,10 +676,24 @@ export function SuperAdminScreenIssuesView() {
                 <div className="p-4 space-y-3">
                   {/* Card Header Tags */}
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                      {renderDeviceIcon(issue.device_type)}
-                      <span>{issue.device_id.slice(0, 12)}...</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelect(issue.id)}
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                        title={selectedIds.has(issue.id) ? 'إلغاء التحديد' : 'تحديد'}
+                      >
+                        {selectedIds.has(issue.id) ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                      <span className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                        {renderDeviceIcon(issue.device_type)}
+                        <span>{issue.device_id.slice(0, 12)}...</span>
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className={`text-[10px] font-bold ${sev.badge}`}>
                         {sev.label}
@@ -564,6 +809,20 @@ export function SuperAdminScreenIssuesView() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-muted-foreground">
+                    <th className="py-3 px-3.5 text-center w-10">
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-muted-foreground hover:text-primary transition-colors inline-flex items-center justify-center"
+                        title={selectedIds.size === filteredIssues.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                      >
+                        {selectedIds.size > 0 && selectedIds.size === filteredIssues.length ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-3.5 text-start font-semibold">الشاشة والمسار</th>
                     <th className="py-3 px-3.5 text-start font-semibold">نوع ومستوى الخطأ</th>
                     <th className="py-3 px-3.5 text-start font-semibold">رسالة الخطأ</th>
@@ -576,8 +835,22 @@ export function SuperAdminScreenIssuesView() {
                   {filteredIssues.map((issue) => {
                     const sev = SEVERITY_CONFIG[issue.severity] || SEVERITY_CONFIG.medium;
                     const sta = STATUS_CONFIG[issue.status] || STATUS_CONFIG.open;
+                    const isSelected = selectedIds.has(issue.id);
                     return (
-                      <tr key={issue.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={issue.id} className={`transition-colors ${isSelected ? 'bg-primary/5' : 'hover:bg-muted/30'}`}>
+                        <td className="py-3 px-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSelect(issue.id)}
+                            className="text-muted-foreground hover:text-primary transition-colors inline-flex items-center justify-center"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-primary" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
                         <td className="py-3 px-3.5">
                           <p className="font-bold text-foreground">{issue.screen_name}</p>
                           <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">{issue.screen_route}</p>

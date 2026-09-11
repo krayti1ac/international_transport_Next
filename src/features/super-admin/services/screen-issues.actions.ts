@@ -380,4 +380,56 @@ export async function sendIssueWhatsAppAlertAction(id: string): Promise<{
   }
 }
 
+export async function bulkUpdateScreenIssuesStatusAction(
+  ids: string[],
+  status: ScreenIssueStatus
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    if (!ids || ids.length === 0) return { success: true, count: 0 };
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const updatePayload: Record<string, unknown> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (status === 'resolved') {
+      updatePayload.resolved_at = new Date().toISOString();
+      updatePayload.resolved_by = user?.id || null;
+    }
+
+    const { error } = await supabase
+      .from('system_screen_issues')
+      .update(updatePayload)
+      .in('id', ids);
+
+    if (error) throw error;
+    return { success: true, count: ids.length };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل التحديث المجمع للحالات';
+    return { success: false, error: message };
+  }
+}
+
+export async function bulkDeleteScreenIssuesAction(
+  ids: string[]
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    if (!ids || ids.length === 0) return { success: true, count: 0 };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('system_screen_issues')
+      .delete()
+      .in('id', ids);
+
+    if (error) throw error;
+    return { success: true, count: ids.length };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل الحذف المجمع للسجلات';
+    return { success: false, error: message };
+  }
+}
+
+
 
