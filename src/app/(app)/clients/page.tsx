@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Phone, MapPin, Edit2, Trash2, Mail, Building, PlaneTakeoff, PlaneLanding, Upload } from 'lucide-react';
+import { Plus, Search, Phone, MapPin, Edit2, Trash2, Mail, Building, PlaneTakeoff, PlaneLanding, Upload, ExternalLink } from 'lucide-react';
 import { ClientFormModal } from '@/components/client-form-modal';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { BulkImportModal } from '@/components/bulk-import-modal';
@@ -269,6 +269,36 @@ export default function ClientsPage() {
                       <span>{client.city}</span>
                     </div>
                   )}
+                  {(client.loading_gps_url || client.unloading_gps_url) && (
+                    <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      {client.loading_gps_url && (
+                        <a
+                          href={client.loading_gps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/20 transition-colors"
+                          title={t('رابط موقع التحميل في Google Maps', 'Lien lieu de chargement')}
+                        >
+                          <MapPin className="w-3 h-3 text-emerald-600" />
+                          <span>{t('GPS شحن', 'GPS Chargement')}</span>
+                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                        </a>
+                      )}
+                      {client.unloading_gps_url && (
+                        <a
+                          href={client.unloading_gps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/25 hover:bg-blue-500/20 transition-colors"
+                          title={t('رابط موقع التفريغ في Google Maps', 'Lien lieu de déchargement')}
+                        >
+                          <MapPin className="w-3 h-3 text-blue-600" />
+                          <span>{t('GPS تفريغ', 'GPS Déchargement')}</span>
+                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                   {client.ice && (
                     <div className="flex justify-between border-t border-border pt-2">
                       <span className="text-muted-foreground">ICE:</span>
@@ -373,6 +403,34 @@ export default function ClientsPage() {
                       <Mail className="w-3.5 h-3.5 text-muted-foreground" />
                       <span dir="ltr" className="font-mono text-xs">{client.email}</span>
                     </div>
+                  )}
+
+                  {client.loading_gps_url && (
+                    <a
+                      href={client.loading_gps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1.5 rounded-xl border border-emerald-500/25 flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 text-xs font-medium transition-colors"
+                      title={t('رابط موقع التحميل في Google Maps', 'Lien lieu de chargement')}
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{t('GPS شحن', 'GPS Chargement')}</span>
+                      <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                    </a>
+                  )}
+
+                  {client.unloading_gps_url && (
+                    <a
+                      href={client.unloading_gps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-blue-500/10 hover:bg-blue-500/20 px-2.5 py-1.5 rounded-xl border border-blue-500/25 flex items-center gap-1.5 text-blue-700 dark:text-blue-300 text-xs font-medium transition-colors"
+                      title={t('رابط موقع التفريغ في Google Maps', 'Lien lieu de déchargement')}
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{t('GPS تفريغ', 'GPS Déchargement')}</span>
+                      <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                    </a>
                   )}
 
                   {client.ice && (

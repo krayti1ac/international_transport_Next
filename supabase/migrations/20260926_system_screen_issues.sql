@@ -7,6 +7,7 @@ BEGIN;
 
 -- 1. Create table public.system_screen_issues
 -- 1. إنشاء جدول مشاكل الشاشات وإدخال البيانات
+-- إنشاء جدول مشاكل الشاشات وإدخال البيانات
 CREATE TABLE IF NOT EXISTS public.system_screen_issues (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id BIGINT REFERENCES public.companies(id) ON DELETE SET NULL,
@@ -44,11 +45,14 @@ CREATE TABLE IF NOT EXISTS public.system_screen_issues (
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_created_at 
   ON public.system_screen_issues (created_at DESC);
 -- 2. الفهارس لتسريع الاستعلامات والفلترة
+-- الفهارس لتسريع الاستعلامات والفلترة
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_created_at ON public.system_screen_issues(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_company_id ON public.system_screen_issues(company_id);
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_device_id ON public.system_screen_issues(device_id);
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_status ON public.system_screen_issues(status);
+CREATE INDEX IF NOT EXISTS idx_system_screen_issues_severity ON public.system_screen_issues(severity);
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_screen_route ON public.system_screen_issues(screen_route);
+CREATE INDEX IF NOT EXISTS idx_system_screen_issues_issue_type ON public.system_screen_issues(issue_type);
 
 CREATE INDEX IF NOT EXISTS idx_system_screen_issues_company_id 
   ON public.system_screen_issues (company_id);
@@ -78,6 +82,7 @@ DROP POLICY IF EXISTS Anyone can insert screen issues ON public.system_screen_is
 CREATE POLICY Anyone can insert screen issues
   ON public.system_screen_issues FOR INSERT
 -- سياسة التسجيل: متاحة لجميع المستخدمين المسجلين لرفع تقرير الخطأ تلقائياً من أجهزتهم
+-- سياسة التسجيل: متاحة لجميع المستخدمين المسجلين وغير المسجلين لرفع تقرير الخطأ تلقائياً من أجهزتهم
 DROP POLICY IF EXISTS "Authenticated users can report screen issues" ON public.system_screen_issues;
 CREATE POLICY "Authenticated users can report screen issues"
   ON public.system_screen_issues
@@ -107,6 +112,9 @@ CREATE POLICY "Super admins have full access to screen issues"
 -- Allow tenant users to view their own company's reported issues
 DROP POLICY IF EXISTS Users can view their own company screen issues ON public.system_screen_issues;
 CREATE POLICY Users can view their own company screen issues
+-- سياسة مستخدمي الشركات: رؤية المشاكل المسجلة لشركتهم فقط
+DROP POLICY IF EXISTS "Users can view their own company screen issues" ON public.system_screen_issues;
+CREATE POLICY "Users can view their own company screen issues"
   ON public.system_screen_issues FOR SELECT
   TO authenticated
   USING (
@@ -114,3 +122,4 @@ CREATE POLICY Users can view their own company screen issues
   );
 
 COMMIT;
+

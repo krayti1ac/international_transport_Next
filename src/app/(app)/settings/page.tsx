@@ -18,10 +18,23 @@ import {
   Trash2,
   Loader2,
   Languages,
+  Mail,
+  Server,
+  Key,
+  Eye,
+  EyeOff,
+  Wifi,
+  CheckCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/language-provider';
 import { useAuth } from '@/components/auth-provider';
+import {
+  testCompanyEmailConnectionAction,
+  updateCompanyEmailSettingsAction,
+} from '@/features/super-admin/services/company.actions';
+import type { MailProviderType } from '@/types/database';
 
 function SettingsContent() {
   const router = useRouter();
@@ -48,6 +61,32 @@ function SettingsContent() {
     default_bank_account_id: '',
     default_tva_rate: '20',
   });
+  const [emailSettings, setEmailSettings] = useState<{
+    email_domain: string;
+    mail_provider: MailProviderType;
+    smtp_host: string;
+    smtp_port: string;
+    imap_host: string;
+    imap_port: string;
+    email_user: string;
+    email_password: string;
+    has_email_password: boolean;
+  }>({
+    email_domain: '',
+    mail_provider: 'cpanel',
+    smtp_host: '',
+    smtp_port: '465',
+    imap_host: '',
+    imap_port: '993',
+    email_user: '',
+    email_password: '',
+    has_email_password: false,
+  });
+  const [showMailPassword, setShowMailPassword] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+  const [savingMail, setSavingMail] = useState(false);
+
   const logoInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
@@ -74,6 +113,19 @@ function SettingsContent() {
           .maybeSingle();
         if (!compErr && compData) {
           fetchedCompany = compData;
+          const domainClean = (compData.email_domain || '').replace(/^@+/, '').trim().toLowerCase();
+          const prov = (compData.mail_provider || 'cpanel') as MailProviderType;
+          setEmailSettings({
+            email_domain: domainClean,
+            mail_provider: prov,
+            smtp_host: compData.smtp_host || (prov === 'hostinger' ? 'smtp.hostinger.com' : prov === 'ovh' ? 'ssl0.ovh.net' : domainClean ? `mail.${domainClean}` : ''),
+            smtp_port: String(compData.smtp_port || 465),
+            imap_host: compData.imap_host || (prov === 'hostinger' ? 'imap.hostinger.com' : prov === 'ovh' ? 'ssl0.ovh.net' : domainClean ? `mail.${domainClean}` : ''),
+            imap_port: String(compData.imap_port || 993),
+            email_user: compData.email_user || (domainClean ? `operations@${domainClean}` : ''),
+            email_password: compData.email_password ? '••••••••' : '',
+            has_email_password: Boolean(compData.email_password),
+          });
         }
       } catch (cErr) {
         console.warn('Could not fetch companies row:', cErr);
@@ -186,6 +238,117 @@ function SettingsContent() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const applyTenantProviderDefaults = (provider: MailProviderType) => {
+    const clean = emailSettings.email_domain || 'domain.com';
+    if (provider === 'cpanel') {
+      setEmailSettings((prev) => ({
+        ...prev,
+        mail_provider: provider,
+        smtp_host: `mail.${clean}`,
+        smtp_port: '465',
+        imap_host: `mail.${clean}`,
+        imap_port: '993',
+        email_user: prev.email_user || `operations@${clean}`,
+      }));
+    } else if (provider === 'hostinger') {
+      setEmailSettings((prev) => ({
+        ...prev,
+        mail_provider: provider,
+        smtp_host: 'smtp.hostinger.com',
+        smtp_port: '465',
+        imap_host: 'imap.hostinger.com',
+        imap_port: '993',
+        email_user: prev.email_user || `operations@${clean}`,
+      }));
+    } else if (provider === 'ovh') {
+      setEmailSettings((prev) => ({
+        ...prev,
+        mail_provider: provider,
+        smtp_host: 'ssl0.ovh.net',
+        smtp_port: '465',
+        imap_host: 'ssl0.ovh.net',
+        imap_port: '993',
+        email_user: prev.email_user || `operations@${clean}`,
+      }));
+    } else {
+      setEmailSettings((prev) => ({ ...prev, mail_provider: provider }));
+    }
+  };
+
+  const handleTestTenantEmailConnection = async () => {
+    const targetCompanyId = companyId || user?.company_id || 1;
+    if (!emailSettings.smtp_host) {
+      toast({ title: 'مضيف SMTP مطلوب', variant: 'destructive' });
+      return;
+    }
+    if (!emailSettings.email_user) {
+      toast({ title: 'البريد الإلكتروني مطلوب', variant: 'destructive' });
+      return;
+    }
+
+    setTestingConnection(true);
+    setTestResult(null);
+
+    const res = await testCompanyEmailConnectionAction({
+      companyId: targetCompanyId,
+      mail_provider: emailSettings.mail_provider,
+      smtp_host: emailSettings.smtp_host,
+      smtp_port: parseInt(emailSettings.smtp_port, 10) || 465,
+      imap_host: emailSettings.imap_host || null,
+      imap_port: parseInt(emailSettings.imap_port, 10) || 993,
+      email_user: emailSettings.email_user,
+      email_password: emailSettings.email_password || undefined,
+    });
+
+    setTestingConnection(false);
+
+    if (res.success) {
+      setTestResult({ success: true, message: res.message || '✅ تم التحقق من مصافحة خادم البريد بنجاح!' });
+      toast({ title: t('✅ تم الاتصال بنجاح', '✅ Connexion réussie', '✅ Conexión exitosa') });
+    } else {
+      setTestResult({ success: false, error: res.error || 'تعذر الاتصال بالخادم' });
+      toast({ title: t('فشل الاتصال', 'Échec de connexion', 'Error de conexión'), description: res.error, variant: 'destructive' });
+    }
+  };
+
+  const handleSaveTenantEmailSettings = async () => {
+    const targetCompanyId = companyId || user?.company_id || 1;
+    setSavingMail(true);
+    try {
+      const res = await updateCompanyEmailSettingsAction({
+        companyId: targetCompanyId,
+        mail_provider: emailSettings.mail_provider,
+        smtp_host: emailSettings.smtp_host || null,
+        smtp_port: parseInt(emailSettings.smtp_port, 10) || 465,
+        imap_host: emailSettings.imap_host || null,
+        imap_port: parseInt(emailSettings.imap_port, 10) || 993,
+        email_user: emailSettings.email_user || null,
+        email_password: emailSettings.email_password || undefined,
+      });
+
+      if (!res.success) {
+        toast({
+          title: t('فشل حفظ إعدادات البريد', "Échec de l'enregistrement", 'Error al guardar'),
+          description: res.error,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: t('✅ تم حفظ إعدادات خادم البريد بنجاح', '✅ Paramètres de messagerie enregistrés', '✅ Configuración de correo guardada'),
+        });
+        setEmailSettings((prev) => ({
+          ...prev,
+          has_email_password: Boolean(emailSettings.email_password && emailSettings.email_password.trim() !== ''),
+          email_password: '••••••••',
+        }));
+      }
+    } catch (err: any) {
+      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingMail(false);
     }
   };
 
@@ -665,10 +828,221 @@ function SettingsContent() {
               </div>
               <Button onClick={handleSave} disabled={saving} className="w-full">
                 <Save className="w-4 h-4 ml-2" />
-                {saving ? t('جاري الحفظ...', 'Enregistrement en cours...', 'Guardando...') : t('حفظ الإعدادات', 'Enregistrer les paramètres', 'Guardar configuración')}
+                {saving ? t('جاري الحفظ...', 'Enregistrement en cours...', 'Guardando...') : t('حفظ الإعدادات', 'Enregistrer les paramètres', 'Guardar configuration')}
               </Button>
             </CardContent>
           </Card>
+
+          {/* إعدادات خادم البريد والمراسلات (Admin Email Settings) */}
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-primary" />
+                    <div>
+                      <CardTitle className="font-amiri text-base">
+                        {t('إعدادات خادم البريد والمراسلات (SMTP & IMAP)', 'Configuration du serveur de messagerie', 'Configuración del servidor de correo')}
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        {t(
+                          'تخصيص ومراجعة خادم البريد الخاص بشركتك لإرسال الإشعارات واستقبال رسائل الرحلات',
+                          'Personnalisez le serveur de messagerie de votre entreprise',
+                          'Personalice el servidor de correo de su empresa'
+                        )}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">
+                    @{emailSettings.email_domain || 'transbodanon.com'}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 text-xs">
+                {/* Mail Provider Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    {t('مزود الخدمة المعتمد', 'Fournisseur de messagerie', 'Proveedor de correo')}
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {(
+                      [
+                        { id: 'cpanel', label: 'cPanel (تلقائي)' },
+                        { id: 'hostinger', label: 'Hostinger' },
+                        { id: 'ovh', label: 'OVH Telecom' },
+                        { id: 'custom', label: 'مخصص (Custom)' },
+                      ] as const
+                    ).map((prov) => (
+                      <button
+                        key={prov.id}
+                        type="button"
+                        onClick={() => applyTenantProviderDefaults(prov.id)}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          emailSettings.mail_provider === prov.id
+                            ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                            : 'border-border bg-card text-muted-foreground hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <p className="font-bold text-xs">{prov.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SMTP Server & Port */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <Server className="w-3.5 h-3.5 text-sky-500" />
+                      <span>{t('خادم إرسال البريد (SMTP Host)', "Serveur d'envoi SMTP", 'Servidor de envío SMTP')}</span>
+                    </label>
+                    <Input
+                      value={emailSettings.smtp_host}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, smtp_host: e.target.value })}
+                      placeholder="mail.domain.com"
+                      dir="ltr"
+                      className="rounded-xl h-10 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">
+                      {t('منفذ SMTP', 'Port SMTP', 'Puerto SMTP')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={emailSettings.smtp_port}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, smtp_port: e.target.value })}
+                      placeholder="465"
+                      dir="ltr"
+                      className="rounded-xl h-10 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* IMAP Server & Port */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <Server className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>{t('خادم استقبال البريد (IMAP Host)', 'Serveur de réception IMAP', 'Servidor de recepción IMAP')}</span>
+                    </label>
+                    <Input
+                      value={emailSettings.imap_host}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, imap_host: e.target.value })}
+                      placeholder="mail.domain.com"
+                      dir="ltr"
+                      className="rounded-xl h-10 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">
+                      {t('منفذ IMAP', 'Port IMAP', 'Puerto IMAP')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={emailSettings.imap_port}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, imap_port: e.target.value })}
+                      placeholder="993"
+                      dir="ltr"
+                      className="rounded-xl h-10 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Email User & Password */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">
+                      {t('البريد التشغيلي (Email User)', 'Adresse email opérationnelle', 'Correo operativo')}
+                    </label>
+                    <Input
+                      value={emailSettings.email_user}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, email_user: e.target.value })}
+                      placeholder="operations@domain.com"
+                      dir="ltr"
+                      className="rounded-xl h-10 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <Key className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{t('كلمة مرور البريد', 'Mot de passe de messagerie', 'Contraseña de correo')}</span>
+                      </label>
+                      <span className="text-[10px] text-muted-foreground">
+                        {emailSettings.has_email_password ? t('(محفوظة ومقنعة)', '(enregistré)', '(guardado)') : t('(غير محددة)', '(vide)', '(vacío)')}
+                      </span>
+                    </div>
+                    <div className="relative flex items-center" dir="ltr">
+                      <Input
+                        type={showMailPassword ? 'text' : 'password'}
+                        value={emailSettings.email_password}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, email_password: e.target.value })}
+                        placeholder={emailSettings.has_email_password ? 'اتركه فارغاً للإبقاء عليها' : 'أدخل كلمة المرور'}
+                        className="rounded-xl h-10 font-mono text-xs pr-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowMailPassword(!showMailPassword)}
+                        className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+                      >
+                        {showMailPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Test Connection Banner */}
+                {testResult && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                      testResult.success
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                    }`}
+                  >
+                    {testResult.success ? (
+                      <CheckCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+                    ) : (
+                      <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                    )}
+                    <span className="leading-snug">{testResult.message || testResult.error}</span>
+                  </div>
+                )}
+
+                {/* Buttons: Test Handshake & Save */}
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testingConnection}
+                    onClick={handleTestTenantEmailConnection}
+                    className="w-full sm:w-auto rounded-xl gap-2 text-xs font-bold"
+                  >
+                    {testingConnection ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Wifi className="w-4 h-4 text-primary" />
+                    )}
+                    <span>{testingConnection ? t('جاري اختبار المصافحة...', 'Test en cours...', 'Probando...') : t('اختبار الاتصال بالخادم', 'Tester la connexion', 'Probar conexión')}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={savingMail}
+                    onClick={handleSaveTenantEmailSettings}
+                    className="w-full sm:flex-1 rounded-xl gap-2 font-bold text-xs"
+                  >
+                    {savingMail ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>{savingMail ? t('جاري الحفظ...', 'Enregistrement...', 'Guardando...') : t('حفظ إعدادات خادم البريد', 'Enregistrer les paramètres de messagerie', 'Guardar configuración de correo')}</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
   );

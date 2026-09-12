@@ -1523,6 +1523,37 @@
     "remainingDevices": "Restant",
     "otherDevices": "autres appareils",
     "toastFailedToReplaceDevice": "Échec du remplacement de l'appareil",
-    "toastDeviceLicenseRevoked": "Licence de l'appareil révoquée"
+    "toastDeviceLicenseRevoked": "Licence de l'appareil révoquée",
+    "emailInbox": {
+      "title": "Boîte de Messagerie Opérationnelle",
+      "dedicatedServer": "Serveur Dédié 100%",
+      "inbound": "Email Reçu",
+      "outbound": "Email Envoyé",
+      "unread": "Non lu",
+      "linkedToTrip": "Lié au trajet",
+      "newMessage": "Nouveau Message",
+      "reply": "Répondre",
+      "send": "Envoyer",
+      "subject": "Objet",
+      "recipient": "Destinataire",
+      "body": "Corps du message"
+    },
+    "emailServerSettings": {
+      "title": "Paramètres des serveurs de messagerie (SMTP & IMAP)",
+      "description": "Configurez le serveur de messagerie dédié pour l'envoi et la réception",
+      "provider": "Fournisseur de messagerie agréé",
+      "smtpHost": "Serveur d'envoi (SMTP Host)",
+      "smtpPort": "Port SMTP",
+      "imapHost": "Serveur de réception (IMAP Host)",
+      "imapPort": "Port IMAP",
+      "emailUser": "Email opérationnel",
+      "emailPassword": "Mot de passe de messagerie",
+      "testConnection": "Tester la connexion au serveur",
+      "testing": "Test de connexion en cours...",
+      "saveSettings": "Enregistrer les paramètres de messagerie",
+      "savedSuccess": "Paramètres de messagerie enregistrés avec succès",
+      "connectionSuccess": "Connexion et vérification réussies avec succès",
+      "connectionFailed": "Échec de la connexion au serveur de messagerie"
+    }
   }
 }

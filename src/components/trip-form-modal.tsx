@@ -4,13 +4,16 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Ship } from 'lucide-react';
+import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Ship, Package, MapPin, Anchor } from 'lucide-react';
+import { CollapsibleSection } from '@/components/ui/collapsible-section';
+import { GpsLinkInput } from '@/components/ui/gps-link-input';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { useLanguage } from '@/components/language-provider';
 import Decimal from 'decimal.js';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
+import { extractCoordinatesFromInput, coordsToGoogleMapsUrl } from '@/lib/gps-utils';
 
 interface TripModalProps {
   isOpen: boolean;
@@ -64,6 +67,11 @@ export function TripFormModal({
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'fleet'>('export');
 
+  // إدارة قسم واحد مفتوح فقط في كل تبويب (Mutual Exclusion Accordion)
+  const [activeExportSection, setActiveExportSection] = useState<'ferry' | 'goods' | 'gps' | null>(null);
+  const [activeImportSection, setActiveImportSection] = useState<'ferry' | 'goods' | 'gps' | null>(null);
+  const [activeFleetSection, setActiveFleetSection] = useState<'status' | null>('status');
+
   const { reportValidation, reportSubmissionError, reportCalculationAnomaly } = useAutoIssueReporter({
     screenName: 'إدارة وتسجيل الرحلات الدولية',
     screenRoute: '/trips',
@@ -107,6 +115,8 @@ export function TripFormModal({
     shipping_longitude: undefined,
     unloading_latitude: undefined,
     unloading_longitude: undefined,
+    shipping_gps_url: '',
+    unloading_gps_url: '',
   });
 
   const totalTripPortFees = useMemo(() => {
@@ -155,6 +165,8 @@ export function TripFormModal({
         triptik_cost: initialData.triptik_cost ?? 500,
         transit_almeria_cost: initialData.transit_almeria_cost ?? 1200,
         marsa_maroc_cost: initialData.marsa_maroc_cost ?? 800,
+        shipping_gps_url: initialData.shipping_gps_url || coordsToGoogleMapsUrl(initialData.shipping_latitude, initialData.shipping_longitude) || '',
+        unloading_gps_url: initialData.unloading_gps_url || coordsToGoogleMapsUrl(initialData.unloading_latitude, initialData.unloading_longitude) || '',
       });
     } else {
       const ts = Date.now().toString().slice(-5);
@@ -192,9 +204,37 @@ export function TripFormModal({
         shipping_longitude: undefined,
         unloading_latitude: undefined,
         unloading_longitude: undefined,
+        shipping_gps_url: '',
+        unloading_gps_url: '',
       });
+      setActiveExportSection(null);
+      setActiveImportSection(null);
     }
   }, [initialData, isOpen, exportClients, importClients]);
+
+  // عند اختيار عميل التصدير: استرجاع روابط GPS للشحن والتفريغ تلقائياً من العميل
+  const handleExportClientChange = (cIdStr: string) => {
+    const cId = parseInt(cIdStr) || undefined;
+    const selectedClient = exportClients.find((c) => c.id === cId);
+    setFormData((prev) => ({
+      ...prev,
+      client_id: cId,
+      shipping_gps_url: selectedClient?.loading_gps_url || prev.shipping_gps_url || '',
+      unloading_gps_url: selectedClient?.unloading_gps_url || prev.unloading_gps_url || '',
+    }));
+  };
+
+  // عند اختيار عميل الاستيراد: استرجاع روابط GPS للشحن والتفريغ تلقائياً من العميل
+  const handleImportClientChange = (cIdStr: string) => {
+    const cId = parseInt(cIdStr) || undefined;
+    const selectedClient = importClients.find((c) => c.id === cId);
+    setFormData((prev) => ({
+      ...prev,
+      client_import_id: cId,
+      unloading_gps_url: selectedClient?.unloading_gps_url || prev.unloading_gps_url || '',
+      shipping_gps_url: prev.shipping_gps_url || selectedClient?.loading_gps_url || '',
+    }));
+  };
 
   const handleDriverChange = (driverIdStr: string) => {
     const dId = parseInt(driverIdStr);
@@ -315,17 +355,28 @@ export function TripFormModal({
         next.transit_almeria_cost = breakdown.transitAlmeriaCost;
         next.marsa_maroc_cost = breakdown.marsaMarocCost;
 
-        // Auto-populate loading GPS
-        if (selectedRoute.origin_latitude !== undefined && selectedRoute.origin_latitude !== null) {
+        // Auto-populate loading GPS: prefer selected client's loading GPS, then route origin
+        const selectedExportClient = exportClients.find((c) => c.id === prev.client_id);
+        if (selectedExportClient?.loading_gps_url) {
+          next.shipping_gps_url = selectedExportClient.loading_gps_url;
+        } else if (selectedRoute.origin_latitude !== undefined && selectedRoute.origin_latitude !== null) {
           next.shipping_latitude = selectedRoute.origin_latitude;
+          if (!next.shipping_gps_url && selectedRoute.origin_longitude !== undefined && selectedRoute.origin_longitude !== null) {
+            next.shipping_gps_url = coordsToGoogleMapsUrl(selectedRoute.origin_latitude, selectedRoute.origin_longitude);
+          }
         }
         if (selectedRoute.origin_longitude !== undefined && selectedRoute.origin_longitude !== null) {
           next.shipping_longitude = selectedRoute.origin_longitude;
         }
 
-        // Default unloading GPS to route destination if not set
-        if (!next.unloading_latitude && selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
+        // Unloading GPS: prefer selected client's unloading GPS, then route destination
+        if (selectedExportClient?.unloading_gps_url) {
+          next.unloading_gps_url = selectedExportClient.unloading_gps_url;
+        } else if (!next.unloading_latitude && selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
           next.unloading_latitude = selectedRoute.destination_latitude;
+          if (!next.unloading_gps_url && selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
+            next.unloading_gps_url = coordsToGoogleMapsUrl(selectedRoute.destination_latitude, selectedRoute.destination_longitude);
+          }
         }
         if (!next.unloading_longitude && selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
           next.unloading_longitude = selectedRoute.destination_longitude;
@@ -358,9 +409,15 @@ export function TripFormModal({
         next.price_import = imp.toNumber();
         next.price = exp.plus(imp).toNumber();
 
-        // Unloading GPS for import leg
-        if (selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
+        // Unloading GPS for import leg: prefer selected import client's unloading GPS, then route destination
+        const selectedImportClient = importClients.find((c) => c.id === prev.client_import_id);
+        if (selectedImportClient?.unloading_gps_url) {
+          next.unloading_gps_url = selectedImportClient.unloading_gps_url;
+        } else if (selectedRoute.destination_latitude !== undefined && selectedRoute.destination_latitude !== null) {
           next.unloading_latitude = selectedRoute.destination_latitude;
+          if (!next.unloading_gps_url && selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
+            next.unloading_gps_url = coordsToGoogleMapsUrl(selectedRoute.destination_latitude, selectedRoute.destination_longitude);
+          }
         }
         if (selectedRoute.destination_longitude !== undefined && selectedRoute.destination_longitude !== null) {
           next.unloading_longitude = selectedRoute.destination_longitude;
@@ -467,15 +524,20 @@ export function TripFormModal({
       ? `${formData.route_export} ⇄ ${formData.route_import}`
       : formData.route_export || formData.route || 'مسار دولي';
 
+    const shipCoords = extractCoordinatesFromInput(formData.shipping_gps_url);
+    const unloadCoords = extractCoordinatesFromInput(formData.unloading_gps_url);
+
     const payload: Partial<TripOrder> = {
       ...formData,
       route: fullRoute,
       price: totalPrice > 0 ? totalPrice : (formData.price || 0),
       cmr_number: formData.cmr_export_number || formData.cmr_number,
-      shipping_latitude: formData.shipping_latitude,
-      shipping_longitude: formData.shipping_longitude,
-      unloading_latitude: formData.unloading_latitude,
-      unloading_longitude: formData.unloading_longitude,
+      shipping_gps_url: formData.shipping_gps_url || null,
+      unloading_gps_url: formData.unloading_gps_url || null,
+      shipping_latitude: shipCoords.latitude ?? formData.shipping_latitude,
+      shipping_longitude: shipCoords.longitude ?? formData.shipping_longitude,
+      unloading_latitude: unloadCoords.latitude ?? formData.unloading_latitude,
+      unloading_longitude: unloadCoords.longitude ?? formData.unloading_longitude,
       ferry_cost: formData.ferry_cost,
       triptik_cost: formData.triptik_cost,
       transit_almeria_cost: formData.transit_almeria_cost,
@@ -591,13 +653,7 @@ export function TripFormModal({
                     </label>
                     <select
                       value={formData.client_id || ''}
-                      onChange={(e) => {
-                        const cId = parseInt(e.target.value) || undefined;
-                        setFormData({
-                          ...formData,
-                          client_id: cId,
-                        });
-                      }}
+                      onChange={(e) => handleExportClientChange(e.target.value)}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
@@ -611,7 +667,6 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('مسار الذهاب (Route Aller) *', 'Itinéraire Aller (Route Aller) *')}</label>
                     <label className="text-sm font-medium text-foreground flex items-center justify-between">
                       <span>{t('مسار الذهاب (Route Aller) *', 'Itinéraire Aller (Route Aller) *')}</span>
                       {formData.route_export && (
@@ -623,13 +678,12 @@ export function TripFormModal({
                     <select
                       value={formData.route_export || ''}
                       onChange={(e) => handleRouteExportChange(e.target.value)}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                       required
                     >
                       <option value="">{t('-- اختر مسار الذهاب --', '-- Sélectionner l\'itinéraire Aller --')}</option>
                       {outboundRoutes.map((r) => (
                         <option key={r.id} value={`${r.origin} → ${r.destination}`}>
-                          {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''}
                           {r.name} {r.distance_km ? `(${r.distance_km} ${t('كم', 'km')})` : ''} {r.cost ? `— [${r.cost.toLocaleString()} MAD]` : ''}
                         </option>
                       ))}
@@ -653,7 +707,7 @@ export function TripFormModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('رقم CMR التصدير (CMR Aller) *', 'N° CMR Aller *')}</label>
                     <Input
@@ -685,178 +739,208 @@ export function TripFormModal({
                       dir="ltr"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('سعر شحن الذهاب (MAD/EUR) *', 'Prix fret Aller (MAD/EUR) *')}</label>
+                    <label className="text-sm font-medium text-foreground font-semibold text-emerald-700 dark:text-emerald-300">{t('سعر شحن الذهاب (MAD/EUR) *', 'Prix fret Aller (MAD/EUR) *')}</label>
                     <Input
                       type="number"
                       step="0.01"
                       value={formData.price_export || ''}
                       onChange={(e) => handlePriceExportChange(parseFloat(e.target.value) || 0)}
                       placeholder="0.00"
+                      className="font-bold font-mono"
                       required
                       dir="ltr"
                     />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للذهاب (Bateau Aller)', 'Compagnie maritime Aller')}</label>
-                    <Input
-                      value={formData.ferry_company || ''}
-                      onChange={(e) => setFormData({ ...formData, ferry_company: e.target.value })}
-                      placeholder="FRS / Balearia"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة الذهاب (Localizador)', 'N° réservation ferry Aller')}</label>
-                    <Input
-                      value={formData.ferry_localizador || ''}
-                      onChange={(e) => setFormData({ ...formData, ferry_localizador: e.target.value })}
-                      placeholder="LOC-EXP-9921"
-                      dir="ltr"
-                    />
-                  </div>
                 </div>
 
-                {/* Unified Port & Maritime Fees Card (الرسوم المينائية ومصاريف العبور الدولي) */}
-                <div className="p-3.5 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Ship className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      {t('الرسوم المينائية ومصاريف العبور الدولي (MAD)', 'Frais portuaires & transit maritime (MAD)')}
+                {/* قسم بيانات العبّارة والرسوم المينائية */}
+                {/* أقسام قابلة للطي (فتح أي قسم يطوي القسم السابق تلقائياً) */}
+                {/* 1. بيانات العبّارة والرسوم المينائية */}
+                <CollapsibleSection
+                  title={t('بيانات العبّارة والرسوم المينائية (MAD)', 'Ferry & Frais portuaires (MAD)')}
+                  description={t('شركة الباخرة، رقم الحجز وتفاصيل تذاكر العبور والترانزيت', 'Compagnie maritime, localizador et détail des frais')}
+                  icon={<Ship className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                  variant="emerald"
+                  defaultOpen={Boolean(formData.ferry_localizador)}
+                  isOpen={activeExportSection === 'ferry'}
+                  onToggle={() => setActiveExportSection((prev) => (prev === 'ferry' ? null : 'ferry'))}
+                  badge={`${totalTripPortFees} MAD`}
+                >
+                  <div className="space-y-4 pt-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للذهاب (Bateau Aller)', 'Compagnie maritime Aller')}</label>
+                        <Input
+                          value={formData.ferry_company || ''}
+                          onChange={(e) => setFormData({ ...formData, ferry_company: e.target.value })}
+                          placeholder="FRS / Balearia"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة الذهاب (Localizador)', 'N° réservation ferry Aller')}</label>
+                        <Input
+                          value={formData.ferry_localizador || ''}
+                          onChange={(e) => setFormData({ ...formData, ferry_localizador: e.target.value })}
+                          placeholder="LOC-EXP-9921"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Unified Port & Maritime Fees Card */}
+                    <div className="p-3 bg-card border border-border/80 rounded-xl space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Anchor className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          {t('تفاصيل الرسوم المينائية ومصاريف العبور (MAD)', 'Détail frais portuaires & transit maritime (MAD)')}
+                        </span>
+                        <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                          {t('مجموع الرسوم:', 'Total frais :')} {totalTripPortFees} MAD
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-foreground block">
+                            {t('الباخرة / العبارة', 'Billet Bateau / Ferry')}
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={formData.ferry_cost ?? ''}
+                            onChange={(e) => setFormData({ ...formData, ferry_cost: parseFloat(e.target.value) || 0 })}
+                            placeholder="4500.00"
+                            className="h-8 text-xs font-mono"
+                            dir="ltr"
+                          />
+                          <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 4,500 MAD', 'Défaut: 4 500 MAD')}</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-foreground block">
+                            {t('التريبتك (Triptik / CPD)', 'Triptyque (CPD)')}
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={formData.triptik_cost ?? ''}
+                            onChange={(e) => setFormData({ ...formData, triptik_cost: parseFloat(e.target.value) || 0 })}
+                            placeholder="500.00"
+                            className="h-8 text-xs font-mono"
+                            dir="ltr"
+                          />
+                          <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 500 MAD', 'Défaut: 500 MAD')}</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-foreground block">
+                            {t('ترانزيت ألميريا / الجزيرة', 'Transit Almería / Algés.')}
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={formData.transit_almeria_cost ?? ''}
+                            onChange={(e) => setFormData({ ...formData, transit_almeria_cost: parseFloat(e.target.value) || 0 })}
+                            placeholder="1200.00"
+                            className="h-8 text-xs font-mono"
+                            dir="ltr"
+                          />
+                          <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 1,200 MAD', 'Défaut: 1 200 MAD')}</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-foreground block">
+                            {t('مناولة مرسى المغرب', 'Marsa Maroc (Port)')}
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={formData.marsa_maroc_cost ?? ''}
+                            onChange={(e) => setFormData({ ...formData, marsa_maroc_cost: parseFloat(e.target.value) || 0 })}
+                            placeholder="800.00"
+                            className="h-8 text-xs font-mono"
+                            dir="ltr"
+                          />
+                          <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 800 MAD', 'Défaut: 800 MAD')}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-muted-foreground">
+                        {t(
+                          '* يتم تحميل الرسوم المرجعية من المسار ويمكنك تعديل أي بند منها بحرية لهذه الرحلة وفق الفواتير الفعلية أو الموسم.',
+                          '* Valeurs de référence pré-remplies et modifiables selon les factures réelles de ce voyage.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </CollapsibleSection>
+
+                {/* قسم تفاصيل بضاعة التصدير والوزن */}
+                {/* 2. تفاصيل بضاعة التصدير والوزن */}
+                <CollapsibleSection
+                  title={t('تفاصيل البضاعة المشحونة والوزن', 'Détails de la marchandise et poids')}
+                  description={t('طبيعة الشحنة والوزن الإجمالي بالأطنان', 'Nature de la marchandise et poids total')}
+                  icon={<Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                  variant="emerald"
+                  defaultOpen={Boolean(formData.goods_description_export || formData.weight_export)}
+                  isOpen={activeExportSection === 'goods'}
+                  onToggle={() => setActiveExportSection((prev) => (prev === 'goods' ? null : 'goods'))}
+                  badge={formData.weight_export ? `${formData.weight_export} T` : undefined}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('وصف بضاعة التصدير (Marchandise)', 'Description marchandise Aller')}</label>
+                      <Input
+                        value={formData.goods_description_export || ''}
+                        onChange={(e) => setFormData({ ...formData, goods_description_export: e.target.value })}
+                        placeholder={t('خضروات، فواكه، نسيج، قطع غيار...', 'Légumes, fruits, textile, pièces...')}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={formData.weight_export || ''}
+                        onChange={(e) => setFormData({ ...formData, weight_export: parseFloat(e.target.value) || undefined })}
+                        placeholder={t('مثال: 22.5', 'Ex: 22.5')}
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleSection>
+
+                {/* 3. موقع الشحن والتحميل GPS (رابط خرائط Google) */}
+                <CollapsibleSection
+                  title={t('موقع الشحن والتحميل GPS (رابط خرائط Google)', 'Lieu de chargement GPS (Lien Google Maps)')}
+                  description={t('رابط خرائط Google يتم جلبه تلقائياً من العميل أو إدخال رابط جديد', 'Lien Google Maps WhatsApp auto-renseigné depuis le client')}
+                  icon={<MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                  variant="emerald"
+                  isOpen={activeExportSection === 'gps'}
+                  onToggle={() => setActiveExportSection((prev) => (prev === 'gps' ? null : 'gps'))}
+                  badge={formData.shipping_gps_url ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                      GPS ✓
                     </span>
-                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
-                      {t('مجموع الرسوم:', 'Total frais :')} {totalTripPortFees} MAD <span className="font-sans font-normal text-[10px] text-muted-foreground">({t('قابلة للتعديل', 'modifiables')})</span>
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
-                        {t('الباخرة / العبارة', 'Billet Bateau / Ferry')}
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.ferry_cost ?? ''}
-                        onChange={(e) => setFormData({ ...formData, ferry_cost: parseFloat(e.target.value) || 0 })}
-                        placeholder="4500.00"
-                        className="h-8 text-xs font-mono"
-                        dir="ltr"
-                      />
-                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 4,500 MAD', 'Défaut: 4 500 MAD')}</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
-                        {t('التريبتك (Triptik / CPD)', 'Triptyque (CPD)')}
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.triptik_cost ?? ''}
-                        onChange={(e) => setFormData({ ...formData, triptik_cost: parseFloat(e.target.value) || 0 })}
-                        placeholder="500.00"
-                        className="h-8 text-xs font-mono"
-                        dir="ltr"
-                      />
-                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 500 MAD', 'Défaut: 500 MAD')}</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
-                        {t('ترانزيت ألميريا / الجزيرة', 'Transit Almería / Algés.')}
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.transit_almeria_cost ?? ''}
-                        onChange={(e) => setFormData({ ...formData, transit_almeria_cost: parseFloat(e.target.value) || 0 })}
-                        placeholder="1200.00"
-                        className="h-8 text-xs font-mono"
-                        dir="ltr"
-                      />
-                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 1,200 MAD', 'Défaut: 1 200 MAD')}</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
-                        {t('مناولة مرسى المغرب', 'Marsa Maroc (Port)')}
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.marsa_maroc_cost ?? ''}
-                        onChange={(e) => setFormData({ ...formData, marsa_maroc_cost: parseFloat(e.target.value) || 0 })}
-                        placeholder="800.00"
-                        className="h-8 text-xs font-mono"
-                        dir="ltr"
-                      />
-                      <span className="text-[10px] text-muted-foreground block">{t('افتراضي: 800 MAD', 'Défaut: 800 MAD')}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-muted-foreground">
-                    {t(
-                      '* يتم تحميل الرسوم المرجعية من المسار ويمكنك تعديل أي بند منها بحرية لهذه الرحلة وفق الفواتير الفعلية أو الموسم.',
-                      '* Valeurs de référence pré-remplies et modifiables selon les factures réelles de ce voyage.'
-                    )}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('وصف بضاعة التصدير (Marchandise)', 'Description marchandise Aller')}</label>
-                    <Input
-                      value={formData.goods_description_export || ''}
-                      onChange={(e) => setFormData({ ...formData, goods_description_export: e.target.value })}
-                      placeholder={t('خضروات، فواكه، نسيج، قطع غيار...', 'Légumes, fruits, textile, pièces...')}
+                  ) : undefined}
+                >
+                  <div className="p-3 bg-muted/40 border border-border rounded-xl space-y-2">
+                    <GpsLinkInput
+                      id="trip-shipping-gps-url"
+                      label={t('رابط موقع الشحن والتحميل (WhatsApp Google Maps Link)', 'Lien Google Maps lieu de chargement')}
+                      value={formData.shipping_gps_url || ''}
+                      onChange={(val) => setFormData({ ...formData, shipping_gps_url: val })}
+                      placeholder="https://maps.app.goo.gl/aWf5HSKLVguTqTcn7"
+                      description={t(
+                        'رابط خرائط Google لموقع شحن البضاعة. يتم ملؤه تلقائياً من بيانات العميل المحدد، كما يمكنك تعديله أو نسخه من رسائل الواتساب.',
+                        'Lien Google Maps pré-rempli depuis la fiche client ou modifiable selon WhatsApp'
+                      )}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={formData.weight_export || ''}
-                      onChange={(e) => setFormData({ ...formData, weight_export: parseFloat(e.target.value) || undefined })}
-                      placeholder={t('مثال: 22.5', 'Ex: 22.5')}
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2">📍 {t('منطقة الشحن (GPS)', 'Lieu de chargement (GPS)')}</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-muted-foreground mb-1">{t('خط العرض', 'Latitude')}</label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formData.shipping_latitude ?? ''}
-                        onChange={(e) => setFormData({ ...formData, shipping_latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder={t('منطقة الشحن', 'Lieu de chargement')}
-                        dir="ltr"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-muted-foreground mb-1">{t('خط الطول', 'Longitude')}</label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formData.shipping_longitude ?? ''}
-                        onChange={(e) => setFormData({ ...formData, shipping_longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder={t('منطقة الشحن', 'Lieu de chargement')}
-                        dir="ltr"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
-                </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
+                </CollapsibleSection>
               </div>
             )}
 
@@ -884,13 +968,7 @@ export function TripFormModal({
                     </label>
                     <select
                       value={formData.client_import_id || ''}
-                      onChange={(e) => {
-                        const cId = parseInt(e.target.value) || undefined;
-                        setFormData({
-                          ...formData,
-                          client_import_id: cId,
-                        });
-                      }}
+                      onChange={(e) => handleImportClientChange(e.target.value)}
                       className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
                       <option value="">{t('-- اختر عميل رحلة العودة (إن وُجد) --', '-- Sélectionner le client Retour (si applicable) --')}</option>
@@ -903,7 +981,6 @@ export function TripFormModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('مسار العودة (Route Retour)', 'Itinéraire Retour (Route Retour)')}</label>
                     <label className="text-sm font-medium text-foreground flex items-center justify-between">
                       <span>{t('مسار العودة (Route Retour)', 'Itinéraire Retour (Route Retour)')}</span>
                       {formData.route_import && (
@@ -915,7 +992,7 @@ export function TripFormModal({
                     <select
                       value={formData.route_import || ''}
                       onChange={(e) => handleRouteImportChange(e.target.value)}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      className="w-full h-10 px-3 py-2 border border-input bg-card text-foreground rounded-lg text-sm focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
                     >
                       <option value="">{t('-- اختر مسار العودة --', '-- Sélectionner l\'itinéraire Retour --')}</option>
                       {returnRoutes.map((r) => (
@@ -943,7 +1020,7 @@ export function TripFormModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('رقم CMR الاستيراد (CMR Retour)', 'N° CMR Retour')}</label>
                     <Input
@@ -973,91 +1050,120 @@ export function TripFormModal({
                       dir="ltr"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('سعر شحن العودة (MAD/EUR)', 'Prix fret Retour (MAD/EUR)')}</label>
+                    <label className="text-sm font-medium text-foreground font-semibold text-blue-700 dark:text-blue-300">{t('سعر شحن العودة (MAD/EUR)', 'Prix fret Retour (MAD/EUR)')}</label>
                     <Input
                       type="number"
                       step="0.01"
                       value={formData.price_import || ''}
                       onChange={(e) => handlePriceImportChange(parseFloat(e.target.value) || 0)}
                       placeholder="0.00"
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للعودة (Bateau Retour)', 'Compagnie maritime Retour')}</label>
-                    <Input
-                      value={formData.ferry_company_import || ''}
-                      onChange={(e) => setFormData({ ...formData, ferry_company_import: e.target.value })}
-                      placeholder="FRS / Balearia"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة العودة (Localizador)', 'N° réservation ferry Retour')}</label>
-                    <Input
-                      value={formData.ferry_localizador_import || ''}
-                      onChange={(e) => setFormData({ ...formData, ferry_localizador_import: e.target.value })}
-                      placeholder="LOC-IMP-8842"
+                      className="font-bold font-mono"
                       dir="ltr"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('وصف بضاعة الاستيراد', 'Description marchandise Retour')}</label>
-                    <Input
-                      value={formData.goods_description_import || ''}
-                      onChange={(e) => setFormData({ ...formData, goods_description_import: e.target.value })}
-                      placeholder={t('مواد أولية، آلات صناعية، فارغة (Vide)...', 'Matières premières, machines, vide...')}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={formData.weight_import || ''}
-                      onChange={(e) => setFormData({ ...formData, weight_import: parseFloat(e.target.value) || undefined })}
-                      placeholder={t('مثال: 18.0', 'Ex: 18.0')}
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">📍 {t('منطقة التفريغ (GPS)', 'Lieu de déchargement (GPS)')}</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-muted-foreground mb-1">{t('خط العرض', 'Latitude')}</label>
+                {/* قسم بيانات عبّارة العودة */}
+                {/* أقسام قابلة للطي (فتح أي قسم يطوي القسم السابق تلقائياً) */}
+                {/* 1. بيانات عبّارة العودة */}
+                <CollapsibleSection
+                  title={t('بيانات عبّارة العودة (Bateau Retour)', 'Ferry Retour & Réservation')}
+                  description={t('شركة الملاحة ورقم الحجز لرحلة الإياب إلى المغرب', 'Compagnie maritime et localizador pour le retour')}
+                  icon={<Ship className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                  variant="blue"
+                  defaultOpen={Boolean(formData.ferry_localizador_import)}
+                  isOpen={activeImportSection === 'ferry'}
+                  onToggle={() => setActiveImportSection((prev) => (prev === 'ferry' ? null : 'ferry'))}
+                  badge={formData.ferry_localizador_import || undefined}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('شركة العبّارة للعودة (Bateau Retour)', 'Compagnie maritime Retour')}</label>
                       <Input
-                        type="number"
-                        step="any"
-                        value={formData.unloading_latitude ?? ''}
-                        onChange={(e) => setFormData({ ...formData, unloading_latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder={t('منطقة التفريغ', 'Lieu de déchargement')}
-                        dir="ltr"
+                        value={formData.ferry_company_import || ''}
+                        onChange={(e) => setFormData({ ...formData, ferry_company_import: e.target.value })}
+                        placeholder="FRS / Balearia"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-muted-foreground mb-1">{t('خط الطول', 'Longitude')}</label>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('رقم حجز باخرة العودة (Localizador)', 'N° réservation ferry Retour')}</label>
                       <Input
-                        type="number"
-                        step="any"
-                        value={formData.unloading_longitude ?? ''}
-                        onChange={(e) => setFormData({ ...formData, unloading_longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder={t('منطقة التفريغ', 'Lieu de déchargement')}
+                        value={formData.ferry_localizador_import || ''}
+                        onChange={(e) => setFormData({ ...formData, ferry_localizador_import: e.target.value })}
+                        placeholder="LOC-IMP-8842"
                         dir="ltr"
                       />
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
-                </div>
+                </CollapsibleSection>
+
+                {/* قسم تفاصيل بضاعة الاستيراد والوزن */}
+                {/* 2. تفاصيل بضاعة الاستيراد والوزن */}
+                <CollapsibleSection
+                  title={t('تفاصيل بضاعة الاستيراد والوزن', 'Détails marchandise Import & Poids')}
+                  description={t('طبيعة شحنة العودة والوزن الإجمالي', 'Nature de la cargaison importée et poids')}
+                  icon={<Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                  variant="blue"
+                  defaultOpen={Boolean(formData.goods_description_import || formData.weight_import)}
+                  isOpen={activeImportSection === 'goods'}
+                  onToggle={() => setActiveImportSection((prev) => (prev === 'goods' ? null : 'goods'))}
+                  badge={formData.weight_import ? `${formData.weight_import} T` : undefined}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('وصف بضاعة الاستيراد', 'Description marchandise Retour')}</label>
+                      <Input
+                        value={formData.goods_description_import || ''}
+                        onChange={(e) => setFormData({ ...formData, goods_description_import: e.target.value })}
+                        placeholder={t('مواد أولية، آلات صناعية، فارغة (Vide)...', 'Matières premières, machines, vide...')}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('الوزن التقريبي (طن)', 'Poids estimé (T)')}</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={formData.weight_import || ''}
+                        onChange={(e) => setFormData({ ...formData, weight_import: parseFloat(e.target.value) || undefined })}
+                        placeholder={t('مثال: 18.0', 'Ex: 18.0')}
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleSection>
+
+                {/* 3. موقع التفريغ والتسليم بالمغرب GPS (رابط خرائط Google) */}
+                <CollapsibleSection
+                  title={t('موقع التفريغ والتسليم بالمغرب GPS (رابط خرائط Google)', 'Lieu de déchargement GPS (Lien Google Maps)')}
+                  description={t('رابط خرائط Google يتم جلبه تلقائياً من العميل أو إدخال رابط جديد', 'Lien Google Maps WhatsApp auto-renseigné depuis le client')}
+                  icon={<MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                  variant="blue"
+                  isOpen={activeImportSection === 'gps'}
+                  onToggle={() => setActiveImportSection((prev) => (prev === 'gps' ? null : 'gps'))}
+                  badge={formData.unloading_gps_url ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25">
+                      GPS ✓
+                    </span>
+                  ) : undefined}
+                >
+                  <div className="p-3 bg-muted/40 border border-border rounded-xl space-y-2">
+                    <GpsLinkInput
+                      id="trip-unloading-gps-url"
+                      label={t('رابط موقع التفريغ والتسليم بالمغرب (WhatsApp Google Maps Link)', 'Lien Google Maps lieu de déchargement')}
+                      value={formData.unloading_gps_url || ''}
+                      onChange={(val) => setFormData({ ...formData, unloading_gps_url: val })}
+                      placeholder="https://maps.app.goo.gl/wYZcQsTCP2ymKpQL6"
+                      description={t(
+                        'رابط خرائط Google لمستودع التفريغ بالمغرب. يتم ملؤه تلقائياً من بيانات العميل المحدد، كما يمكنك تعديله أو نسخه من رسائل الواتساب.',
+                        'Lien Google Maps pré-rempli depuis la fiche client ou modifiable selon WhatsApp'
+                      )}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">{t('يتم تحديد إحداثيات الشحن والتفريغ لكل رحلة على حدة (غير مرتبطة ببيانات العميل)', 'Coordonnées GPS spécifiques à ce voyage')}</p>
+                </CollapsibleSection>
               </div>
             )}
 
@@ -1132,35 +1238,47 @@ export function TripFormModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('حالة مسار الرحلة', 'Statut du voyage')}</label>
-                    <select
-                      value={formData.status || 'pending'}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                      <option value="pending">{t('قيد التجهيز (Pending)', 'En préparation (Pending)')}</option>
-                      <option value="en_route_outbound">{t('في طريق الذهاب (En route Aller / Export)', 'En route Aller (Export)')}</option>
-                      <option value="at_destination_export">{t('وصل وجهة التصدير (At Export Destination)', 'Arrivé destination Export')}</option>
-                      <option value="en_route_inbound">{t('في طريق العودة (En route Retour / Import)', 'En route Retour (Import)')}</option>
-                      <option value="at_customs">{t('في جمرك الميناء (At Customs)', 'En douane portuaire')}</option>
-                      <option value="completed">{t('مكتملة ومفرغة (Completed)', 'Terminé & Déchargé')}</option>
-                    </select>
-                  </div>
+                {/* حالة مسار الرحلة والعملة */}
+                <CollapsibleSection
+                  title={t('حالة مسار الرحلة والعملة', 'Statut du voyage & Devise')}
+                  description={t('تحديد المرحلة الحالية للرحلة ونوع العملة المعتمدة', 'Suivi de l\'état d\'avancement et devise')}
+                  icon={<Navigation className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                  variant="amber"
+                  defaultOpen={true}
+                  isOpen={activeFleetSection === 'status'}
+                  onToggle={() => setActiveFleetSection((prev) => (prev === 'status' ? null : 'status'))}
+                  badge={formData.status || 'pending'}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('حالة مسار الرحلة', 'Statut du voyage')}</label>
+                      <select
+                        value={formData.status || 'pending'}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                        className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="pending">{t('قيد التجهيز (Pending)', 'En préparation (Pending)')}</option>
+                        <option value="en_route_outbound">{t('في طريق الذهاب (En route Aller / Export)', 'En route Aller (Export)')}</option>
+                        <option value="at_destination_export">{t('وصل وجهة التصدير (At Export Destination)', 'Arrivé destination Export')}</option>
+                        <option value="en_route_inbound">{t('في طريق العودة (En route Retour / Import)', 'En route Retour (Import)')}</option>
+                        <option value="at_customs">{t('في جمرك الميناء (At Customs)', 'En douane portuaire')}</option>
+                        <option value="completed">{t('مكتملة ومفرغة (Completed)', 'Terminé & Déchargé')}</option>
+                      </select>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('نوع التسعير / العملة', 'Devise')}</label>
-                    <select
-                      value={formData.price_type || 'MAD'}
-                      onChange={(e) => setFormData({ ...formData, price_type: e.target.value })}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                      <option value="MAD">{t('درهم مغربي (MAD)', 'Dirham marocain (MAD)')}</option>
-                      <option value="EUR">{t('يورو (EUR)', 'Euro (EUR)')}</option>
-                    </select>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('نوع التسعير / العملة', 'Devise')}</label>
+                      <select
+                        value={formData.price_type || 'MAD'}
+                        onChange={(e) => setFormData({ ...formData, price_type: e.target.value })}
+                        className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="MAD">{t('درهم مغربي (MAD)', 'Dirham marocain (MAD)')}</option>
+                        <option value="EUR">{t('يورو (EUR)', 'Euro (EUR)')}</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
+                </CollapsibleSection>
               </div>
             )}
 

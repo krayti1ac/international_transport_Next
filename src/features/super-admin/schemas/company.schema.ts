@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const mailProviderEnum = z.enum(['cpanel', 'hostinger', 'ovh', 'custom']);
+export type MailProvider = z.infer<typeof mailProviderEnum>;
+
 export const createCompanySchema = z.object({
   name: z.string().trim().min(2, 'اسم الشركة مطلوب ويجب أن يحتوي على حرفين على الأقل'),
   ice: z.string().trim().optional().nullable(),
@@ -17,6 +20,13 @@ export const createCompanySchema = z.object({
       (val) => /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val),
       'صيغة نطاق البريد غير صالحة، يجب أن ينتهي بنطاق مثل .com أو .ma'
     ),
+  mail_provider: mailProviderEnum.default('cpanel').optional(),
+  smtp_host: z.string().trim().optional().nullable(),
+  smtp_port: z.coerce.number().int().min(1).max(65535).default(465).optional().nullable(),
+  imap_host: z.string().trim().optional().nullable(),
+  imap_port: z.coerce.number().int().min(1).max(65535).default(993).optional().nullable(),
+  email_user: z.string().trim().optional().nullable(),
+  email_password: z.string().trim().optional().nullable(),
 });
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
@@ -41,7 +51,39 @@ export const updateCompanySchema = z.object({
       'صيغة نطاق البريد غير صالحة، يجب أن ينتهي بنطاق مثل .com أو .ma'
     ),
   is_active: z.boolean().optional(),
+  mail_provider: mailProviderEnum.optional(),
+  smtp_host: z.string().trim().optional().nullable(),
+  smtp_port: z.coerce.number().int().min(1).max(65535).optional().nullable(),
+  imap_host: z.string().trim().optional().nullable(),
+  imap_port: z.coerce.number().int().min(1).max(65535).optional().nullable(),
+  email_user: z.string().trim().optional().nullable(),
+  email_password: z.string().trim().optional().nullable(),
 });
 
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 
+export const testEmailConnectionSchema = z.object({
+  companyId: z.number().int().positive().optional().nullable(),
+  mail_provider: mailProviderEnum.default('cpanel'),
+  smtp_host: z.string().trim().min(1, 'عنوان خادم SMTP مطلوب'),
+  smtp_port: z.coerce.number().int().min(1).max(65535).default(465),
+  imap_host: z.string().trim().optional().nullable(),
+  imap_port: z.coerce.number().int().min(1).max(65535).default(993).optional().nullable(),
+  email_user: z.string().trim().min(1, 'البريد الإلكتروني مطلوب'),
+  email_password: z.string().trim().optional().nullable(),
+});
+
+export type TestEmailConnectionInput = z.infer<typeof testEmailConnectionSchema>;
+
+export const updateCompanyEmailSettingsSchema = z.object({
+  companyId: z.number().int().positive('معرف الشركة مطلوب'),
+  mail_provider: mailProviderEnum.default('cpanel'),
+  smtp_host: z.string().trim().optional().nullable(),
+  smtp_port: z.coerce.number().int().min(1).max(65535).default(465).optional().nullable(),
+  imap_host: z.string().trim().optional().nullable(),
+  imap_port: z.coerce.number().int().min(1).max(65535).default(993).optional().nullable(),
+  email_user: z.string().trim().optional().nullable(),
+  email_password: z.string().trim().optional().nullable(),
+});
+
+export type UpdateCompanyEmailSettingsInput = z.infer<typeof updateCompanyEmailSettingsSchema>;

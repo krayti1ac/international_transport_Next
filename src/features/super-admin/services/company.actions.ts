@@ -6,11 +6,17 @@ import { revalidatePath } from 'next/cache';
 import {
   createCompanySchema,
   updateCompanySchema,
+  testEmailConnectionSchema,
+  updateCompanyEmailSettingsSchema,
   type CreateCompanyInput,
   type UpdateCompanyInput,
+  type TestEmailConnectionInput,
+  type UpdateCompanyEmailSettingsInput,
 } from '../schemas/company.schema';
 import type { Company, CompanyDevice } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
+import nodemailer from 'nodemailer';
+import imaps from 'imap-simple';
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -89,6 +95,14 @@ export async function getCompaniesAction(): Promise<{
       max_devices: comp.max_devices ?? 5,
       email_domain: comp.email_domain || null,
       active_devices_count: deviceCounts[comp.id] ?? 0,
+      mail_provider: comp.mail_provider || 'cpanel',
+      smtp_host: comp.smtp_host || null,
+      smtp_port: comp.smtp_port || 465,
+      imap_host: comp.imap_host || null,
+      imap_port: comp.imap_port || 993,
+      email_user: comp.email_user || null,
+      has_email_password: Boolean(comp.email_password),
+      email_password: comp.email_password ? '••••••••' : null,
     }));
 
     return { success: true, data: enrichedCompanies };
@@ -264,7 +278,7 @@ export async function createCompanyAction(
       };
     }
 
-    const fullPayload = {
+    const fullPayload: Record<string, any> = {
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
       currency: parsed.data.currency || 'MAD',
@@ -273,6 +287,13 @@ export async function createCompanyAction(
       subscription_end_date: parsed.data.subscription_end_date || null,
       max_devices: parsed.data.max_devices ?? 5,
       email_domain: cleanDomain,
+      mail_provider: parsed.data.mail_provider || 'cpanel',
+      smtp_host: parsed.data.smtp_host?.trim() || null,
+      smtp_port: parsed.data.smtp_port || 465,
+      imap_host: parsed.data.imap_host?.trim() || null,
+      imap_port: parsed.data.imap_port || 993,
+      email_user: parsed.data.email_user?.trim() || `operations@${cleanDomain}`,
+      ...(parsed.data.email_password?.trim() ? { email_password: parsed.data.email_password.trim() } : {}),
       is_active: true,
     };
 
@@ -407,7 +428,13 @@ export async function updateCompanyAction(
       }
     }
 
-    const fullPayload = {
+    const shouldUpdatePassword =
+      parsed.data.email_password !== undefined &&
+      parsed.data.email_password !== null &&
+      parsed.data.email_password.trim() !== '' &&
+      parsed.data.email_password !== '••••••••';
+
+    const fullPayload: Record<string, any> = {
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
       currency: parsed.data.currency || 'MAD',
@@ -416,6 +443,13 @@ export async function updateCompanyAction(
       subscription_end_date: parsed.data.subscription_end_date || null,
       max_devices: parsed.data.max_devices ?? 5,
       email_domain: cleanDomain !== undefined ? cleanDomain : null,
+      ...(parsed.data.mail_provider ? { mail_provider: parsed.data.mail_provider } : {}),
+      ...(parsed.data.smtp_host !== undefined ? { smtp_host: parsed.data.smtp_host?.trim() || null } : {}),
+      ...(parsed.data.smtp_port !== undefined ? { smtp_port: parsed.data.smtp_port || 465 } : {}),
+      ...(parsed.data.imap_host !== undefined ? { imap_host: parsed.data.imap_host?.trim() || null } : {}),
+      ...(parsed.data.imap_port !== undefined ? { imap_port: parsed.data.imap_port || 993 } : {}),
+      ...(parsed.data.email_user !== undefined ? { email_user: parsed.data.email_user?.trim() || null } : {}),
+      ...(shouldUpdatePassword ? { email_password: parsed.data.email_password!.trim() } : {}),
       ...(parsed.data.is_active !== undefined ? { is_active: parsed.data.is_active } : {}),
     };
 
@@ -758,4 +792,203 @@ export async function replaceStaleDeviceAction(
     return { success: false, error: message };
   }
 }
+
+/**
+ * Tests the SMTP and IMAP connection handshake for a company before saving settings.
+ */
+export async function testCompanyEmailConnectionAction(
+  rawInput: TestEmailConnectionInput
+): Promise<{
+  success: boolean;
+  smtpVerified: boolean;
+  imapVerified?: boolean;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const parsed = testEmailConnectionSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return {
+        success: false,
+        smtpVerified: false,
+        error: parsed.error.issues[0]?.message || 'البيانات المدخلة غير صالحة',
+      };
+    }
+
+    let effectivePassword = parsed.data.email_password?.trim() || '';
+
+    // If password was omitted or masked, lookup existing stored password from database
+    if ((!effectivePassword || effectivePassword === '••••••••') && parsed.data.companyId) {
+      const adminClient = getAdminClient();
+      const supabase = await createClient();
+      const clientToUse = adminClient || supabase;
+
+      const { data: comp } = await clientToUse
+        .from('companies')
+        .select('email_password')
+        .eq('id', parsed.data.companyId)
+        .maybeSingle();
+
+      if (comp?.email_password) {
+        effectivePassword = comp.email_password;
+      }
+    }
+
+    if (!effectivePassword) {
+      return {
+        success: false,
+        smtpVerified: false,
+        error: 'كلمة مرور خادم البريد مطلوبة لاختبار الاتصال والمصافحة',
+      };
+    }
+
+    const host = parsed.data.smtp_host;
+    const port = parsed.data.smtp_port;
+    const user = parsed.data.email_user;
+
+    // 1. Test SMTP Handshake
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: {
+        user,
+        pass: effectivePassword,
+      },
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === 'production',
+      },
+      connectionTimeout: 10000,
+    });
+
+    try {
+      await transporter.verify();
+    } catch (smtpErr: any) {
+      return {
+        success: false,
+        smtpVerified: false,
+        error: `فشل الاتصال بخادم إرسال البريد (SMTP): ${smtpErr.message}`,
+      };
+    }
+
+    // 2. Test IMAP Handshake if imap_host provided
+    let imapOk = false;
+    if (parsed.data.imap_host) {
+      try {
+        const imapPort = parsed.data.imap_port || 993;
+        const conn = await imaps.connect({
+          imap: {
+            user,
+            password: effectivePassword,
+            host: parsed.data.imap_host,
+            port: imapPort,
+            tls: imapPort === 993,
+            authTimeout: 10000,
+            tlsOptions: {
+              rejectUnauthorized: process.env.NODE_ENV === 'production',
+            },
+          },
+        });
+        await conn.openBox('INBOX');
+        conn.end();
+        imapOk = true;
+      } catch (imapErr: any) {
+        return {
+          success: true,
+          smtpVerified: true,
+          imapVerified: false,
+          message: `✅ نجحت مصافحة إرسال SMTP، ولكن تعذر الاتصال بصندوق وارد IMAP (${imapErr.message})`,
+        };
+      }
+    }
+
+    return {
+      success: true,
+      smtpVerified: true,
+      imapVerified: parsed.data.imap_host ? imapOk : undefined,
+      message: '✅ تم الاتصال واختبار مصافحة خادم البريد (SMTP/IMAP) بنجاح تام!',
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      smtpVerified: false,
+      error: `فشل الاتصال بخادم البريد: ${msg}`,
+    };
+  }
+}
+
+/**
+ * Action for company admin or super admin to update company email settings
+ */
+export async function updateCompanyEmailSettingsAction(
+  rawInput: UpdateCompanyEmailSettingsInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const parsed = updateCompanyEmailSettingsSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message || 'بيانات غير صالحة' };
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'غير مصرح - يرجى تسجيل الدخول' };
+    }
+
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('role, company_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isSuper = userProfile?.role === 'super_admin';
+    const isCompanyAdmin =
+      userProfile?.role === 'admin' && userProfile?.company_id === parsed.data.companyId;
+
+    if (!isSuper && !isCompanyAdmin) {
+      return { success: false, error: 'غير مصرح لك بتعديل إعدادات خادم البريد لهذه الشركة' };
+    }
+
+    const adminClient = getAdminClient();
+    const clientToUse = adminClient || supabase;
+
+    const payload: Record<string, any> = {
+      mail_provider: parsed.data.mail_provider,
+      smtp_host: parsed.data.smtp_host?.trim() || null,
+      smtp_port: parsed.data.smtp_port || 465,
+      imap_host: parsed.data.imap_host?.trim() || null,
+      imap_port: parsed.data.imap_port || 993,
+      email_user: parsed.data.email_user?.trim() || null,
+    };
+
+    if (
+      parsed.data.email_password &&
+      parsed.data.email_password.trim() !== '' &&
+      parsed.data.email_password !== '••••••••'
+    ) {
+      payload.email_password = parsed.data.email_password.trim();
+    }
+
+    const { error } = await clientToUse
+      .from('companies')
+      .update(payload)
+      .eq('id', parsed.data.companyId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/settings');
+    revalidatePath('/super-admin/companies');
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
+}
+
 

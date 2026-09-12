@@ -20,9 +20,10 @@ import {
   RotateCw,
   ExternalLink,
   ChevronLeft,
+  Mail,
 } from 'lucide-react';
 import { useSecretaryTripStages, SecretaryTripItem } from '../services/secretary.queries';
-import { advanceTripStageAction } from '../services/secretary.actions';
+import { advanceTripStageAction, sendTripNotificationBySecretaryAction } from '../services/secretary.actions';
 
 const STAGES = [
   {
@@ -75,6 +76,7 @@ export function TripStagesPipeline() {
   const { data, isLoading, refetch, isRefetching } = useSecretaryTripStages();
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
   const [updatingTripId, setUpdatingTripId] = useState<number | null>(null);
+  const [sendingEmailTripId, setSendingEmailTripId] = useState<number | null>(null);
 
   const trips = data?.trips || [];
   const counts = data?.stageCounts || {
@@ -116,6 +118,43 @@ export function TripStagesPipeline() {
       });
     } finally {
       setUpdatingTripId(null);
+    }
+  };
+
+  const handleSendTrackingEmail = async (trip: SecretaryTripItem) => {
+    try {
+      setSendingEmailTripId(trip.id);
+      const res = await sendTripNotificationBySecretaryAction(trip.id);
+      if (!res.success) {
+        throw new Error(res.error || t('فشل إرسال إشعار التتبع', 'Échec de l\'envoi'));
+      }
+
+      if (res.safeRedirected) {
+        toast({
+          title: t('تم إرسال إشعار التتبع [وضع التجربة 🧪]', 'Notification envoyée [Mode Test 🧪]'),
+          description: t(
+            `تم توجيه البريد بأمان إلى بريد الإدارة (hisaltan@gmail.com) نيابة عن: ${res.clientName || trip.client_name || 'العميل'}`,
+            `Email redirigé en toute sécurité vers l'admin (hisaltan@gmail.com) pour: ${res.clientName || trip.client_name || 'Client'}`
+          ),
+        });
+      } else {
+        toast({
+          title: t('تم إرسال إشعار التتبع للعميل بنجاح', 'Notification envoyée au client avec succès'),
+          description: t(
+            `تم إرسال الرابط المباشر إلى ${res.clientEmail} (${res.clientName})`,
+            `Lien de suivi envoyé à ${res.clientEmail} (${res.clientName})`
+          ),
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('حدث خطأ', 'Erreur');
+      toast({
+        title: t('خطأ في إرسال الإشعار', 'Erreur d\'envoi'),
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingEmailTripId(null);
     }
   };
 
@@ -310,30 +349,49 @@ export function TripStagesPipeline() {
                         </span>
                       </td>
 
-                      {/* Action: Next Stage */}
+                      {/* Actions: Send Email & Next Stage */}
                       <td className="px-4 py-3 text-center">
-                        {nextStage && nextStageObj ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* Send Tracking Email to Client */}
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled={isUpdating}
-                            onClick={() => handleAdvanceStage(trip, nextStage)}
-                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-all"
-                            title={t('نقل للمرحلة التالية', 'Passer à l\'étape suivante')}
+                            variant="ghost"
+                            disabled={sendingEmailTripId === trip.id}
+                            onClick={() => handleSendTrackingEmail(trip)}
+                            className="h-7 w-7 p-0 rounded-lg text-teal-600 hover:text-teal-700 hover:bg-teal-500/10 dark:text-teal-400 dark:hover:bg-teal-500/20 border border-teal-500/20"
+                            title={t('إرسال إشعار التتبع للعميل بالبريد', 'Envoyer notification de suivi par email')}
                           >
-                            <span>{t('نقل إلى: ', 'Vers: ')}{locale === 'fr' ? nextStageObj.labelFr : nextStageObj.labelAr}</span>
-                            {dir === 'rtl' ? (
-                              <ChevronLeft className="w-3 h-3 ms-1 text-primary" />
+                            {sendingEmailTripId === trip.id ? (
+                              <RotateCw className="w-3.5 h-3.5 animate-spin text-teal-600 dark:text-teal-400" />
                             ) : (
-                              <ChevronRight className="w-3 h-3 ms-1 text-primary" />
+                              <Mail className="w-3.5 h-3.5" />
                             )}
                           </Button>
-                        ) : (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center justify-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {t('مكتملة', 'Terminé')}
-                          </span>
-                        )}
+
+                          {/* Next Stage Button */}
+                          {nextStage && nextStageObj ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isUpdating}
+                              onClick={() => handleAdvanceStage(trip, nextStage)}
+                              className="h-7 px-2 text-[11px] font-semibold rounded-lg border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-all"
+                              title={t('نقل للمرحلة التالية', 'Passer à l\'étape suivante')}
+                            >
+                              <span>{t('نقل إلى: ', 'Vers: ')}{locale === 'fr' ? nextStageObj.labelFr : nextStageObj.labelAr}</span>
+                              {dir === 'rtl' ? (
+                                <ChevronLeft className="w-3 h-3 ms-1 text-primary" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3 ms-1 text-primary" />
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center justify-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {t('مكتملة', 'Terminé')}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

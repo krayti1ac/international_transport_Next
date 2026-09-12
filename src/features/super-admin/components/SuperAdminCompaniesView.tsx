@@ -36,6 +36,16 @@ import {
   AtSign,
   Copy,
   Check,
+  Mail,
+  Server,
+  Key,
+  Eye,
+  EyeOff,
+  CheckCheck,
+  Send,
+  Globe,
+  Wifi,
+  ShieldAlert,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
@@ -47,8 +57,9 @@ import {
   toggleCompanyStatusAction,
   getCompanyDevicesAction,
   toggleDeviceStatusAction,
+  testCompanyEmailConnectionAction,
 } from '../services/company.actions';
-import type { Company, CompanyDevice } from '@/types/database';
+import type { Company, CompanyDevice, MailProviderType } from '@/types/database';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -294,6 +305,26 @@ export function SuperAdminCompaniesView() {
   const [editMaxDevices, setEditMaxDevices] = useState('5');
   const [updating, setUpdating] = useState(false);
 
+  // Email Settings State in Modal Edit
+  const [editMailProvider, setEditMailProvider] = useState<MailProviderType>('cpanel');
+  const [editSmtpHost, setEditSmtpHost] = useState('');
+  const [editSmtpPort, setEditSmtpPort] = useState('465');
+  const [editImapHost, setEditImapHost] = useState('');
+  const [editImapPort, setEditImapPort] = useState('993');
+  const [editEmailUser, setEditEmailUser] = useState('');
+  const [editEmailPassword, setEditEmailPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
+
+  // Email settings in Create Form
+  const [createMailProvider, setCreateMailProvider] = useState<MailProviderType>('cpanel');
+  const [createEmailPassword, setCreateEmailPassword] = useState('');
+
   // Modal Devices
   const [devicesModalOpen, setDevicesModalOpen] = useState(false);
   const [devicesCompany, setDevicesCompany] = useState<Company | null>(null);
@@ -420,6 +451,37 @@ export function SuperAdminCompaniesView() {
     fetchCompanies();
   }, [fetchCompanies]);
 
+  // Auto-configure server settings when provider or domain changes
+  const applyProviderDefaults = (provider: MailProviderType, domain: string) => {
+    const clean = domain.replace(/^@+/, '').trim().toLowerCase() || 'domain.com';
+    setEditMailProvider(provider);
+    if (provider === 'cpanel') {
+      setEditSmtpHost(`mail.${clean}`);
+      setEditSmtpPort('465');
+      setEditImapHost(`mail.${clean}`);
+      setEditImapPort('993');
+      if (!editEmailUser || editEmailUser.startsWith('operations@')) {
+        setEditEmailUser(`operations@${clean}`);
+      }
+    } else if (provider === 'hostinger') {
+      setEditSmtpHost('smtp.hostinger.com');
+      setEditSmtpPort('465');
+      setEditImapHost('imap.hostinger.com');
+      setEditImapPort('993');
+      if (!editEmailUser || editEmailUser.startsWith('operations@')) {
+        setEditEmailUser(`operations@${clean}`);
+      }
+    } else if (provider === 'ovh') {
+      setEditSmtpHost('ssl0.ovh.net');
+      setEditSmtpPort('465');
+      setEditImapHost('ssl0.ovh.net');
+      setEditImapPort('993');
+      if (!editEmailUser || editEmailUser.startsWith('operations@')) {
+        setEditEmailUser(`operations@${clean}`);
+      }
+    }
+  };
+
   // Open Edit Modal
   const handleOpenEdit = (comp: Company) => {
     const local = getLocalSubscription(comp.id);
@@ -432,7 +494,96 @@ export function SuperAdminCompaniesView() {
     setEditStartDate(comp.subscription_start_date || local?.subscription_start_date || '');
     setEditEndDate(comp.subscription_end_date || local?.subscription_end_date || '');
     setEditMaxDevices(String(comp.max_devices ?? local?.max_devices ?? 5));
+
+    // Initialize Mail settings
+    const domainClean = (comp.email_domain || '').replace(/^@+/, '').trim().toLowerCase();
+    const provider = comp.mail_provider || 'cpanel';
+    setEditMailProvider(provider);
+    setEditSmtpHost(
+      comp.smtp_host ||
+        (provider === 'hostinger'
+          ? 'smtp.hostinger.com'
+          : provider === 'ovh'
+          ? 'ssl0.ovh.net'
+          : domainClean
+          ? `mail.${domainClean}`
+          : '')
+    );
+    setEditSmtpPort(String(comp.smtp_port || 465));
+    setEditImapHost(
+      comp.imap_host ||
+        (provider === 'hostinger'
+          ? 'imap.hostinger.com'
+          : provider === 'ovh'
+          ? 'ssl0.ovh.net'
+          : domainClean
+          ? `mail.${domainClean}`
+          : '')
+    );
+    setEditImapPort(String(comp.imap_port || 993));
+    setEditEmailUser(comp.email_user || (domainClean ? `operations@${domainClean}` : ''));
+    setEditEmailPassword(comp.email_password || (comp.has_email_password ? '••••••••' : ''));
+    setShowEditPassword(false);
+    setConnectionTestResult(null);
+
     setEditModalOpen(true);
+  };
+
+  // Test Email Connection Handshake
+  const handleTestEmailConnection = async () => {
+    if (!editSmtpHost.trim()) {
+      toast({
+        title: 'مضيف SMTP مطلوب',
+        description: 'يرجى إدخال خادم SMTP للاختبار',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!editEmailUser.trim()) {
+      toast({
+        title: 'البريد الإلكتروني مطلوب',
+        description: 'يرجى إدخال عنوان البريد الإلكتروني التشغيلي',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+
+    const res = await testCompanyEmailConnectionAction({
+      companyId: editingCompany?.id || null,
+      mail_provider: editMailProvider,
+      smtp_host: editSmtpHost.trim(),
+      smtp_port: parseInt(editSmtpPort, 10) || 465,
+      imap_host: editImapHost.trim() || null,
+      imap_port: parseInt(editImapPort, 10) || 993,
+      email_user: editEmailUser.trim(),
+      email_password: editEmailPassword || undefined,
+    });
+
+    setTestingConnection(false);
+
+    if (res.success) {
+      setConnectionTestResult({
+        success: true,
+        message: res.message || '✅ تم التحقق من مصافحة خادم البريد بنجاح!',
+      });
+      toast({
+        title: 'نجاح مصافحة البريد',
+        description: res.message || 'تم اختبار الاتصال بالخادم بنجاح تام',
+      });
+    } else {
+      setConnectionTestResult({
+        success: false,
+        error: res.error || 'تعذر الاتصال بالخادم، يرجى مراجعة البيانات',
+      });
+      toast({
+        title: 'فشل الاتصال بخادم البريد',
+        description: res.error || 'يرجى التحقق من صحة المضيف والمنافذ وكلمة المرور',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Save Edit Company
@@ -461,6 +612,13 @@ export function SuperAdminCompaniesView() {
               ice: editIce.trim() || null,
               currency: editCurrency,
               email_domain: cleanDomain,
+              mail_provider: editMailProvider,
+              smtp_host: editSmtpHost.trim() || null,
+              smtp_port: parseInt(editSmtpPort, 10) || 465,
+              imap_host: editImapHost.trim() || null,
+              imap_port: parseInt(editImapPort, 10) || 993,
+              email_user: editEmailUser.trim() || null,
+              has_email_password: Boolean(editEmailPassword && editEmailPassword.trim() !== ''),
               ...subData,
             }
           : c
@@ -474,6 +632,13 @@ export function SuperAdminCompaniesView() {
       ice: editIce.trim() || null,
       currency: editCurrency,
       email_domain: cleanDomain,
+      mail_provider: editMailProvider,
+      smtp_host: editSmtpHost.trim() || null,
+      smtp_port: parseInt(editSmtpPort, 10) || 465,
+      imap_host: editImapHost.trim() || null,
+      imap_port: parseInt(editImapPort, 10) || 993,
+      email_user: editEmailUser.trim() || null,
+      email_password: editEmailPassword || undefined,
       ...subData,
     });
     setUpdating(false);
@@ -625,6 +790,8 @@ export function SuperAdminCompaniesView() {
       subscription_end_date: endDate || null,
       max_devices: parseInt(maxDevices, 10) || 5,
       email_domain: cleanDomain,
+      mail_provider: createMailProvider,
+      email_password: createEmailPassword.trim() || undefined,
     });
 
     setSubmitting(false);
@@ -1281,11 +1448,17 @@ export function SuperAdminCompaniesView() {
                               </span>
                               {comp.email_domain && (
                                 <span
-                                  className="text-[10px] font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.2 rounded border border-sky-500/20"
+                                  className="text-[10px] font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20 inline-flex items-center gap-1"
                                   dir="ltr"
                                   title="النطاق المعتمد للبريد الإلكتروني"
                                 >
-                                  @{comp.email_domain}
+                                  <Mail className="w-2.5 h-2.5 text-sky-500" />
+                                  <span>@{comp.email_domain}</span>
+                                  {comp.mail_provider && (
+                                    <span className="text-[9px] font-sans opacity-80 uppercase">
+                                      ({comp.mail_provider})
+                                    </span>
+                                  )}
                                 </span>
                               )}
                             </div>
@@ -1437,11 +1610,17 @@ export function SuperAdminCompaniesView() {
                           </span>
                           {comp.email_domain && (
                             <span
-                              className="text-[10px] font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.2 rounded border border-sky-500/20"
+                              className="text-[10px] font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20 inline-flex items-center gap-1"
                               dir="ltr"
                               title="النطاق المعتمد للبريد الإلكتروني"
                             >
-                              @{comp.email_domain}
+                              <Mail className="w-2.5 h-2.5 text-sky-500" />
+                              <span>@{comp.email_domain}</span>
+                              {comp.mail_provider && (
+                                <span className="text-[9px] font-sans opacity-80 uppercase">
+                                  ({comp.mail_provider})
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>
@@ -1827,6 +2006,205 @@ export function SuperAdminCompaniesView() {
                   )}
                 </div>
 
+                {/* 5. Dynamic Email & Mail Server Settings (SMTP / IMAP) */}
+                <div className="space-y-3 bg-primary/5 border border-primary/20 p-3.5 rounded-xl">
+                  <div className="flex items-center justify-between border-b border-primary/10 pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-foreground text-xs">
+                          إعدادات خوادم البريد والمراسلات (SMTP & IMAP)
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground">
+                          تكوين خادم البريد الخاص بالشركة لإرسال واستقبال الإشعارات والرحلات
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold font-mono">
+                      Multi-Tenant Mail
+                    </span>
+                  </div>
+
+                  {/* Mail Provider Selection */}
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-foreground flex items-center justify-between">
+                      <span>مزود خدمة البريد (Mail Provider)</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        يحدد إعدادات الربط التلقائي للخوادم
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {(
+                        [
+                          { id: 'cpanel', label: 'cPanel (تلقائي)', desc: 'mail.domain' },
+                          { id: 'hostinger', label: 'Hostinger', desc: 'smtp.hostinger' },
+                          { id: 'ovh', label: 'OVH Telecom', desc: 'ssl0.ovh.net' },
+                          { id: 'custom', label: 'خادم مخصص', desc: 'إعدادات يدوية' },
+                        ] as const
+                      ).map((prov) => (
+                        <button
+                          key={prov.id}
+                          type="button"
+                          onClick={() => applyProviderDefaults(prov.id, editEmailDomain)}
+                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            editMailProvider === prov.id
+                              ? 'border-primary bg-primary/15 text-primary font-bold shadow-xs'
+                              : 'border-border bg-card text-muted-foreground hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                        >
+                          <p className="text-[11px] leading-tight">{prov.label}</p>
+                          <span className="text-[9px] text-muted-foreground font-mono">{prov.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* SMTP Server & Port */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="font-semibold text-foreground flex items-center gap-1">
+                        <Server className="w-3 h-3 text-sky-500" />
+                        <span>خادم الإرسال (SMTP Host) *</span>
+                      </label>
+                      <Input
+                        value={editSmtpHost}
+                        onChange={(e) => setEditSmtpHost(e.target.value)}
+                        placeholder="mail.transbodanon.com"
+                        dir="ltr"
+                        className="rounded-xl h-9 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground">منفذ SMTP</label>
+                      <Input
+                        type="number"
+                        value={editSmtpPort}
+                        onChange={(e) => setEditSmtpPort(e.target.value)}
+                        placeholder="465"
+                        dir="ltr"
+                        className="rounded-xl h-9 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* IMAP Server & Port */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="font-semibold text-foreground flex items-center gap-1">
+                        <Server className="w-3 h-3 text-indigo-500" />
+                        <span>خادم الاستقبال (IMAP Host)</span>
+                      </label>
+                      <Input
+                        value={editImapHost}
+                        onChange={(e) => setEditImapHost(e.target.value)}
+                        placeholder="mail.transbodanon.com"
+                        dir="ltr"
+                        className="rounded-xl h-9 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground">منفذ IMAP</label>
+                      <Input
+                        type="number"
+                        value={editImapPort}
+                        onChange={(e) => setEditImapPort(e.target.value)}
+                        placeholder="993"
+                        dir="ltr"
+                        className="rounded-xl h-9 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Operating Email User & Password */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground flex items-center gap-1">
+                        <AtSign className="w-3 h-3 text-emerald-500" />
+                        <span>البريد التشغيلي (Email User) *</span>
+                      </label>
+                      <Input
+                        value={editEmailUser}
+                        onChange={(e) => setEditEmailUser(e.target.value)}
+                        placeholder="operations@domain.com"
+                        dir="ltr"
+                        className="rounded-xl h-9 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Key className="w-3 h-3 text-amber-500" />
+                          <span>كلمة مرور البريد</span>
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {editingCompany.has_email_password ? '(محفوظة ومقنعة)' : '(غير محددة)'}
+                        </span>
+                      </label>
+                      <div className="relative flex items-center" dir="ltr">
+                        <Input
+                          type={showEditPassword ? 'text' : 'password'}
+                          value={editEmailPassword}
+                          onChange={(e) => setEditEmailPassword(e.target.value)}
+                          placeholder={editingCompany.has_email_password ? 'اتركه فارغاً للإبقاء عليها' : 'أدخل كلمة المرور'}
+                          className="rounded-xl h-9 font-mono text-xs pr-8"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEditPassword(!showEditPassword)}
+                          className="absolute right-2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showEditPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Connection Test Button & Feedback Banner */}
+                  <div className="pt-2 border-t border-primary/10 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-muted-foreground">
+                        ينصح بفحص مصافحة السيرفر (Handshake) قبل حفظ التعديلات
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={testingConnection}
+                        onClick={handleTestEmailConnection}
+                        className="rounded-xl h-8 px-3 text-xs gap-1.5 font-bold shadow-xs bg-card hover:bg-muted border border-border"
+                      >
+                        {testingConnection ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Wifi className="w-3.5 h-3.5 text-primary" />
+                        )}
+                        <span>{testingConnection ? 'جاري فحص المصافحة...' : 'اختبار الاتصال بالخادم'}</span>
+                      </Button>
+                    </div>
+
+                    {connectionTestResult && (
+                      <div
+                        className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+                          connectionTestResult.success
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                        }`}
+                      >
+                        {connectionTestResult.success ? (
+                          <CheckCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+                        ) : (
+                          <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                        )}
+                        <span className="leading-snug">
+                          {connectionTestResult.message || connectionTestResult.error}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Submit buttons */}
                 <div className="flex justify-end gap-2 pt-3 border-t">
                   <Button
@@ -1929,6 +2307,50 @@ export function SuperAdminCompaniesView() {
                         سيتم تلقائياً إنشاء حساب مسؤول النظام: <strong className="font-mono text-foreground">{emailDomain ? `admin@${emailDomain.trim().toLowerCase()}` : 'admin@domain.com'}</strong> بكلمة سر: <strong className="font-mono text-foreground">123</strong>
                       </span>
                     </p>
+                  </div>
+                </div>
+
+                {/* Mail Provider Selection & Initial Auto-Config */}
+                <div className="space-y-1.5 p-3 rounded-xl bg-muted/30 border border-border">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-primary" />
+                      <span>مزود خدمة البريد الإلكتروني للمؤسسة</span>
+                    </label>
+                    <span className="text-[10px] text-muted-foreground font-mono">تهيئة تلقائية للربط</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {(
+                      [
+                        { id: 'cpanel', label: 'cPanel', desc: 'mail.domain' },
+                        { id: 'hostinger', label: 'Hostinger', desc: 'smtp.hostinger' },
+                        { id: 'ovh', label: 'OVH', desc: 'ssl0.ovh.net' },
+                        { id: 'custom', label: 'مخصص', desc: 'إعدادات يدوية' },
+                      ] as const
+                    ).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setCreateMailProvider(p.id)}
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                          createMailProvider === p.id
+                            ? 'border-primary bg-primary/15 text-primary font-bold shadow-xs'
+                            : 'border-border bg-card text-muted-foreground hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <p className="text-[11px] leading-tight">{p.label}</p>
+                        <span className="text-[9px] text-muted-foreground font-mono">{p.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pt-2">
+                    <Input
+                      type="password"
+                      value={createEmailPassword}
+                      onChange={(e) => setCreateEmailPassword(e.target.value)}
+                      placeholder="كلمة مرور خادم البريد (اختياري - يمكن تعيينها لاحقاً)"
+                      className="rounded-xl h-9 text-xs"
+                    />
                   </div>
                 </div>
 

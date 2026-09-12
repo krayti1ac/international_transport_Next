@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, FileText } from 'lucide-react';
+import { X, Save, FileText, Landmark } from 'lucide-react';
+import { CollapsibleSection } from '@/components/ui/collapsible-section';
 import type { Invoice, Client, TripOrder } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_TRIPS, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
@@ -320,50 +321,21 @@ export function InvoiceFormModal({
                 />
               </div>
             </div>
-
-            {/* Calculations and Taxes */}
-            <div className="p-4 bg-muted/60 dark:bg-slate-900/60 rounded-xl border border-border space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">{t('المبلغ الصافي (HT) *', 'Montant HT *')}</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.ht_amount || ''}
-                    onChange={(e) => handleHTChange(e.target.value, formData.tva_rate || '20')}
-                    required
-                    dir="ltr"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">{t('نسبة الضريبة TVA (%)', 'Taux TVA (%)')}</label>
-                  <Input
-                    type="number"
-                    value={formData.tva_rate || '20'}
-                    onChange={(e) => handleHTChange(formData.ht_amount || '0', e.target.value)}
-                    dir="ltr"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">{t('قيمة الضريبة (TVA)', 'Montant TVA')}</label>
-                  <Input
-                    value={formData.tva_amount || '0.00'}
-                    disabled
-                    className="bg-muted font-mono"
-                    dir="ltr"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-2 border-t border-border font-bold text-base text-primary">
-                <span>{t('المجموع النهائي (TTC):', 'Total TTC :')}</span>
-                <span className="font-mono text-lg">{formData.ttc_amount || '0.00'} {formData.currency}</span>
-              </div>
-            </div>
-
+            {/* Amount and Payment Status (Upfront Essential Fields) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">{t('المبلغ الصافي (HT) *', 'Montant HT *')}</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.ht_amount || ''}
+                  onChange={(e) => handleHTChange(e.target.value, formData.tva_rate || '20')}
+                  required
+                  dir="ltr"
+                  placeholder="0.00"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">{t('حالة الدفع', 'Statut de paiement')}</label>
                 <select
@@ -377,16 +349,82 @@ export function InvoiceFormModal({
                   <option value="overdue">{t('متأخرة عن الدفع', 'En retard de paiement')}</option>
                 </select>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">{t('المسار (Route)', 'Trajet (Route)')}</label>
-                <Input
-                  value={formData.route || ''}
-                  onChange={(e) => setFormData({ ...formData, route: e.target.value })}
-                  placeholder={t('طنجة -> فالنسيا', 'Tanger -> Valence')}
-                />
-              </div>
             </div>
+
+            {/* Prominent TTC Total Banner */}
+            <div className="flex justify-between items-center px-4 py-3 bg-primary/10 border border-primary/25 rounded-xl">
+              <div className="flex flex-col">
+                <span className="text-xs text-muted-foreground">{t('المجموع النهائي مع احتساب الضريبة', 'Total TTC avec taxes incluses')}</span>
+                <span className="text-sm font-semibold text-primary">{t('المجموع النهائي (TTC)', 'Total TTC')}</span>
+              </div>
+              <span className="font-mono text-xl font-black text-primary">
+                {formData.ttc_amount || '0.00'} {formData.currency}
+              </span>
+            </div>
+
+            {/* Collapsible: Advanced Tax & Bank RIB & Route */}
+            <CollapsibleSection
+              title={t('الخيارات الضريبية وتفاصيل الحساب البنكي', 'Options Fiscales & Coordonnées Bancaires')}
+              subtitle={t('تعديل نسبة الضريبة TVA، مسار الرحلة، ومعلومات التحويل البنكي', 'TVA, trajet associé et coordonnées RIB')}
+              icon={<Landmark className="w-4 h-4" />}
+              variant="slate"
+              defaultOpen={false}
+              badge={
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                    TVA {formData.tva_rate || '20'}% ({formData.tva_amount || '0.00'})
+                  </span>
+                  {formData.route && (
+                    <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[11px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
+                      {formData.route}
+                    </span>
+                  )}
+                </div>
+              }
+            >
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">{t('نسبة الضريبة TVA (%)', 'Taux TVA (%)')}</label>
+                    <Input
+                      type="number"
+                      value={formData.tva_rate || '20'}
+                      onChange={(e) => handleHTChange(formData.ht_amount || '0', e.target.value)}
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">{t('قيمة الضريبة (TVA)', 'Montant TVA')}</label>
+                    <Input
+                      value={formData.tva_amount || '0.00'}
+                      disabled
+                      className="bg-muted font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">{t('المسار (Route)', 'Trajet (Route)')}</label>
+                  <Input
+                    value={formData.route || ''}
+                    onChange={(e) => setFormData({ ...formData, route: e.target.value })}
+                    placeholder={t('مثال: طنجة -> فالنسيا', 'Ex: Tanger -> Valence')}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">{t('معلومات الحساب البنكي والتحصيل (RIB)', 'Coordonnées Bancaires (RIB)')}</label>
+                  <Input
+                    value={formData.bank_info_text || ''}
+                    onChange={(e) => setFormData({ ...formData, bank_info_text: e.target.value })}
+                    placeholder={t('RIB: 007 780 0001234567890123 45 - ATTIJARIWAFA BANK', 'RIB: 007 780 0001234567890123 45')}
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+            </CollapsibleSection>
 
             <div className="flex gap-2 pt-4 border-t border-border">
               <Button type="submit" disabled={loading} className="flex-1 flex items-center justify-center gap-2">

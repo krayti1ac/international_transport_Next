@@ -7,6 +7,7 @@ import { QuickDataEntryBar } from './QuickDataEntryBar';
 import { SecretaryCashCard } from './SecretaryCashCard';
 import { CriticalDatesTracker } from './CriticalDatesTracker';
 import { TripStagesPipeline } from './TripStagesPipeline';
+import { SecretaryEmailInbox } from './SecretaryEmailInbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw } from 'lucide-react';
@@ -21,6 +22,7 @@ export default function SecretaryDashboard() {
     queryClient.invalidateQueries({ queryKey: ['secretary-trip-stages'] });
     queryClient.invalidateQueries({ queryKey: ['trips'] });
     queryClient.invalidateQueries({ queryKey: ['treasuryBalances'] });
+    queryClient.invalidateQueries({ queryKey: ['email_messages'] });
   };
 
   const currentDateFormatted = new Date().toLocaleDateString(
@@ -85,6 +87,9 @@ export default function SecretaryDashboard() {
 
       {/* 3. Operational Trip Stages & Tracking Pipeline */}
       <TripStagesPipeline />
+
+      {/* 4. Independent Smart Email Inbox */}
+      <SecretaryEmailInbox />
     </div>
   );
 }

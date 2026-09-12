@@ -48,4 +48,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260920_add_truck_fuel_and_route_ferry.sql` — Add truck fuel_consumption_rate (default 36%), route ferry_cost, road_distance_km, and ferry_distance_km.
 - `supabase/migrations/20260924_add_user_is_active_column.sql` — Add user is_active column and check_user_active_status security trigger function.
 - `supabase/migrations/20260926_system_screen_issues.sql` — System Screen Issues and Data Entry Anomaly Tracker for Super Admin (`system_screen_issues` table, indexes, RLS policies).
+- `supabase/migrations/20260928_independent_email_inbox.sql` — Independent Email System (SMTP/IMAP) & Secretary Smart Inbox (`email_messages` table, RLS policies, realtime replication).
+- `supabase/migrations/20260929_multi_tenant_dynamic_email_settings.sql` — Multi-Tenant Dynamic Email Settings & Zero-Config Auto Provisioning (`companies` email columns, `trg_auto_configure_company_mail` trigger).
+- `supabase/migrations/20260930_add_client_and_trip_gps_urls.sql` — Add WhatsApp Google Maps GPS URL columns to clients (`loading_gps_url`, `unloading_gps_url`) and trip_orders (`shipping_gps_url`, `unloading_gps_url`).
+
 

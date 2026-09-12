@@ -11,6 +11,7 @@ import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from
 import { useLanguage } from '@/components/language-provider';
 import { DriverAvatar } from '@/components/drivers/DriverAvatar';
 import { PRESET_DRIVER_AVATARS, compressImageFile, saveDriverPhotoLocal, resolveDriverPhoto } from '@/lib/driver-photos';
+import { CollapsibleSection } from '@/components/ui/collapsible-section';
 
 type EntityType = 'truck' | 'driver' | 'trailer';
 
@@ -45,6 +46,10 @@ export function FleetFormModal({
   const [showPresets, setShowPresets] = useState(false);
   const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // إدارة قسم واحد نشط فقط (Mutual Exclusion Accordion)
+  const [activeTruckSection, setActiveTruckSection] = useState<'driver_trailer' | 'specs_fuel' | null>(null);
+  const [activeDriverSection, setActiveDriverSection] = useState<'photo' | 'visa' | null>(null);
 
   // Deduplicate drivers by name to prevent repeated entries in the dropdown,
   // prioritizing the currently selected driver ID if active.
@@ -248,7 +253,7 @@ export function FleetFormModal({
             {/* حقول الشاحنة */}
             {entityType === 'truck' && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('رقم اللوحة (Matricule) *', 'Numéro d\'immatriculation (Matricule) *')}</label>
                     <Input
@@ -268,54 +273,6 @@ export function FleetFormModal({
                       required
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('السائق الافتراضي', 'Chauffeur par défaut')}</label>
-                    <select
-                      value={formData.default_driver_id || ''}
-                      onChange={(e) => {
-                        const dId = parseInt(e.target.value) || undefined;
-                        setFormData({
-                          ...formData,
-                          default_driver_id: dId,
-                        });
-                      }}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                      <option value="">{t('-- بدون سائق افتراضي --', '-- Sans chauffeur par défaut --')}</option>
-                      {uniqueDrivers.map((driver) => (
-                        <option key={driver.id} value={driver.id}>
-                          {driver.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('المقطورة المجرورة الافتراضية (Remorque)', 'Remorque attelée par défaut')}</label>
-                    <select
-                      value={formData.default_trailer_id || ''}
-                      onChange={(e) => {
-                        const trId = parseInt(e.target.value) || undefined;
-                        setFormData({
-                          ...formData,
-                          default_trailer_id: trId,
-                        });
-                      }}
-                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
-                    >
-                      <option value="">{t('-- بدون مقطورة افتراضية --', '-- Sans remorque par défaut --')}</option>
-                      {availableTrailers.map((trailer) => (
-                        <option key={trailer.id} value={trailer.id}>
-                          {trailer.plate_number} {trailer.model ? `(${trailer.model})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('الحالة التشغيلية', 'Statut opérationnel')}</label>
                     <select
@@ -330,160 +287,127 @@ export function FleetFormModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('حمولة الوزن (بالأطنان)', 'Capacité de charge (Tonnes)')}</label>
-                    <Input
-                      type="number"
-                      value={formData.weight_capacity || ''}
-                      onChange={(e) => setFormData({ ...formData, weight_capacity: parseFloat(e.target.value) || 0 })}
-                      placeholder={t('مثال: 25', 'Ex: 25')}
-                      dir="ltr"
-                    />
+                {/* قسم السائق والمقطورة الافتراضية */}
+                {/* قسم السائق والمقطورة الافتراضية */}
+                <CollapsibleSection
+                  title={t('تعيين السائق والمقطورة الافتراضية', 'Chauffeur et remorque par défaut')}
+                  description={t('ربط الشاحنة بسائق أو مقطورة أساسية للرحلات', 'Associer ce camion à un chauffeur ou une remorque')}
+                  icon={<User className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                  variant="blue"
+                  defaultOpen={Boolean(formData.default_driver_id || formData.default_trailer_id)}
+                  isOpen={activeTruckSection === 'driver_trailer'}
+                  onToggle={() => setActiveTruckSection((prev) => (prev === 'driver_trailer' ? null : 'driver_trailer'))}
+                  badge={
+                    formData.default_driver_id
+                      ? uniqueDrivers.find((d) => d.id === formData.default_driver_id)?.name
+                      : undefined
+                  }
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('السائق الافتراضي', 'Chauffeur par défaut')}</label>
+                      <select
+                        value={formData.default_driver_id || ''}
+                        onChange={(e) => {
+                          const dId = parseInt(e.target.value) || undefined;
+                          setFormData({
+                            ...formData,
+                            default_driver_id: dId,
+                          });
+                        }}
+                        className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="">{t('-- بدون سائق افتراضي --', '-- Sans chauffeur par défaut --')}</option>
+                        {uniqueDrivers.map((driver) => (
+                          <option key={driver.id} value={driver.id}>
+                            {driver.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('المقطورة المجرورة الافتراضية (Remorque)', 'Remorque attelée par défaut')}</label>
+                      <select
+                        value={formData.default_trailer_id || ''}
+                        onChange={(e) => {
+                          const trId = parseInt(e.target.value) || undefined;
+                          setFormData({
+                            ...formData,
+                            default_trailer_id: trId,
+                          });
+                        }}
+                        className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="">{t('-- بدون مقطورة افتراضية --', '-- Sans remorque par défaut --')}</option>
+                        {availableTrailers.map((trailer) => (
+                          <option key={trailer.id} value={trailer.id}>
+                            {trailer.plate_number} {trailer.model ? `(${trailer.model})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('قوة المحرك (Ch)', 'Puissance moteur (Ch)')}</label>
-                    <Input
-                      type="number"
-                      value={formData.power || ''}
-                      onChange={(e) => setFormData({ ...formData, power: parseFloat(e.target.value) || 0 })}
-                      placeholder="500"
-                      dir="ltr"
-                    />
+                </CollapsibleSection>
+
+                {/* قسم المواصفات الفنية واستهلاك الوقود */}
+                <CollapsibleSection
+                  title={t('المواصفات الفنية واستهلاك الوقود', 'Spécifications techniques & Carburant')}
+                  description={t('الوزن وقوة المحرك ونسبة استهلاك الديزل لكل 100 كم', 'Capacité, puissance et consommation de gasoil')}
+                  icon={<Fuel className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                  variant="emerald"
+                  defaultOpen={false}
+                  isOpen={activeTruckSection === 'specs_fuel'}
+                  onToggle={() => setActiveTruckSection((prev) => (prev === 'specs_fuel' ? null : 'specs_fuel'))}
+                  badge={`${formData.fuel_consumption_rate ?? 36} L/100km`}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('حمولة الوزن (بالأطنان)', 'Capacité de charge (Tonnes)')}</label>
+                      <Input
+                        type="number"
+                        value={formData.weight_capacity || ''}
+                        onChange={(e) => setFormData({ ...formData, weight_capacity: parseFloat(e.target.value) || 0 })}
+                        placeholder={t('مثال: 25', 'Ex: 25')}
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('قوة المحرك (Ch)', 'Puissance moteur (Ch)')}</label>
+                      <Input
+                        type="number"
+                        value={formData.power || ''}
+                        onChange={(e) => setFormData({ ...formData, power: parseFloat(e.target.value) || 0 })}
+                        placeholder="500"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                        <Fuel className="h-4 w-4 text-primary" />
+                        {t('معدل الاستهلاك (L/100km أو %)', 'Consommation (L/100km)')}
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="10"
+                        max="80"
+                        value={formData.fuel_consumption_rate ?? 36}
+                        onChange={(e) => setFormData({ ...formData, fuel_consumption_rate: parseFloat(e.target.value) || 0 })}
+                        placeholder="36"
+                        dir="ltr"
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        {t('افتراضي 36% - قابل للتعديل والتتبع', 'Par défaut 36% - ajustable')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                      <Fuel className="h-4 w-4 text-primary" />
-                      {t('معدل الاستهلاك (L/100km أو %)', 'Consommation (L/100km)')}
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      min="10"
-                      max="80"
-                      value={formData.fuel_consumption_rate ?? 36}
-                      onChange={(e) => setFormData({ ...formData, fuel_consumption_rate: parseFloat(e.target.value) || 0 })}
-                      placeholder="36"
-                      dir="ltr"
-                    />
-                    <span className="text-[11px] text-muted-foreground">
-                      {t('افتراضي 36% - قابل للتعديل والتتبع', 'Par défaut 36% - ajustable')}
-                    </span>
-                  </div>
-                </div>
+                </CollapsibleSection>
               </>
             )}
 
             {/* حقول السائق */}
             {entityType === 'driver' && (
               <>
-                {/* قسم الصورة الشخصية للسائق */}
-                <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 flex flex-col sm:flex-row items-center gap-4">
-                  <DriverAvatar
-                    name={formData.name || 'سائق'}
-                    photoUrl={formData.photo_url}
-                    size="xl"
-                    className="ring-2 ring-primary/20 shadow-xs"
-                  />
-                  <div className="flex-1 space-y-2 text-center sm:text-start w-full">
-                    <div>
-                      <h4 className="text-xs font-bold text-foreground">
-                        {t('الصورة الشخصية للسائق', 'Photo de profil du chauffeur')}
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground">
-                        {t('اختر صورة من جهازك أو اختر من النماذج الاحترافية الجاهزة', 'Téléversez une photo ou choisissez parmi les modèles')}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setCompressing(true);
-                          try {
-                            const compressed = await compressImageFile(file);
-                            setFormData((prev: any) => ({ ...prev, photo_url: compressed }));
-                          } catch (err) {
-                            console.error('Error compressing image:', err);
-                          } finally {
-                            setCompressing(false);
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={compressing}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="h-8 text-xs rounded-xl gap-1.5"
-                      >
-                        <Upload className="w-3.5 h-3.5 text-primary" />
-                        {compressing ? t('جاري المعالجة...', 'Traitement...') : t('رفع صورة', 'Téléverser')}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowPresets(!showPresets)}
-                        className="h-8 text-xs rounded-xl gap-1.5"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        {t('نماذج جاهزة', 'Modèles')}
-                      </Button>
-
-                      {formData.photo_url && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setFormData((prev: any) => ({ ...prev, photo_url: '' }))}
-                          className="h-8 text-xs text-destructive hover:bg-destructive/10 rounded-xl gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {t('إزالة', 'Supprimer')}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* معرض النماذج الجاهزة */}
-                    {showPresets && (
-                      <div className="pt-2 border-t border-border/40">
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {PRESET_DRIVER_AVATARS.map((preset) => (
-                            <button
-                              type="button"
-                              key={preset.id}
-                              onClick={() => {
-                                setFormData((prev: any) => ({ ...prev, photo_url: preset.url }));
-                                setShowPresets(false);
-                              }}
-                              className={`relative rounded-xl overflow-hidden border-2 transition-all p-0.5 hover:scale-105 ${
-                                formData.photo_url === preset.url
-                                  ? 'border-primary shadow-xs ring-2 ring-primary/30'
-                                  : 'border-border/60 hover:border-border'
-                              }`}
-                              title={preset.label}
-                            >
-                              <img
-                                src={preset.url}
-                                alt={preset.label}
-                                className="w-9 h-9 object-cover rounded-lg"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('الاسم الكامل *', 'Nom complet *')}</label>
@@ -567,27 +491,156 @@ export function FleetFormModal({
                   </div>
                 </div>
 
+                {/* قسم الصورة الشخصية للسائق */}
+                <CollapsibleSection
+                  title={t('الصورة الشخصية للسائق', 'Photo de profil du chauffeur')}
+                  description={t('رفع صورة أو اختيار نموذج جاهز للملف التعريفي', 'Téléverser une photo ou choisir parmi les modèles')}
+                  icon={<Camera className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                  variant="amber"
+                  defaultOpen={Boolean(formData.photo_url)}
+                  isOpen={activeDriverSection === 'photo'}
+                  onToggle={() => setActiveDriverSection((prev) => (prev === 'photo' ? null : 'photo'))}
+                  badge={formData.photo_url ? t('تم تعيين صورة', 'Photo configurée') : undefined}
+                >
+                  <div className="p-3 rounded-xl bg-muted/30 border border-border/60 flex flex-col sm:flex-row items-center gap-4">
+                    <DriverAvatar
+                      name={formData.name || 'سائق'}
+                      photoUrl={formData.photo_url}
+                      size="xl"
+                      className="ring-2 ring-primary/20 shadow-xs"
+                    />
+                    <div className="flex-1 space-y-2 text-center sm:text-start w-full">
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground">
+                          {t('الصورة الشخصية للسائق', 'Photo de profil du chauffeur')}
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t('اختر صورة من جهازك أو اختر من النماذج الاحترافية الجاهزة', 'Téléversez une photo ou choisissez parmi les modèles')}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setCompressing(true);
+                            try {
+                              const compressed = await compressImageFile(file);
+                              setFormData((prev: any) => ({ ...prev, photo_url: compressed }));
+                            } catch (err) {
+                              console.error('Error compressing image:', err);
+                            } finally {
+                              setCompressing(false);
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={compressing}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="h-8 text-xs rounded-xl gap-1.5"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-primary" />
+                          {compressing ? t('جاري المعالجة...', 'Traitement...') : t('رفع صورة', 'Téléverser')}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowPresets(!showPresets)}
+                          className="h-8 text-xs rounded-xl gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          {t('نماذج جاهزة', 'Modèles')}
+                        </Button>
+
+                        {formData.photo_url && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFormData((prev: any) => ({ ...prev, photo_url: '' }))}
+                            className="h-8 text-xs text-destructive hover:bg-destructive/10 rounded-xl gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {t('إزالة', 'Supprimer')}
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* معرض النماذج الجاهزة */}
+                      {showPresets && (
+                        <div className="pt-2 border-t border-border/40">
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {PRESET_DRIVER_AVATARS.map((preset) => (
+                              <button
+                                type="button"
+                                key={preset.id}
+                                onClick={() => {
+                                  setFormData((prev: any) => ({ ...prev, photo_url: preset.url }));
+                                  setShowPresets(false);
+                                }}
+                                className={`relative rounded-xl overflow-hidden border-2 transition-all p-0.5 hover:scale-105 ${
+                                  formData.photo_url === preset.url
+                                    ? 'border-primary shadow-xs ring-2 ring-primary/30'
+                                    : 'border-border/60 hover:border-border'
+                                }`}
+                                title={preset.label}
+                              >
+                                <img
+                                  src={preset.url}
+                                  alt={preset.label}
+                                  className="w-9 h-9 object-cover rounded-lg"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleSection>
+
                 {/* تأشيرات الدخول الدولية */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-3">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('رقم التأشيرة (Visa Schengen)', 'Numéro de visa (Visa Schengen)')}</label>
-                    <Input
-                      value={formData.visa_number || ''}
-                      onChange={(e) => setFormData({ ...formData, visa_number: e.target.value })}
-                      placeholder="ES-9812401"
-                      dir="ltr"
-                    />
+                <CollapsibleSection
+                  title={t('تأشيرة الدخول الدولية (Visa Schengen)', 'Visa Schengen & Validité')}
+                  description={t('بيانات التأشيرة للرحلات الدولية والعبور الأوروبي', 'Données de visa pour le transport international')}
+                  icon={<Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  variant="purple"
+                  defaultOpen={Boolean(formData.visa_number || formData.visa_expiry_date)}
+                  isOpen={activeDriverSection === 'visa'}
+                  onToggle={() => setActiveDriverSection((prev) => (prev === 'visa' ? null : 'visa'))}
+                  badge={formData.visa_number || undefined}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('رقم التأشيرة (Visa Schengen)', 'Numéro de visa (Visa Schengen)')}</label>
+                      <Input
+                        value={formData.visa_number || ''}
+                        onChange={(e) => setFormData({ ...formData, visa_number: e.target.value })}
+                        placeholder="ES-9812401"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">{t('تاريخ انتهاء التأشيرة', 'Date d\'expiration du visa')}</label>
+                      <Input
+                        type="date"
+                        value={formData.visa_expiry_date || ''}
+                        onChange={(e) => setFormData({ ...formData, visa_expiry_date: e.target.value })}
+                        dir="ltr"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">{t('تاريخ انتهاء التأشيرة', 'Date d\'expiration du visa')}</label>
-                    <Input
-                      type="date"
-                      value={formData.visa_expiry_date || ''}
-                      onChange={(e) => setFormData({ ...formData, visa_expiry_date: e.target.value })}
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
+                </CollapsibleSection>
               </>
             )}
 

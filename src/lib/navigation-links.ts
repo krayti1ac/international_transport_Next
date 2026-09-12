@@ -1,11 +1,17 @@
+import { extractCoordinatesFromInput } from './gps-utils';
+
 export interface NavigationTarget {
   latitude?: number | null;
   longitude?: number | null;
+  gpsUrl?: string | null;
   addressOrCity?: string | null;
   label?: string;
 }
 
 export function buildGoogleMapsNavigationUrl(target: NavigationTarget): string {
+  if (target.gpsUrl && (target.gpsUrl.startsWith('http://') || target.gpsUrl.startsWith('https://'))) {
+    return target.gpsUrl;
+  }
   if (target.latitude && target.longitude) {
     return `https://www.google.com/maps/dir/?api=1&destination=${target.latitude},${target.longitude}&travelmode=driving`;
   }
@@ -16,8 +22,12 @@ export function buildGoogleMapsNavigationUrl(target: NavigationTarget): string {
 }
 
 export function buildWazeNavigationUrl(target: NavigationTarget): string {
-  if (target.latitude && target.longitude) {
-    return `https://waze.com/ul?ll=${target.latitude},${target.longitude}&navigate=yes`;
+  const coords = target.latitude && target.longitude
+    ? { latitude: target.latitude, longitude: target.longitude }
+    : extractCoordinatesFromInput(target.gpsUrl);
+
+  if (coords.latitude && coords.longitude) {
+    return `https://waze.com/ul?ll=${coords.latitude},${coords.longitude}&navigate=yes`;
   }
   if (target.addressOrCity) {
     return `https://waze.com/ul?q=${encodeURIComponent(target.addressOrCity)}&navigate=yes`;
@@ -26,11 +36,19 @@ export function buildWazeNavigationUrl(target: NavigationTarget): string {
 }
 
 export function buildAppleMapsNavigationUrl(target: NavigationTarget): string {
-  if (target.latitude && target.longitude) {
-    return `maps://?daddr=${target.latitude},${target.longitude}&dirflg=d`;
+  const coords = target.latitude && target.longitude
+    ? { latitude: target.latitude, longitude: target.longitude }
+    : extractCoordinatesFromInput(target.gpsUrl);
+
+  if (coords.latitude && coords.longitude) {
+    return `maps://?daddr=${coords.latitude},${coords.longitude}&dirflg=d`;
   }
   if (target.addressOrCity) {
     return `maps://?daddr=${encodeURIComponent(target.addressOrCity)}&dirflg=d`;
   }
+  if (target.gpsUrl && (target.gpsUrl.startsWith('http://') || target.gpsUrl.startsWith('https://'))) {
+    return target.gpsUrl;
+  }
   return 'maps://';
 }
+

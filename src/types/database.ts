@@ -1,5 +1,7 @@
 export type UserRole = 'super_admin' | 'admin' | 'secretary' | 'driver';
 
+export type MailProviderType = 'cpanel' | 'hostinger' | 'ovh' | 'custom';
+
 export interface Company {
   id: number;
   name: string;
@@ -13,6 +15,14 @@ export interface Company {
   max_devices?: number;
   active_devices_count?: number;
   email_domain?: string | null;
+  mail_provider?: MailProviderType | null;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  imap_host?: string | null;
+  imap_port?: number | null;
+  email_user?: string | null;
+  email_password?: string | null;
+  has_email_password?: boolean;
   created_at: string;
 }
 
@@ -83,6 +93,8 @@ export interface Client {
   billing_postal_code: string;
   billing_country: string;
   logo_url?: string | null;
+  loading_gps_url?: string | null;
+  unloading_gps_url?: string | null;
 }
 
 export interface Driver {
@@ -206,6 +218,8 @@ export interface TripOrder {
   shipping_longitude?: number;
   unloading_latitude?: number;
   unloading_longitude?: number;
+  shipping_gps_url?: string | null;
+  unloading_gps_url?: string | null;
 }
 
 export interface Trip {

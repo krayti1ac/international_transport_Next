@@ -137,13 +137,12 @@ export function useSecretaryCriticalDates() {
       const threshold30Str = threshold30.toISOString().split('T')[0];
 
       // Fetch drivers with upcoming/expired visas
+      // Fetch drivers, fleet documents, trucks, trailers, and scheduled trips
       const [driversRes, docsRes, trucksRes, trailersRes, tripsRes] = await Promise.all([
         supabase
           .from('drivers')
           .select('id, name, visa_expiry_date')
-          .not('visa_expiry_date', 'is', null)
-          .lte('visa_expiry_date', threshold30Str)
-          .order('visa_expiry_date', { ascending: true }),
+          .order('name', { ascending: true }),
         supabase
           .from('fleet_documents')
           .select('*')
@@ -154,11 +153,16 @@ export function useSecretaryCriticalDates() {
         supabase.from('trailers').select('id, plate_number'),
         supabase
           .from('trip_orders')
-          .select('id, departure_date, route, cmr_number, status, drivers(name), trucks(plate_number)')
+          .select('id, departure_date, route, cmr_number, status, driver_id, truck_id')
           .gte('departure_date', today.toISOString().split('T')[0])
           .order('departure_date', { ascending: true })
           .limit(10),
       ]);
+
+      const driverMap = (driversRes.data || []).reduce((acc: Record<number, string>, d: { id: number; name: string }) => {
+        acc[d.id] = d.name;
+        return acc;
+      }, {});
 
       const truckMap = (trucksRes.data || []).reduce((acc: Record<number, string>, t: { id: number; plate_number: string }) => {
         acc[t.id] = t.plate_number;
@@ -172,12 +176,14 @@ export function useSecretaryCriticalDates() {
 
       const criticalDocs: CriticalDocItem[] = [];
 
-      // Process Driver Visas
+      // Process Driver Visas (expired or upcoming within 30 days)
       (driversRes.data || []).forEach((d) => {
         if (!d.visa_expiry_date) return;
         const exp = new Date(d.visa_expiry_date);
         exp.setHours(0, 0, 0, 0);
         const days = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (days > 30) return;
+
         let urgency: 'expired' | 'urgent' | 'soon' | 'upcoming' = 'upcoming';
         if (days < 0) urgency = 'expired';
         else if (days <= 2) urgency = 'urgent';
@@ -229,8 +235,8 @@ export function useSecretaryCriticalDates() {
         departureDate: tr.departure_date,
         route: tr.route || 'غير محدد',
         cmrNumber: tr.cmr_number,
-        driverName: tr.drivers?.name,
-        truckPlate: tr.trucks?.plate_number,
+        driverName: tr.driver_id ? driverMap[tr.driver_id] : undefined,
+        truckPlate: tr.truck_id ? truckMap[tr.truck_id] : undefined,
         status: tr.status,
       }));
 
@@ -256,24 +262,20 @@ export function useSecretaryTripStages() {
     queryFn: async (): Promise<SecretaryPipelineData> => {
       const supabase = createClient();
 
-      const { data, error } = await supabase
-        .from('trip_orders')
-        .select(`
-          id,
-          cmr_number,
-          route,
-          departure_date,
-          status,
-          drivers:driver_id(name),
-          trucks:truck_id(plate_number),
-          trailers:trailer_id(plate_number),
-          clients:client_id(name)
-        `)
-        .order('departure_date', { ascending: false })
-        .limit(20);
+      const [tripsRes, driversRes, trucksRes, trailersRes, clientsRes] = await Promise.all([
+        supabase
+          .from('trip_orders')
+          .select('id, cmr_number, route, departure_date, status, driver_id, truck_id, trailer_id, client_id')
+          .order('departure_date', { ascending: false })
+          .limit(20),
+        supabase.from('drivers').select('id, name'),
+        supabase.from('trucks').select('id, plate_number'),
+        supabase.from('trailers').select('id, plate_number'),
+        supabase.from('clients').select('id, name'),
+      ]);
 
-      if (error) {
-        console.error('Error fetching secretary trips:', error);
+      if (tripsRes.error) {
+        console.error('Error fetching secretary trips:', tripsRes.error.message || tripsRes.error);
         return {
           trips: [],
           stageCounts: {
@@ -287,6 +289,26 @@ export function useSecretaryTripStages() {
         };
       }
 
+      const driverMap = (driversRes.data || []).reduce((acc: Record<number, string>, d: { id: number; name: string }) => {
+        acc[d.id] = d.name;
+        return acc;
+      }, {});
+
+      const truckMap = (trucksRes.data || []).reduce((acc: Record<number, string>, t: { id: number; plate_number: string }) => {
+        acc[t.id] = t.plate_number;
+        return acc;
+      }, {});
+
+      const trailerMap = (trailersRes.data || []).reduce((acc: Record<number, string>, tr: { id: number; plate_number: string }) => {
+        acc[tr.id] = tr.plate_number;
+        return acc;
+      }, {});
+
+      const clientMap = (clientsRes.data || []).reduce((acc: Record<number, string>, c: { id: number; name: string }) => {
+        acc[c.id] = c.name;
+        return acc;
+      }, {});
+
       const stageCounts = {
         pendingAssignment: 0,
         outbound: 0,
@@ -296,7 +318,7 @@ export function useSecretaryTripStages() {
         total: 0,
       };
 
-      const trips: SecretaryTripItem[] = (data || []).map((t: any) => {
+      const trips: SecretaryTripItem[] = (tripsRes.data || []).map((t: any) => {
         const stage = mapDbStatusToKanbanStage(t.status);
         if (stage in stageCounts) {
           (stageCounts as any)[stage] += 1;
@@ -310,10 +332,10 @@ export function useSecretaryTripStages() {
           departure_date: t.departure_date,
           status: t.status,
           stage,
-          driver_name: t.drivers?.name,
-          truck_plate: t.trucks?.plate_number,
-          trailer_plate: t.trailers?.plate_number,
-          client_name: t.clients?.name,
+          driver_name: t.driver_id ? driverMap[t.driver_id] : undefined,
+          truck_plate: t.truck_id ? truckMap[t.truck_id] : undefined,
+          trailer_plate: t.trailer_id ? trailerMap[t.trailer_id] : undefined,
+          client_name: t.client_id ? clientMap[t.client_id] : undefined,
         };
       });
 

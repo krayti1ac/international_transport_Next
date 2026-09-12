@@ -1523,6 +1523,37 @@
     "remainingDevices": "متبقي",
     "otherDevices": "أجهزة أخرى",
     "toastFailedToReplaceDevice": "فشل في استبدال الجهاز",
-    "toastDeviceLicenseRevoked": "تم إلغاء ترخيص الجهاز"
+    "toastDeviceLicenseRevoked": "تم إلغاء ترخيص الجهاز",
+    "emailInbox": {
+      "title": "صندوق المراسلات الذكي",
+      "dedicatedServer": "خادم الدومين المستقل 100%",
+      "inbound": "بريد وارد",
+      "outbound": "بريد صادر",
+      "unread": "غير مقروء",
+      "linkedToTrip": "مرتبط برحلة",
+      "newMessage": "رسالة جديدة",
+      "reply": "رد سريع",
+      "send": "إرسال الآن",
+      "subject": "الموضوع",
+      "recipient": "البريد المستلم",
+      "body": "نص الرسالة"
+    },
+    "emailServerSettings": {
+      "title": "إعدادات خوادم البريد والمراسلات (SMTP & IMAP)",
+      "description": "تكوين خادم البريد الخاص بالشركة لإرسال واستقبال الإشعارات والرحلات",
+      "provider": "مزود خدمة البريد المعتمد",
+      "smtpHost": "خادم إرسال البريد (SMTP Host)",
+      "smtpPort": "منفذ SMTP",
+      "imapHost": "خادم استقبال البريد (IMAP Host)",
+      "imapPort": "منفذ IMAP",
+      "emailUser": "البريد التشغيلي",
+      "emailPassword": "كلمة مرور البريد",
+      "testConnection": "اختبار الاتصال بالخادم",
+      "testing": "جاري فحص المصافحة...",
+      "saveSettings": "حفظ إعدادات خادم البريد",
+      "savedSuccess": "تم حفظ إعدادات خادم البريد بنجاح",
+      "connectionSuccess": "تم الاتصال واختبار مصافحة خادم البريد بنجاح تام",
+      "connectionFailed": "فشل الاتصال بخادم البريد"
+    }
   }
 }

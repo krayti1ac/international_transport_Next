@@ -31,6 +31,7 @@ import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 import { DriverAvatar } from '@/components/drivers/DriverAvatar';
 import { saveDriverPhotoLocal } from '@/lib/driver-photos';
+import { saveDriverWithUserAction } from '@/features/drivers/services/driver.actions';
 
 type StatusFilter = 'all' | 'active' | 'in_trip' | 'vacation' | 'inactive';
 type VisaFilter = 'all' | 'valid' | 'expiring_soon' | 'expired_or_none';
@@ -92,58 +93,30 @@ export default function DriversPage() {
 
   const handleSaveDriver = async (_type: any, data: any) => {
     try {
-      // If assigning a truck to this driver, release it from any previously assigned driver
-      if (data.default_truck_id) {
-        try {
-          await supabase
-            .from('drivers')
-            .update({ default_truck_id: null })
-            .eq('default_truck_id', data.default_truck_id)
-            .neq('id', data.id || -1);
-        } catch (e) {
-          console.warn('Releasing previous truck assignment from other driver:', e);
-        }
-
-        setDrivers((prev) =>
-          prev.map((d) =>
-            d.id !== data.id && d.default_truck_id === data.default_truck_id
-              ? { ...d, default_truck_id: undefined }
-              : d
-          )
-        );
+      const res = await saveDriverWithUserAction(data);
+      if (!res.success) {
+        throw new Error(res.error || t('فشل حفظ بيانات السائق', "Erreur lors de l'enregistrement du chauffeur"));
       }
 
-      const executeSave = async (payload: any) => {
-        if (payload.id) {
-          return await supabase.from('drivers').update(payload).eq('id', payload.id);
-        } else {
-          return await supabase.from('drivers').insert(payload);
-        }
-      };
-
-      let currentData = { ...data };
-      let { error } = await executeSave(currentData);
-
-      while (error && error.message && error.message.includes('in the schema cache')) {
-        const match = error.message.match(/Could not find the '([^']+)' column/);
-        if (match && match[1] && match[1] in currentData) {
-          delete currentData[match[1]];
-          const retryRes = await executeSave(currentData);
-          error = retryRes.error;
-        } else {
-          break;
-        }
-      }
-
-      if (error) throw error;
       if (data.photo_url) {
-        saveDriverPhotoLocal(data.id || data.name, data.photo_url, data.name);
+        saveDriverPhotoLocal(res.driver?.id || data.id || data.name, data.photo_url, data.name);
       }
-      toast({ title: data.id ? t('تم تحديث بيانات السائق بنجاح', 'Chauffeur mis à jour avec succès') : t('تمت إضافة السائق بنجاح', 'Chauffeur ajouté avec succès') });
+
+      const accountCreatedMsg = res.userAccount?.created
+        ? `${t('تم إنشاء حساب مستخدم للسائق:', 'Compte utilisateur créé :')} ${res.userAccount.email}`
+        : undefined;
+
+      toast({
+        title: data.id
+          ? t('تم تحديث بيانات السائق بنجاح', 'Chauffeur mis à jour avec succès')
+          : t('تمت إضافة السائق بنجاح', 'Chauffeur ajouté avec succès'),
+        description: accountCreatedMsg,
+      });
+
       fetchData();
     } catch (error: any) {
       toast({
-        title: t('خطأ أثناء حفظ بيانات السائق', 'Erreur lors de l\'enregistrement du chauffeur'),
+        title: t('خطأ أثناء حفظ بيانات السائق', "Erreur lors de l'enregistrement du chauffeur"),
         description: error.message,
         variant: 'destructive',
       });

@@ -290,6 +290,23 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
                   {t('البضاعة:', 'Marchandises :', 'Goods:')} {trip.goods_description_export}
                 </p>
               )}
+              {(trip.shipping_gps_url || clientExport?.loading_gps_url) && (
+                <div className="pt-2 mt-2 border-t border-blue-500/20 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                    {t('موقع التحميل والشحن (GPS):', 'Lieu de chargement (GPS) :')}
+                  </span>
+                  <a
+                    href={trip.shipping_gps_url || clientExport?.loading_gps_url || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-500/10 px-2 py-0.5 rounded-md"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    {t('فتح في الخريطة', 'Ouvrir Maps')}
+                  </a>
+                </div>
+              )}
             </div>
 
             {(trip.route_import || clientImport) && (
@@ -309,6 +326,23 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
                   <p className="text-muted-foreground text-xs mt-1">
                     {t('البضاعة:', 'Marchandises :', 'Goods:')} {trip.goods_description_import}
                   </p>
+                )}
+                {(trip.unloading_gps_url || clientImport?.unloading_gps_url) && (
+                  <div className="pt-2 mt-2 border-t border-emerald-500/20 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      {t('موقع التفريغ بالمغرب (GPS):', 'Lieu de déchargement (GPS) :')}
+                    </span>
+                    <a
+                      href={trip.unloading_gps_url || clientImport?.unloading_gps_url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline bg-blue-500/10 px-2 py-0.5 rounded-md"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      {t('فتح في الخريطة', 'Ouvrir Maps')}
+                    </a>
+                  </div>
                 )}
               </div>
             )}

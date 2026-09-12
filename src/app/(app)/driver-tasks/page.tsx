@@ -218,16 +218,34 @@ export default function DriverTasksPage() {
                           </a>
                         </Button>
                       </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-border/60">
-                        <span className="text-xs text-muted-foreground">{t('توجيه الشاحنة عبر GPS:', 'Navigation GPS :')}</span>
-                        <NavigationLauncher
-                          target={{
-                            latitude: trip.unloading_latitude,
-                            longitude: trip.unloading_longitude,
-                            addressOrCity: trip.route_export || trip.route,
-                            label: trip.route,
-                          }}
-                        />
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/60">
+                        <span className="text-xs text-muted-foreground">{t('توجيه الشاحنة GPS:', 'Navigation GPS :')}</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(trip.shipping_gps_url || trip.shipping_latitude) && (
+                            <NavigationLauncher
+                              target={{
+                                latitude: trip.shipping_latitude,
+                                longitude: trip.shipping_longitude,
+                                gpsUrl: trip.shipping_gps_url,
+                                addressOrCity: trip.route_export || trip.route,
+                                label: t('موقع الشحن', 'Chargement'),
+                              }}
+                              variant="outline"
+                              size="sm"
+                            />
+                          )}
+                          <NavigationLauncher
+                            target={{
+                              latitude: trip.unloading_latitude,
+                              longitude: trip.unloading_longitude,
+                              gpsUrl: trip.unloading_gps_url || trip.shipping_gps_url,
+                              addressOrCity: trip.route_export || trip.route,
+                              label: t('موقع التفريغ', 'Déchargement'),
+                            }}
+                            variant="default"
+                            size="sm"
+                          />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

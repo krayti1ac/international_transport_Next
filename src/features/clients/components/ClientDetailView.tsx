@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Truck } from '@/components/icons/vehicle-icons';
 import {
   Building, Phone, MapPin, Mail, FileText,
-  Calculator, Receipt, Landmark, RefreshCw
+  Calculator, Receipt, Landmark, RefreshCw, ExternalLink
 } from 'lucide-react';
 import type { Client, Invoice, TripOrder } from '@/types/database';
 import { useLanguage } from '@/components/language-provider';
@@ -109,6 +109,30 @@ export function ClientDetailView({ clientId }: { clientId: number }) {
                   <Badge variant="secondary" className="text-xs">
                     {client.client_type === 'export' ? t('عميل تصدير (Aller)', 'Client Export (Aller)') : client.client_type === 'import' ? t('عميل استيراد (Retour)', 'Client Import (Retour)') : t('شحن عام', 'Transport Général')}
                   </Badge>
+                  {client.loading_gps_url && (
+                    <a
+                      href={client.loading_gps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all shadow-2xs"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>{t('موقع التحميل (GPS)', 'GPS Chargement')}</span>
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </a>
+                  )}
+                  {client.unloading_gps_url && (
+                    <a
+                      href={client.unloading_gps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/30 hover:bg-blue-500/20 transition-all shadow-2xs"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>{t('موقع التفريغ (GPS)', 'GPS Déchargement')}</span>
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

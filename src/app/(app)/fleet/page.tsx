@@ -30,9 +30,11 @@ import { DEFAULT_TRUCKS, DEFAULT_DRIVERS, DEFAULT_TRAILERS, fallbackArray } from
 import { useFleetDataQuery } from '@/lib/query/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '@/components/language-provider';
+import { saveDriverWithUserAction } from '@/features/drivers/services/driver.actions';
+import { saveDriverPhotoLocal } from '@/lib/driver-photos';
 
 type TabType = 'trucks' | 'trailers';
-type EntityType = 'truck' | 'trailer';
+type EntityType = 'truck' | 'trailer' | 'driver';
 
 export default function FleetPage() {
   const { locale, dir, t } = useLanguage();
@@ -50,7 +52,7 @@ export default function FleetPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [selectedDetailsVehicle, setSelectedDetailsVehicle] = useState<{ entity: Truck | Trailer; type: EntityType } | null>(null);
+  const [selectedDetailsVehicle, setSelectedDetailsVehicle] = useState<{ entity: Truck | Trailer; type: 'truck' | 'trailer' } | null>(null);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
 
   const { toast } = useToast();
@@ -74,6 +76,35 @@ export default function FleetPage() {
   }, [refreshData, supabase]);
 
   const handleSaveItem = async (type: EntityType, data: any) => {
+    if (type === 'driver') {
+      try {
+        const res = await saveDriverWithUserAction(data);
+        if (!res.success) {
+          throw new Error(res.error || t('خطأ أثناء حفظ بيانات السائق', "Erreur lors de l'enregistrement du chauffeur"));
+        }
+        if (data.photo_url) {
+          saveDriverPhotoLocal(res.driver?.id || data.id || data.name, data.photo_url, data.name);
+        }
+        const accountCreatedMsg = res.userAccount?.created
+          ? `${t('تم إنشاء حساب مستخدم للسائق:', 'Compte utilisateur créé :')} ${res.userAccount.email}`
+          : undefined;
+        toast({
+          title: data.id
+            ? t('تم تحديث بيانات السائق بنجاح', 'Chauffeur mis à jour avec succès')
+            : t('تمت إضافة السائق بنجاح', 'Chauffeur ajouté avec succès'),
+          description: accountCreatedMsg,
+        });
+        refreshData();
+      } catch (error: any) {
+        toast({
+          title: t('خطأ أثناء حفظ بيانات السائق', "Erreur lors de l'enregistrement du chauffeur"),
+          description: error.message,
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
     const tableName = type === 'truck' ? 'trucks' : 'trailers';
     try {
       // 1. If assigning a driver or trailer to a truck, release it from any previously assigned truck

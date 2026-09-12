@@ -18,16 +18,32 @@ export function useTrips(filters?: { status?: string }) {
       const supabase = createClient();
       let query = supabase
         .from('trip_orders')
-        .select('*, drivers(name), trucks(plate_number), clients(name)')
+        .select('*')
         .order('departure_date', { ascending: false });
 
       if (filters?.status) {
         query = query.eq('status', filters.status);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as TripWithRelations[];
+      const [tripsRes, driversRes, trucksRes, clientsRes] = await Promise.all([
+        query,
+        supabase.from('drivers').select('*'),
+        supabase.from('trucks').select('*'),
+        supabase.from('clients').select('*'),
+      ]);
+
+      if (tripsRes.error) throw tripsRes.error;
+
+      const driverMap = new Map((driversRes.data || []).map((d: any) => [d.id, d]));
+      const truckMap = new Map((trucksRes.data || []).map((t: any) => [t.id, t]));
+      const clientMap = new Map((clientsRes.data || []).map((c: any) => [c.id, c]));
+
+      return (tripsRes.data || []).map((trip: any) => ({
+        ...trip,
+        driver: trip.driver_id ? driverMap.get(trip.driver_id) : undefined,
+        truck: trip.truck_id ? truckMap.get(trip.truck_id) : undefined,
+        client: trip.client_id ? clientMap.get(trip.client_id) : undefined,
+      })) as TripWithRelations[];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -42,7 +58,7 @@ export function useTripsByPeriod(filters?: { status?: string }) {
       const supabase = createClient();
       let query = supabase
         .from('trip_orders')
-        .select('*, drivers(name), trucks(plate_number), clients(name)')
+        .select('*')
         .gte('departure_date', startDate)
         .lte('departure_date', endDate)
         .order('departure_date', { ascending: false });
@@ -51,9 +67,25 @@ export function useTripsByPeriod(filters?: { status?: string }) {
         query = query.eq('status', filters.status);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as TripWithRelations[];
+      const [tripsRes, driversRes, trucksRes, clientsRes] = await Promise.all([
+        query,
+        supabase.from('drivers').select('*'),
+        supabase.from('trucks').select('*'),
+        supabase.from('clients').select('*'),
+      ]);
+
+      if (tripsRes.error) throw tripsRes.error;
+
+      const driverMap = new Map((driversRes.data || []).map((d: any) => [d.id, d]));
+      const truckMap = new Map((trucksRes.data || []).map((t: any) => [t.id, t]));
+      const clientMap = new Map((clientsRes.data || []).map((c: any) => [c.id, c]));
+
+      return (tripsRes.data || []).map((trip: any) => ({
+        ...trip,
+        driver: trip.driver_id ? driverMap.get(trip.driver_id) : undefined,
+        truck: trip.truck_id ? truckMap.get(trip.truck_id) : undefined,
+        client: trip.client_id ? clientMap.get(trip.client_id) : undefined,
+      })) as TripWithRelations[];
     },
     staleTime: 5 * 60 * 1000,
   });

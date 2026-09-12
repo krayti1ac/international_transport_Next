@@ -1,4 +1,4 @@
-﻿-- ==============================================================================
+-- ==============================================================================
 -- Migration: 20260924_add_user_is_active_column.sql
 -- Description: Add is_active column to public.users table and define
 --              check_user_active_status trigger function.
@@ -16,6 +16,7 @@ CREATE INDEX IF NOT EXISTS idx_users_is_active ON public.users(is_active);
 -- 3. سياسة الأمان / دالة التحقق من حالة نشاط الحساب
 CREATE OR REPLACE FUNCTION public.check_user_active_status()
 RETURNS TRIGGER AS 
+RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.is_active = FALSE THEN
     -- يمكن استخدامه لتسجيل حدث أمني في audit_logs
@@ -24,6 +25,7 @@ BEGIN
   RETURN NEW;
 END;
  LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- 4. مشغل الأمان للتنفيذ عند تحديث حالة المستخدم
 DROP TRIGGER IF EXISTS trg_check_user_active_status ON public.users;
