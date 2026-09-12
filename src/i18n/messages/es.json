@@ -1523,6 +1523,37 @@
     "remainingDevices": "Restante",
     "otherDevices": "otros dispositivos",
     "toastFailedToReplaceDevice": "Error al reemplazar el dispositivo",
-    "toastDeviceLicenseRevoked": "Licencia del dispositivo revocada"
+    "toastDeviceLicenseRevoked": "Licencia del dispositivo revocada",
+    "emailInbox": {
+      "title": "Buzón de Mensajería Operativa",
+      "dedicatedServer": "Servidor Dedicado 100%",
+      "inbound": "Correo Entrante",
+      "outbound": "Correo Saliente",
+      "unread": "No leído",
+      "linkedToTrip": "Vinculado al viaje",
+      "newMessage": "Nuevo Mensaje",
+      "reply": "Respuesta Rápida",
+      "send": "Enviar Ahora",
+      "subject": "Asunto",
+      "recipient": "Destinatario",
+      "body": "Cuerpo del mensaje"
+    },
+    "emailServerSettings": {
+      "title": "Configuración de Servidores de Correo (SMTP e IMAP)",
+      "description": "Configure el servidor de correo dedicado de la empresa para enviar y recibir notificaciones y viajes",
+      "provider": "Proveedor de Correo Autorizado",
+      "smtpHost": "Servidor Saliente (SMTP Host)",
+      "smtpPort": "Puerto SMTP",
+      "imapHost": "Servidor Entrante (IMAP Host)",
+      "imapPort": "Puerto IMAP",
+      "emailUser": "Correo Operativo",
+      "emailPassword": "Contraseña del Correo",
+      "testConnection": "Probar Conexión al Servidor",
+      "testing": "Comprobando conexión...",
+      "saveSettings": "Guardar Configuración del Servidor",
+      "savedSuccess": "Configuración del servidor de correo guardada con éxito",
+      "connectionSuccess": "Conexión y autenticación con el servidor completadas con éxito",
+      "connectionFailed": "Error al conectar con el servidor de correo"
+    }
   }
 }
