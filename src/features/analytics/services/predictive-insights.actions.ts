@@ -19,22 +19,30 @@ export async function getPredictiveInsightsData(
   branchFilter?: number | 'all'
 ): Promise<{ success: boolean; data?: PredictiveInsightsSummary; error?: string }> {
   try {
-    const supabase = await createClient();
+    let branches: CompanyBranch[] = [];
+    let trucks: Truck[] = [];
+    let trips: TripOrder[] = [];
+    let invoices: Invoice[] = [];
+    let maintenance: TruckMaintenance[] = [];
 
-    // Fetch branches, trucks, trips, invoices, and maintenance records
-    const [branchesRes, trucksRes, tripsRes, invoicesRes, maintenanceRes] = await Promise.all([
-      supabase.from('company_branches').select('*').order('is_headquarters', { ascending: false }),
-      supabase.from('trucks').select('*'),
-      supabase.from('trip_orders').select('*').order('created_at', { ascending: false }).limit(100),
-      supabase.from('invoices').select('*').limit(100),
-      supabase.from('truck_maintenance').select('*').order('created_at', { ascending: false }).limit(100),
-    ]);
+    try {
+      const supabase = await createClient();
+      const [branchesRes, trucksRes, tripsRes, invoicesRes, maintenanceRes] = await Promise.all([
+        supabase.from('company_branches').select('*').order('is_headquarters', { ascending: false }),
+        supabase.from('trucks').select('*'),
+        supabase.from('trip_orders').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('invoices').select('*').limit(100),
+        supabase.from('truck_maintenance').select('*').order('created_at', { ascending: false }).limit(100),
+      ]);
 
-    const branches = (branchesRes.data || []) as CompanyBranch[];
-    const trucks = (trucksRes.data || []) as Truck[];
-    const trips = (tripsRes.data || []) as TripOrder[];
-    const invoices = (invoicesRes.data || []) as Invoice[];
-    const maintenance = (maintenanceRes.data || []) as TruckMaintenance[];
+      branches = (branchesRes.data || []) as CompanyBranch[];
+      trucks = (trucksRes.data || []) as Truck[];
+      trips = (tripsRes.data || []) as TripOrder[];
+      invoices = (invoicesRes.data || []) as Invoice[];
+      maintenance = (maintenanceRes.data || []) as TruckMaintenance[];
+    } catch {
+      // Graceful fallback if called outside Next.js request scope
+    }
 
     // Filter by branch if specific branch selected
     const filteredTrucks = branchFilter && branchFilter !== 'all'
