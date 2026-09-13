@@ -1,15 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Decimal from 'decimal.js';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/browser';
 import { useLanguage } from '@/components/language-provider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-
-Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 import {
   Upload,
   ArrowLeftRight,
@@ -17,725 +15,566 @@ import {
   Landmark,
   CheckCircle2,
   AlertCircle,
-  XCircle,
   Plus,
   Activity,
-  Clock,
-  TrendingUp,
-  TrendingDown,
+  FileSpreadsheet,
+  Zap,
+  Layers,
+  FileText,
 } from 'lucide-react';
 import {
   autoReconcileBankStatement,
-  confirmBankReconciliation,
+  confirmSingleSmartMatch,
+  confirmBatchReconciliation,
+  type ReconciliationMatch,
 } from '@/features/finance/services/bank_reconciliation.actions';
-import type { BankStatementRow, ReconciliationMatch } from '@/features/finance/services/bank_reconciliation.actions';
-import type { TreasuryTransaction, BankAccount } from '@/types/database';
+import {
+  parseBankStatement,
+  type ParsedBankRow,
+} from '@/features/finance/services/bank-parser';
+import type { TreasuryTransaction, BankAccount, Invoice } from '@/types/database';
 import { AddBankAccountModal } from '@/components/add-bank-account-modal';
 import { DEFAULT_BANK_ACCOUNTS, fallbackArray } from '@/lib/default-data';
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
-
-function detectCurrency(text: string): string {
-  const upper = text.toUpperCase();
-  if (upper.includes('EUR') || upper.includes('EURO') || upper.includes('EUROS')) return 'EUR';
-  if (upper.includes('USD') || upper.includes('DOLLAR')) return 'USD';
-  return 'MAD';
-}
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export default function BankReconciliationScreen() {
   const { t, dir, locale } = useLanguage();
-  const [parsedRows, setParsedRows] = useState<BankStatementRow[]>([]);
+  const { toast } = useToast();
+
+  const [parsedRows, setParsedRows] = useState<ParsedBankRow[]>([]);
+  const [statementMeta, setStatementMeta] = useState<{
+    format: 'csv' | 'ofx';
+    totalCredit: string;
+    totalDebit: string;
+  } | null>(null);
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [batchReconciling, setBatchReconciling] = useState(false);
   const [result, setResult] = useState<{
     matched: ReconciliationMatch[];
-    unmatchedBank: BankStatementRow[];
+    unmatchedBank: ParsedBankRow[];
     unmatchedSystem: TreasuryTransaction[];
+    unmatchedInvoices?: (Invoice & { client_name?: string })[];
+    highConfidenceCount: number;
+    totalMatchedVolume: string;
   } | null>(null);
+
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<number | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
-  const [allPendingTx, setAllPendingTx] = useState<TreasuryTransaction[]>([]);
-  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
 
-  const { toast } = useToast();
-  const supabase = useMemo(() => createClient(), []);
-
-  const parseCsvToRows = useCallback((csvText: string): BankStatementRow[] => {
-    const lines = csvText.trim().split(/\r?\n/).filter((l) => l.trim());
-    if (lines.length < 2) return [];
-
-    const headerLower = lines[0].toLowerCase();
-    const colIdx = {
-      date: headerLower.search(/\b(date|transaction_date|dateopened)\b/),
-      desc: headerLower.search(/\b(description|narration|details|memo|libelle)\b/),
-      amt: headerLower.search(/\b(amount|montant|debit|credit|value)\b/),
-      ref: headerLower.search(/\b(reference|ref|num|trx|id|cheque|numero)\b/),
-    };
-
-    const rows: BankStatementRow[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = parseCsvLine(lines[i]);
-      const dateStr = colIdx.date >= 0 ? cols[colIdx.date]?.trim() ?? '' : '';
-      const desc = colIdx.desc >= 0 ? cols[colIdx.desc]?.trim() ?? '' : '';
-      const amtStr = colIdx.amt >= 0 ? cols[colIdx.amt]?.trim() ?? '' : '';
-      const ref = colIdx.ref >= 0 ? cols[colIdx.ref]?.trim() : undefined;
-
-      let parsedDate = dateStr || new Date().toISOString().split('T')[0];
-      const dateMatch = dateStr.match(/(\d{1,4})[\/\-.](\d{1,2})[\/\-.](\d{1,4})/);
-      if (dateMatch) {
-        const parts = dateMatch[0].split(/[\/\-.]/);
-        if (parts[0].length === 4) {
-          parsedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-        } else {
-          parsedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        }
-      }
-
-      const cleanAmt = amtStr.replace(/[^0-9.,\-]/g, '').replace(/,/g, '.');
-      let amountNum: number;
-      try {
-        amountNum = new Decimal(cleanAmt).toNumber();
-      } catch {
-        continue;
-      }
-      if (Number.isNaN(amountNum)) continue;
-
-      const currency = detectCurrency((desc || '') + ' ' + (lines[i] || ''));
-
-      rows.push({
-        date: parsedDate,
-        amount: amountNum,
-        description: desc || t('بدون بيان', 'Sans description'),
-        reference: ref,
-        currency,
-      });
-    }
-    return rows;
-  }, [t]);
-
-  const fetchBankAccounts = useCallback(async () => {
+  // Load bank accounts
+  const loadBankAccounts = useCallback(async () => {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('bank_accounts')
         .select('*')
-        .order('id', { ascending: true });
+        .order('name', { ascending: true });
+
       if (error) throw error;
-      const rows = fallbackArray(((data ?? []) as BankAccount[]).filter((a) => a.is_active !== false), DEFAULT_BANK_ACCOUNTS);
-      if (rows.length > 0) {
-        setSelectedBankAccountId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0].id));
+      const accounts = fallbackArray(data, DEFAULT_BANK_ACCOUNTS);
+      setBankAccounts(accounts);
+      if (accounts.length > 0 && !selectedBankAccountId) {
+        setSelectedBankAccountId(accounts[0].id);
       }
-      setBankAccounts(rows);
     } catch {
-      const rows = DEFAULT_BANK_ACCOUNTS;
-      if (rows.length > 0) {
-        setSelectedBankAccountId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0].id));
+      setBankAccounts(DEFAULT_BANK_ACCOUNTS);
+      if (DEFAULT_BANK_ACCOUNTS.length > 0 && !selectedBankAccountId) {
+        setSelectedBankAccountId(DEFAULT_BANK_ACCOUNTS[0].id);
       }
-      setBankAccounts(rows);
     }
-  }, [supabase]);
+  }, [selectedBankAccountId]);
 
   useEffect(() => {
-    fetchBankAccounts();
-  }, [fetchBankAccounts]);
+    loadBankAccounts();
+  }, [loadBankAccounts]);
 
-  const fetchAccountHealth = useCallback(async () => {
-    if (!selectedBankAccountId) {
-      setAllPendingTx([]);
-      return;
-    }
-    setLoadingHealth(true);
-    try {
-      const { data, error } = await supabase
-        .from('treasury_transactions')
-        .select('*')
-        .eq('bank_account_id', selectedBankAccountId)
-        .neq('reconciliation_status', 'reconciled')
-        .order('created_at', { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      setAllPendingTx((data ?? []) as TreasuryTransaction[]);
-    } catch {
-      setAllPendingTx([]);
-    } finally {
-      setLoadingHealth(false);
-    }
-  }, [supabase, selectedBankAccountId]);
-
-  useEffect(() => {
-    fetchAccountHealth();
-  }, [fetchAccountHealth]);
-
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = useCallback((file: File) => {
     setFileName(file.name);
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = (ev.target?.result as string) || '';
-      try {
-        const rows = parseCsvToRows(text);
-        setParsedRows(rows);
-        setErrors(rows.length === 0 ? [t('الملف فارغ أو لا يحتوي على بيانات صالحة', 'Le fichier est vide ou ne contient pas de données valides')] : []);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : t('خطأ في قراءة الملف', 'Erreur de lecture du fichier');
-        setErrors([message]);
+    reader.onload = (e) => {
+      const text = (e.target?.result as string) || '';
+      const parsed = parseBankStatement(text, file.name);
+      if (parsed.success && parsed.rows.length > 0) {
+        setParsedRows(parsed.rows);
+        setStatementMeta({
+          format: parsed.format,
+          totalCredit: parsed.totalCredit,
+          totalDebit: parsed.totalDebit,
+        });
+        setErrors([]);
+        setResult(null);
+      } else {
+        setParsedRows([]);
+        setStatementMeta(null);
+        setErrors([parsed.error || t('خطأ في معالجة الملف', 'Erreur de traitement du fichier')]);
       }
     };
     reader.readAsText(file);
-  }, [parseCsvToRows, t]);
+  }, [t]);
 
   const handleReconcile = useCallback(async () => {
     if (!selectedBankAccountId || parsedRows.length === 0) return;
-    setLoading(true);
+    setReconciling(true);
     setResult(null);
     setErrors([]);
     try {
-      const res = await autoReconcileBankStatement(parsedRows, selectedBankAccountId);
-      setResult({
-        matched: res.matched || [],
-        unmatchedBank: res.unmatchedBankRows || [],
-        unmatchedSystem: res.unmatchedSystemTransactions || [],
-      });
+      const res = await autoReconcileBankStatement(parsedRows);
+      if (res.success) {
+        setResult({
+          matched: res.matched,
+          unmatchedBank: res.unmatchedBankRows,
+          unmatchedSystem: res.unmatchedSystemTransactions,
+          unmatchedInvoices: res.unmatchedInvoices,
+          highConfidenceCount: res.highConfidenceCount,
+          totalMatchedVolume: res.totalMatchedVolume,
+        });
+        toast({
+          title: t('اكتملت المطابقة الذكية', 'Rapprochement intelligent terminé'),
+          description: t(
+            `تمت مطابقة ${res.matched.length} معاملة بنجاح (${res.highConfidenceCount} موثوقة بنسبة عالية)`,
+            `${res.matched.length} transactions rapprochées (${res.highConfidenceCount} haute confiance)`
+          ),
+        });
+      } else {
+        setErrors([res.error || t('فشل محرك المطابقة', 'Échec du moteur de rapprochement')]);
+      }
+    } catch {
+      setErrors([t('حدث خطأ أثناء إجراء المطابقة', 'Une erreur est survenue lors du rapprochement')]);
+    } finally {
+      setReconciling(false);
+    }
+  }, [selectedBankAccountId, parsedRows, t, toast]);
+
+  const handleConfirmSingle = async (match: ReconciliationMatch) => {
+    if (!selectedBankAccountId) return;
+    setLoading(true);
+    try {
+      const res = await confirmSingleSmartMatch(match, selectedBankAccountId);
+      if (res.success) {
+        toast({
+          title: t('تم تأكيد التسوية', 'Rapprochement confirmé'),
+          description: t('تم إدراج وقيد التسوية في السجلات المحاسبية', 'Lettrage et écritures validés avec succès'),
+        });
+        if (result) {
+          setResult({
+            ...result,
+            matched: result.matched.filter((m) => m !== match),
+          });
+        }
+      } else {
+        toast({
+          title: t('فشل التأكيد', 'Échec de confirmation'),
+          description: res.error,
+          variant: 'destructive',
+        });
+      }
+    } catch {
       toast({
-        title: t(
-          `تمت المطابقة: ${res.matched?.length || 0} معاملة`,
-          `Rapprochement terminé : ${res.matched?.length || 0} transaction(s)`
-        )
+        title: t('خطأ غير متوقع', 'Erreur inattendue'),
+        variant: 'destructive',
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t('خطأ في المطابقة', 'Erreur lors du rapprochement');
-      toast({ title: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [parsedRows, selectedBankAccountId, toast, t]);
+  };
 
-  const handleConfirmMatch = useCallback(
-    async (txId: number) => {
-      setReconciling(true);
-      try {
-        const match = result?.matched.find((m) => m.treasuryTransaction.id === txId);
-        if (!match) return;
-        const ref = match.bankRow.reference || match.bankRow.description || 'bank_reconciled';
-        const res = await confirmBankReconciliation(txId, ref);
-        if (res.success) {
-          setResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  matched: prev.matched.filter((m) => m.treasuryTransaction.id !== txId),
-                  unmatchedSystem: prev.unmatchedSystem.filter((tx) => tx.id !== txId),
-                }
-              : prev
-          );
-          toast({ title: t('تم تأكيد المطابقة', 'Rapprochement confirmé') });
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : t('خطأ', 'Erreur');
-        toast({ title: message, variant: 'destructive' });
-      } finally {
-        setReconciling(false);
-      }
-    },
-    [result, toast, t]
-  );
+  const handleBatchConfirm = async () => {
+    if (!selectedBankAccountId || !result) return;
+    const highConfMatches = result.matched.filter((m) => m.confidence === 'high');
+    if (highConfMatches.length === 0) return;
 
-  const formatDate = (dateStr: string) => {
+    setBatchReconciling(true);
     try {
-      return new Date(dateStr).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR');
+      const res = await confirmBatchReconciliation(highConfMatches, selectedBankAccountId);
+      toast({
+        title: t('تمت التسوية الجماعية', 'Rapprochement par lot effectué'),
+        description: t(
+          `تمت تسوية ${res.processedCount} معاملة موثوقة بنجاح`,
+          `${res.processedCount} transactions rapprochées par lot`
+        ),
+      });
+      setResult({
+        ...result,
+        matched: result.matched.filter((m) => m.confidence !== 'high'),
+      });
     } catch {
-      return dateStr;
+      toast({
+        title: t('خطأ في التسوية الجماعية', 'Erreur rapprochement par lot'),
+        variant: 'destructive',
+      });
+    } finally {
+      setBatchReconciling(false);
     }
   };
 
-  const accountHealth = useMemo(() => {
-    const now = Date.now();
-    const buckets = { fresh: 0, aging: 0, stale: 0, critical: 0 };
-    const sumByCurrency: Record<string, InstanceType<typeof Decimal>> = {};
-    const staleItems: TreasuryTransaction[] = [];
-
-    for (const tx of allPendingTx) {
-      const ageDays = Math.floor((now - new Date(tx.created_at).getTime()) / 86400000);
-      if (ageDays > 90) buckets.critical++;
-      else if (ageDays > 60) buckets.stale++;
-      else if (ageDays > 30) buckets.aging++;
-      else buckets.fresh++;
-
-      const cur = tx.currency || 'MAD';
-      const txAmt = new Decimal(tx.amount || 0);
-      if (!sumByCurrency[cur]) sumByCurrency[cur] = new Decimal(0);
-      sumByCurrency[cur] = tx.type === 'income'
-        ? sumByCurrency[cur].plus(txAmt)
-        : sumByCurrency[cur].minus(txAmt);
-
-      if (ageDays > 60) staleItems.push(tx);
-    }
-
-    const sumByCurrencyNumber: Record<string, number> = {};
-    for (const [cur, dec] of Object.entries(sumByCurrency)) {
-      sumByCurrencyNumber[cur] = dec.toNumber();
-    }
-
-    const selected = bankAccounts.find((a) => a.id === selectedBankAccountId);
-    return { buckets, sumByCurrency: sumByCurrencyNumber, staleItems, selected };
-  }, [allPendingTx, bankAccounts, selectedBankAccountId]);
-
-  const formatCurrency = (amount?: number | string | null, currency?: string | null) => {
+  const formatMoney = (amount?: number | string | null, currency?: string) => {
     const d = new Decimal(amount ?? 0);
     return `${d.toFixed(2)} ${currency || 'MAD'}`;
   };
 
-  const getMatchStrength = (confidence: 'high' | 'medium' | 'low') => {
-    switch (confidence) {
-      case 'high':
-        return { label: t('ثقة عالية', 'Confiance élevée'), color: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/25' };
-      case 'medium':
-        return { label: t('ثقة متوسطة', 'Confiance moyenne'), color: 'bg-blue-500/15 text-blue-700 border-blue-500/25' };
-      default:
-        return { label: t('ثقة ضعيفة', 'Confiance faible'), color: 'bg-amber-500/15 text-amber-700 border-amber-500/25' };
-    }
-  };
-
   return (
-    <div className="space-y-6" dir={dir}>
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b border-border/40">
         <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
-            <ArrowLeftRight className="w-6 h-6 text-primary" />
-            {t('التسوية البنكية التلقائية', 'Rapprochement Bancaire Automatique')}
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>{t('المطابقة البنكية والذكاء المحاسبي', 'Rapprochement Bancaire & IA')}</span>
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-bold font-amiri text-foreground flex items-center gap-2.5">
+            <ArrowLeftRight className="w-7 h-7 text-primary" />
+            {t('المطابقة البنكية الذكية (Smart Bank Reconciliation)', 'Rapprochement Bancaire Intelligent')}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t('مطابقة كشوف الحساب مع المعاملات المسجلة', 'Rapprochement des relevés bancaires avec les transactions du système')}
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+            {t(
+              'معالجة كشوف الحسابات (CSV / OFX)، احتساب نسبة التطابق (Matching Score)، والربط الفوري مع المعاملات والفواتير.',
+              'Traitement des relevés bancaires (CSV / OFX), calcul du score de correspondance et lettrage avec factures et trésorerie.'
+            )}
           </p>
         </div>
+
         <Button
           type="button"
           onClick={() => setIsAddAccountOpen(true)}
-          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-semibold h-9 px-3 gap-1.5 shadow-xs"
+          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-semibold h-10 px-4 gap-1.5 shadow-xs"
         >
           <Plus className="w-4 h-4" />
           {t('إضافة حساب بنكي جديد', 'Ajouter un nouveau compte')}
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-foreground">
-            {t('1. تحميل كشف الحساب البنكي', '1. Importer le relevé de compte bancaire')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">
-                  {t('الحساب البنكي', 'Compte bancaire')}
-                </label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsAddAccountOpen(true)}
-                  className="h-6 text-xs text-primary hover:text-primary/80 gap-1 px-1.5 font-medium"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  {t('إضافة حساب', 'Ajouter un compte')}
-                </Button>
-              </div>
-              <select
-                value={selectedBankAccountId ?? ''}
-                onChange={(e) => setSelectedBankAccountId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full h-10 px-3 border border-input rounded-lg bg-card text-foreground text-sm focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
-              >
-                <option value="">{t('-- اختر الحساب البنكي --', '-- Sélectionner le compte bancaire --')}</option>
-                {bankAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name || a.bank_name || `${t('حساب #', 'Compte #')}${a.id}`} ({a.currency || 'MAD'})
-                  </option>
-                ))}
-              </select>
-
-              {bankAccounts.length === 0 && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 mt-2">
-                  <span>
-                    {t(
-                      'لا توجد حسابات بنكية مسجلة حالياً. يُرجى إضافة حسابك البنكي.',
-                      'Aucun compte bancaire enregistré. Veuillez ajouter un compte bancaire.'
-                    )}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsAddAccountOpen(true)}
-                    className="h-7 text-xs border-amber-500/30 text-amber-800 dark:text-amber-300 font-medium"
-                  >
-                    {t('+ إضافة حساب بنكي الآن', '+ Ajouter un compte')}
-                  </Button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                {t('ملف كشف الحساب (CSV)', 'Fichier de relevé (CSV)')}
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".csv,.txt"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="bank-csv-upload"
-                />
-                <label
-                  htmlFor="bank-csv-upload"
-                  className="flex items-center gap-2 h-10 px-4 border border-dashed border-input rounded-lg bg-card hover:bg-accent cursor-pointer transition-colors"
-                >
-                  <Upload className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground truncate">
-                    {fileName || t('اختر ملف CSV أو اسحبه هنا...', 'Choisir un fichier CSV ou le glisser ici...')}
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {errors.length > 0 && (
-            <Card className="border-rose-500/20">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 text-rose-500 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-rose-600 text-sm">
-                      {t('أخطاء في قراءة الملف:', 'Erreurs de lecture du fichier :')}
-                    </p>
-                    <ul className="text-xs text-rose-600/80 mt-1 space-y-0.5">
-                      {errors.map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Button
-            onClick={handleReconcile}
-            disabled={loading || !parsedRows.length || !selectedBankAccountId}
-            className="w-full h-11 text-base font-semibold"
-          >
-            {loading || reconciling ? (
-              <>
-                <RefreshCw className="w-4 h-4 ms-2 animate-spin" />
-                {t('جاري المطابقة التلقائية...', 'Rapprochement automatique en cours...')}
-              </>
-            ) : (
-              <>
-                <ArrowLeftRight className="w-4 h-4 ms-2" />
-                {t(`مطابقة تلقائية (${parsedRows.length} صف)`, `Rapprochement automatique (${parsedRows.length} lignes)`)}
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {selectedBankAccountId && (
-        <Card className="border-slate-500/15">
+      {/* Account Selection & File Upload Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card className="border border-border shadow-xs">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base text-foreground">
-              <Activity className="w-5 h-5 text-primary" />
-              {t('صحة الحساب البنكي', 'Santé du compte bancaire')}
-              {loadingHealth && <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-primary" />
+              {t('اختر الحساب البنكي للتسوية', 'Sélectionner le compte bancaire')}
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {accountHealth.selected
-                ? `${accountHealth.selected.name || accountHealth.selected.bank_name || t('حساب بنكي', 'Compte bancaire')} • ${t('رصيد مُسجَّل:', 'Solde enregistré :')} ${formatCurrency(
-                    accountHealth.selected.current_balance ?? (accountHealth.selected as unknown as Record<string, unknown>).balance as number ?? 0,
-                    accountHealth.selected.currency || 'MAD'
-                  )}`
-                : t('لم يتم اختيار حساب', 'Aucun compte sélectionné')}
-            </p>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
-                <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
-                  <Clock className="w-3.5 h-3.5" /> {t('≤ 30 يوم', '≤ 30 jours')}
-                </div>
-                <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
-                  {accountHealth.buckets.fresh}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
-                <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-                  <Clock className="w-3.5 h-3.5" /> {t('31-60 يوم', '31-60 jours')}
-                </div>
-                <p className="text-xl font-bold font-mono text-amber-700 dark:text-amber-400 mt-1">
-                  {accountHealth.buckets.aging}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
-                <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400">
-                  <Clock className="w-3.5 h-3.5" /> {t('61-90 يوم', '61-90 jours')}
-                </div>
-                <p className="text-xl font-bold font-mono text-orange-700 dark:text-orange-400 mt-1">
-                  {accountHealth.buckets.stale}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
-                <div className="flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400">
-                  <Clock className="w-3.5 h-3.5" /> {t('> 90 يوم (حرج)', '> 90 jours (Critique)')}
-                </div>
-                <p className="text-xl font-bold font-mono text-rose-700 dark:text-rose-400 mt-1">
-                  {accountHealth.buckets.critical}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3 text-xs">
-              {Object.entries(accountHealth.sumByCurrency).map(([cur, net]) => (
-                <div
-                  key={cur}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
-                    net >= 0
-                      ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400'
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              {bankAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => setSelectedBankAccountId(acc.id)}
+                  className={`w-full text-start p-3 rounded-xl border transition-all flex items-center justify-between ${
+                    selectedBankAccountId === acc.id
+                      ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/40'
+                      : 'border-border/70 hover:bg-muted/30'
                   }`}
                 >
-                  {net >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                  <span className="font-mono font-semibold">{formatCurrency(net, cur)}</span>
-                  <span className="text-muted-foreground">{t('صافي معلَّق', 'Net en attente')}</span>
-                </div>
+                  <div>
+                    <p className="font-semibold text-xs text-foreground">{acc.name || acc.bank_name}</p>
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{acc.bank_name ? `${acc.bank_name} - ${acc.account_number}` : acc.account_number}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[11px] font-mono">
+                    {acc.currency || 'MAD'}
+                  </Badge>
+                </button>
               ))}
             </div>
-
-            {accountHealth.staleItems.length > 0 && (
-              <div className="mt-4 p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
-                <p className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4" />
-                  {t('معاملات معلَّقة منذ أكثر من 60 يوم', 'Transactions en attente depuis plus de 60 jours')} ({accountHealth.staleItems.length})
-                </p>
-                <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-                  {accountHealth.staleItems.slice(0, 5).map((tx) => (
-                    <li key={tx.id} className="text-xs text-muted-foreground flex justify-between">
-                      <span className="truncate">#{tx.id} - {tx.description?.substring(0, 40)}</span>
-                      <span className="font-mono shrink-0">{formatCurrency(tx.amount, tx.currency)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </CardContent>
         </Card>
-      )}
 
+        <Card className="lg:col-span-2 border border-border shadow-xs">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Upload className="w-4 h-4 text-primary" />
+              {t('رفع واستيراد كشف الحساب البنكي (CSV / OFX / QFX)', 'Importer le relevé bancaire')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${
+                isDragging
+                  ? 'border-primary bg-primary/5 scale-[0.99]'
+                  : 'border-border hover:border-primary/50 bg-muted/10'
+              }`}
+            >
+              <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-70" />
+              <p className="text-xs font-semibold text-foreground">
+                {fileName ? fileName : t('اسحب كشف الحساب إلى هنا أو اضغط للاختيار', 'Glissez le fichier ici ou cliquez pour choisir')}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {t('يدعم كشوف الحسابات المغربية والأوروبية بصيغ CSV و OFX و QFX', 'Prend en charge les formats CSV marocains/européens, OFX et QFX')}
+              </p>
+              <input
+                type="file"
+                accept=".csv,.ofx,.qfx,text/csv,text/plain"
+                className="hidden"
+                id="statement-upload"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                }}
+              />
+              <label htmlFor="statement-upload">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 rounded-xl text-xs cursor-pointer gap-1.5"
+                  onClick={() => document.getElementById('statement-upload')?.click()}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {t('استعراض الملفات', 'Parcourir les fichiers')}
+                </Button>
+              </label>
+            </div>
+
+            {statementMeta && (
+              <div className="flex flex-wrap items-center justify-between p-3 rounded-xl bg-muted/30 border border-border text-xs gap-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="uppercase font-mono text-[10px]">
+                    {statementMeta.format}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {parsedRows.length} {t('سطر مقروء', 'lignes analysées')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-mono">
+                  <span className="text-emerald-600 font-semibold" dir="ltr">
+                    +{statementMeta.totalCredit}
+                  </span>
+                  <span className="text-rose-600 font-semibold" dir="ltr">
+                    -{statementMeta.totalDebit}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {errors.length > 0 && (
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs space-y-1">
+                {errors.map((err, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{err}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                disabled={parsedRows.length === 0 || !selectedBankAccountId || reconciling}
+                onClick={handleReconcile}
+                className="rounded-xl text-xs font-semibold h-10 px-5 gap-2 bg-primary text-primary-foreground shadow-xs"
+              >
+                {reconciling ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    {t('جاري المطابقة الذكية...', 'Rapprochement en cours...')}
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    {t('تشغيل محرك المطابقة الآلي', 'Lancer le Rapprochement Intelligent')}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Results Overview */}
       {result && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                  {t('إجمالي صفوف CSV', 'Total lignes CSV')}
-                </p>
-                <p className="text-2xl font-bold font-mono text-foreground">{parsedRows.length}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-emerald-500/20">
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-emerald-600 uppercase tracking-wider">
-                  {t('مطابقات تلقائية', 'Rapprochements automatiques')}
-                </p>
-                <p className="text-2xl font-bold font-mono text-emerald-600">{result.matched.length}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-amber-500/20">
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-amber-600 uppercase tracking-wider">
-                  {t('غير مطابق', 'Non rapprochés')}
-                </p>
-                <p className="text-2xl font-bold font-mono text-amber-600">
-                  {result.unmatchedBank.length + result.unmatchedSystem.length}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {result.matched.length > 0 && (
-            <Card className="border-emerald-500/15">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-emerald-700 text-base">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  {t('المطابقات التلقائية', 'Correspondances automatiques')} ({result.matched.length})
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {t('اضغط "تأكيد" لترسيم كل مطابقة', 'Cliquez sur "Confirmer" pour valider chaque rapprochement')}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {result.matched.map((match, idx) => {
-                    const strength = getMatchStrength(match.confidence);
-                    return (
-                      <div
-                        key={idx}
-                        className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15 flex items-center justify-between gap-4 flex-wrap"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge className={strength.color}>{strength.label}</Badge>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                {t('صف #', 'Ligne #')}{idx + 1}
-                              </p>
-                              <p className="font-mono font-medium text-foreground">
-                                {formatCurrency(match.bankRow.amount, match.bankRow.currency)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatDate(match.bankRow.date)} - {match.bankRow.description}
-                              </p>
-                            </div>
-                            <div className="flex items-center justify-center">
-                              <ArrowLeftRight className="w-5 h-5 text-emerald-500" />
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                {t('معاملة #', 'Transaction #')}{match.treasuryTransaction.id}
-                              </p>
-                              <p className="font-mono font-medium text-foreground">
-                                {formatCurrency(match.treasuryTransaction.amount, match.treasuryTransaction.currency)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {match.treasuryTransaction.description?.substring(0, 50)}
-                                {match.treasuryTransaction.reference && ` (Ref: ${match.treasuryTransaction.reference})`}
-                              </p>
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-2">{match.matchReason}</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => handleConfirmMatch(match.treasuryTransaction.id)}
-                          disabled={reconciling}
-                          className="shrink-0 bg-emerald-600 hover:bg-emerald-700"
-                        >
-                          {reconciling ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 ms-1" />
-                              {t('تأكيد', 'Confirmer')}
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    );
-                  })}
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+            <Card className="border border-border shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t('المعاملات المتطابقة', 'Transactions rapprochées')}</p>
+                  <p className="text-xl font-bold font-mono text-foreground mt-1">{result.matched.length}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
                 </div>
               </CardContent>
             </Card>
-          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                  <XCircle className="w-4 h-4" />
-                  {t('صفوف كشف الحساب غير المطابقة', 'Lignes de relevé non rapprochées')} ({result.unmatchedBank.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {result.unmatchedBank.length === 0 ? (
-                  <p className="text-center text-xs text-muted-foreground py-6">
-                    {t('لا توجد صفوف غير مطابقة', 'Aucune ligne non rapprochée')}
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {result.unmatchedBank.map((row, idx) => (
-                      <div key={idx} className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 text-xs">
-                        <div className="flex justify-between items-start">
-                          <span className="font-mono font-bold text-rose-600">
-                            {formatCurrency(row.amount, row.currency)}
-                          </span>
-                          <span className="text-muted-foreground">{formatDate(row.date)}</span>
-                        </div>
-                        <p className="text-muted-foreground mt-1">{row.description}</p>
-                        {row.reference && <p className="text-muted-foreground">Ref: {row.reference}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <Card className="border border-border shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t('ثقة عالية (Match >= 80%)', 'Haute confiance')}</p>
+                  <p className="text-xl font-bold font-mono text-emerald-600 mt-1">{result.highConfidenceCount}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <Zap className="w-5 h-5" />
+                </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Landmark className="w-4 h-4" />
-                  {t('المعاملات النظامية غير المسوية', 'Transactions système non rapprochées')} ({result.unmatchedSystem.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {result.unmatchedSystem.length === 0 ? (
-                  <p className="text-center text-xs text-muted-foreground py-6">
-                    {t('لا توجد معاملات غير مسوية', 'Aucune transaction non rapprochée')}
+            <Card className="border border-border shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t('حجم السيولة المطابقة', 'Volume rapproché')}</p>
+                  <p className="text-xl font-bold font-mono text-primary mt-1" dir="ltr">
+                    {result.totalMatchedVolume} MAD
                   </p>
-                ) : (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {result.unmatchedSystem.map((tx) => (
-                      <div key={tx.id} className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 text-xs">
-                        <div className="flex justify-between items-start">
-                          <span className="font-mono font-bold text-amber-600">
-                            {formatCurrency(tx.amount, tx.currency)}
-                          </span>
-                          <Badge variant="outline" className="text-[10px]">{tx.reconciliation_status}</Badge>
-                        </div>
-                        <p className="text-muted-foreground mt-1">{tx.description?.substring(0, 60)}</p>
-                        {tx.reference && <p className="text-muted-foreground">Ref: {tx.reference}</p>}
-                        <p className="text-muted-foreground">
-                          {new Date(tx.created_at).toLocaleDateString(locale === 'ar' ? 'ar-MA' : 'fr-FR')}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Activity className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t('أسطر غير مسواة', 'Lignes en attente')}</p>
+                  <p className="text-xl font-bold font-mono text-amber-600 mt-1">{result.unmatchedBank.length}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
               </CardContent>
             </Card>
           </div>
-        </>
+
+          {/* Matched Transactions Table */}
+          <Card className="border border-border shadow-xs overflow-hidden">
+            <CardHeader className="py-3.5 px-5 border-b border-border flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{t('المعاملات المقترحة للتسوية المباشرة', 'Transactions prêtes pour le lettrage')}</span>
+              </CardTitle>
+              {result.highConfidenceCount > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={batchReconciling}
+                  onClick={handleBatchConfirm}
+                  className="rounded-xl text-xs font-semibold h-8 px-3 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  {batchReconciling
+                    ? t('جاري التسوية الجماعية...', 'Traitement par lot...')
+                    : t(`تسوية ${result.highConfidenceCount} دفعة واحدة`, `Valider ${result.highConfidenceCount} en lot`)}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              {result.matched.length === 0 ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">
+                  {t('لا توجد مطابقات مطروحة حالياً.', 'Aucune correspondance identifiée.')}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 text-muted-foreground">
+                        <th className="py-3 px-4 text-start font-semibold">{t('سطر كشف الحساب البنكي', 'Ligne Relevé')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('المعاملة المقابلة في النظام', 'Transaction Système')}</th>
+                        <th className="py-3 px-4 text-center font-semibold">{t('نسبة التطابق', 'Score')}</th>
+                        <th className="py-3 px-4 text-start font-semibold">{t('سبب المطابقة', 'Raison')}</th>
+                        <th className="py-3 px-4 text-end font-semibold">{t('الإجراء', 'Action')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {result.matched.map((m, idx) => (
+                        <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <p className="font-semibold text-foreground font-mono" dir="ltr">
+                              {formatMoney(m.bankRow.amount, m.bankRow.currency)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{m.bankRow.date}</p>
+                            <p className="text-[10px] text-muted-foreground line-clamp-1">{m.bankRow.description}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            {m.matchType === 'treasury_transaction' && m.treasuryTransaction && (
+                              <div>
+                                <Badge variant="outline" className="text-[10px] mb-1">
+                                  <Layers className="w-3 h-3 me-1" />
+                                  {t('حركة خزينة', 'Trésorerie')} #{m.treasuryTransaction.id}
+                                </Badge>
+                                <p className="font-mono text-foreground" dir="ltr">
+                                  {formatMoney(m.treasuryTransaction.amount, m.treasuryTransaction.currency)}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground line-clamp-1">
+                                  {m.treasuryTransaction.description}
+                                </p>
+                              </div>
+                            )}
+                            {m.matchType === 'invoice' && m.invoice && (
+                              <div>
+                                <Badge variant="outline" className="text-[10px] mb-1 bg-blue-500/10 text-blue-600 border-blue-500/30">
+                                  <FileText className="w-3 h-3 me-1" />
+                                  {t('فاتورة عميل', 'Facture')} #{m.invoice.invoice_number}
+                                </Badge>
+                                <p className="font-semibold text-foreground">{m.invoice.client_name}</p>
+                                <p className="font-mono text-muted-foreground" dir="ltr">
+                                  {t('المتبقي:', 'Reste:')} {formatMoney(m.invoice.remaining_amount, m.invoice.currency)}
+                                </p>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold font-mono text-[11px] ${
+                                m.confidence === 'high'
+                                  ? 'bg-emerald-500/15 text-emerald-600'
+                                  : m.confidence === 'medium'
+                                  ? 'bg-blue-500/15 text-blue-600'
+                                  : 'bg-amber-500/15 text-amber-600'
+                              }`}
+                            >
+                              {m.matchScore}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-[11px] text-muted-foreground">
+                            {m.matchReason}
+                          </td>
+                          <td className="py-3 px-4 text-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => handleConfirmSingle(m)}
+                              className="rounded-xl text-xs font-semibold h-8 px-3 gap-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-xs"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {t('تأكيد وقيد', 'Valider')}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
+      {/* Add Bank Account Modal */}
       <AddBankAccountModal
         isOpen={isAddAccountOpen}
         onClose={() => setIsAddAccountOpen(false)}
-        onSuccess={(newAcc: BankAccount) => {
-          fetchBankAccounts();
-          if (newAcc?.id) {
-            setSelectedBankAccountId(newAcc.id);
-          }
+        onSuccess={() => {
+          setIsAddAccountOpen(false);
+          loadBankAccounts();
         }}
       />
     </div>

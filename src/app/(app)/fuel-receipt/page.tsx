@@ -13,6 +13,9 @@ import { processFuelReceiptOCR } from '@/features/fleet/services/ocr.actions';
 import { OfflineSyncBadge } from '@/components/offline-sync-badge';
 import { useLanguage } from '@/components/language-provider';
 import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
+import { auditFuelReceipt, type FuelAuditResult } from '@/features/fleet/services/fuel-fraud-detector.actions';
+import { FuelFraudAuditBadge } from '@/features/fleet/components/FuelFraudAuditBadge';
+import { ShieldCheck } from 'lucide-react';
 import Decimal from 'decimal.js';
 
 export default function FuelReceiptScanPage() {
@@ -31,10 +34,46 @@ export default function FuelReceiptScanPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [fraudAudit, setFraudAudit] = useState<FuelAuditResult | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
+
+  const runFraudAudit = async (targetStation?: string, targetLiters?: string, targetAmount?: string, targetDate?: string) => {
+    const st = targetStation !== undefined ? targetStation : station;
+    const lt = Number(targetLiters !== undefined ? targetLiters : liters);
+    const am = Number(targetAmount !== undefined ? targetAmount : amount);
+    const dt = targetDate !== undefined ? targetDate : date;
+
+    if (!lt || !am || !dt) return;
+
+    setIsAuditing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: driverData } = await supabase
+        .from('drivers')
+        .select('default_truck_id')
+        .eq('user_id', session?.user?.id || '')
+        .maybeSingle();
+
+      const truckId = driverData?.default_truck_id || 1;
+      const result = await auditFuelReceipt({
+        truckId,
+        liters: lt,
+        amount: am,
+        currency,
+        date: dt,
+        stationName: st,
+      });
+      setFraudAudit(result);
+    } catch (err) {
+      console.error('Audit check failed:', err);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
   const { reportValidation, reportSubmissionError } = useAutoIssueReporter({
     screenName: 'تسجيل وصل وقود (OCR)',
     screenRoute: '/fuel-receipt',
@@ -119,6 +158,16 @@ export default function FuelReceiptScanPage() {
           if (data.currency) setCurrency(data.currency);
           setConfidence(data.confidence);
           setOcrText(data.rawText);
+
+          // Automatically trigger fuel fraud and geolocation triangulation audit
+          if (data.liters && data.amount) {
+            runFraudAudit(
+              data.station,
+              data.liters.toString(),
+              data.amount.toString(),
+              data.date || new Date().toISOString().split('T')[0]
+            );
+          }
 
           toast({
             title: t('✨ تم استخراج البيانات بالذكاء الاصطناعي', '✨ Données extraites par IA'),
@@ -425,6 +474,36 @@ export default function FuelReceiptScanPage() {
                   className="font-mono rounded-xl h-10"
                 />
               </div>
+            </div>
+
+            {/* Real-Time Fraud & Geolocation Audit Section */}
+            <div className="pt-2 border-t border-border/60">
+              {fraudAudit ? (
+                <div className="p-3 rounded-xl border bg-muted/30 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+                    <span>{t('نتيجة التدقيق ومطابقة مسار GPS:', 'Résultat d\'audit & trajet GPS :')}</span>
+                  </div>
+                  <FuelFraudAuditBadge audit={fraudAudit} size="sm" />
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {t('فحص موثوقية السند وسعة الخزان ومسار GPS', 'Contrôle de fiabilité, réservoir et GPS')}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runFraudAudit()}
+                    disabled={isAuditing || !liters || !amount}
+                    className="h-8 text-xs rounded-xl gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>{isAuditing ? t('جاري الفحص...', 'Audit en cours...') : t('فحص الشذوذ والاحتيال', 'Tester anti-fraude')}</span>
+                  </Button>
+                </div>
+              )}
             </div>
 
             <Button

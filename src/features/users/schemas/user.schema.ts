@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-export const userRoleSchema = z.enum(['super_admin', 'admin', 'secretary', 'driver']);
+export const userRoleSchema = z.enum([
+  'super_admin',
+  'admin',
+  'secretary',
+  'driver',
+  'accountant',
+  'fleet_manager',
+]);
 
 export const createUserSchema = z.object({
   name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),

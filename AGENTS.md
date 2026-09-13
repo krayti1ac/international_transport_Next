@@ -51,5 +51,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260928_independent_email_inbox.sql` — Independent Email System (SMTP/IMAP) & Secretary Smart Inbox (`email_messages` table, RLS policies, realtime replication).
 - `supabase/migrations/20260929_multi_tenant_dynamic_email_settings.sql` — Multi-Tenant Dynamic Email Settings & Zero-Config Auto Provisioning (`companies` email columns, `trg_auto_configure_company_mail` trigger).
 - `supabase/migrations/20260930_add_client_and_trip_gps_urls.sql` — Add WhatsApp Google Maps GPS URL columns to clients (`loading_gps_url`, `unloading_gps_url`) and trip_orders (`shipping_gps_url`, `unloading_gps_url`).
+- `supabase/migrations/20260930_add_accountant_and_fleet_manager_roles.sql` — Expand User Roles with Accountant and Fleet Manager & configure RLS policies (`treasury_transactions`, `truck_maintenance`).
+- `supabase/migrations/20261005_multi_branch_architecture.sql` — Phase 4: Multi-Branch Architecture & Operations Hubs (`company_branches` table, RLS policies, operational entity links, indexes).
 
 

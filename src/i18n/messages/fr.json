@@ -209,6 +209,8 @@
     "user": "Utilisateur",
     "admin": "Administrateur",
     "secretary": "Secrétaire",
+    "accountant": "Comptable / Auditeur",
+    "fleet_manager": "Gestionnaire de flotte",
     "driver": "Chauffeur",
     "role": "Rôle",
     "permissions": "Permissions",

@@ -81,6 +81,10 @@ function getRoleLabelArabic(role?: string): string {
       return 'مدير النظام';
     case 'secretary':
       return 'سكرتارية وإدارة';
+    case 'accountant':
+      return 'محاسب / مدقق مالي';
+    case 'fleet_manager':
+      return 'مدير الأسطول والصيانة';
     case 'driver':
       return 'سائق';
     default:

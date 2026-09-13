@@ -37,6 +37,7 @@ import { InvoicePrintModal } from '@/components/invoice-print-modal';
 import { InvoiceFormModal } from '@/components/invoice-form-modal';
 import { FIFOPaymentModal } from '@/components/fifo-payment-modal';
 import { PaymentRequestModal } from '@/components/payment-request-modal';
+import { AccountingExportModal } from '@/features/accounting/components/AccountingExportModal';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import {
   DEFAULT_CLIENTS,
@@ -86,6 +87,7 @@ function InvoicesPageContent() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isFIFOPaymentOpen, setIsFIFOPaymentOpen] = useState(false);
   const [isPaymentRequestOpen, setIsPaymentRequestOpen] = useState(false);
+  const [isAccountingExportOpen, setIsAccountingExportOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<Invoice | null>(null);
   const [fifoClientId, setFifoClientId] = useState<number | ''>('');
@@ -373,6 +375,16 @@ function InvoicesPageContent() {
           >
             <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
             {t('تحصيل دفعة (FIFO)', 'Encaissement (FIFO)')}
+          </Button>
+
+          {/* ERP Accounting Export Button */}
+          <Button
+            variant="outline"
+            onClick={() => setIsAccountingExportOpen(true)}
+            className="border-indigo-500/40 bg-card hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
+          >
+            <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            {t('تصدير قيود ERP (Sage / Odoo)', 'Export ERP (Sage / Odoo)')}
           </Button>
 
           {/* Create Invoice Button */}
@@ -990,6 +1002,12 @@ function InvoicesPageContent() {
           client={clients.find((c) => c.id === Number(activeInvoice.client_id))}
         />
       )}
+
+      {/* 5. ERP Accounting Export Modal */}
+      <AccountingExportModal
+        isOpen={isAccountingExportOpen}
+        onClose={() => setIsAccountingExportOpen(false)}
+      />
     </div>
   );
 }

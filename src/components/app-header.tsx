@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/users/UserAvatar';
+import { BranchSwitcher } from '@/features/branches/components/BranchSwitcher';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -261,6 +262,9 @@ export function AppHeader({
 
       {/* End side: Controls */}
       <div className="flex items-center gap-1.5 sm:gap-2.5">
+        {/* Multi-Branch Operations Switcher */}
+        <BranchSwitcher />
+
         {/* Refresh / F5 Data Button */}
         <Button
           type="button"

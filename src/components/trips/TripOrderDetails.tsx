@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlaneTakeoff, PlaneLanding, DollarSign, X, Navigation, Ship } from 'lucide-react';
+import { PlaneTakeoff, PlaneLanding, DollarSign, X, Navigation, Ship, ShieldCheck } from 'lucide-react';
 import Decimal from 'decimal.js';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { TransitActions } from '@/components/trips/TransitActions';
 import { DriverSettlementDialog } from '@/components/trips/DriverSettlementDialog';
 import { PodReportView } from '@/features/trips/components/PodReportView';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
+import { CustomsGatewayModal } from '@/features/customs/components/CustomsGatewayModal';
 import { useLanguage } from '@/components/language-provider';
 import type { TripOrder, Client, Driver, Truck as TruckType, Trailer, Advance } from '@/types/database';
 
@@ -39,6 +40,7 @@ function TripOrderDetails({
   const { dir, t } = useLanguage();
   const [settlementAdvance, setSettlementAdvance] = useState<Advance | null>(null);
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
+  const [isCustomsOpen, setIsCustomsOpen] = useState(false);
 
   const assignedClient = clients.find((c) => c.id === trip.client_id);
   const assignedClientImport = clients.find((c) => c.id === trip.client_import_id);
@@ -80,6 +82,20 @@ function TripOrderDetails({
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-5 h-5" />
           </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCustomsOpen(true)}
+              className="rounded-xl border-indigo-500/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/10 text-xs font-semibold gap-1.5 h-8.5"
+            >
+              <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              {t('الربط الجمركي (PortNet / TIR)', 'Douane (PortNet / TIR)')}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -250,6 +266,14 @@ function TripOrderDetails({
           advance={settlementAdvance}
           cashBoxes={cashBoxes}
           onSettled={handleSettled}
+        />
+      )}
+
+      {isCustomsOpen && (
+        <CustomsGatewayModal
+          tripId={trip.id}
+          isOpen={isCustomsOpen}
+          onClose={() => setIsCustomsOpen(false)}
         />
       )}
     </div>

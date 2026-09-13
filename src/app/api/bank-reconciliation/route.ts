@@ -5,16 +5,13 @@ import type { BankStatementRow } from '@/features/finance/services/bank_reconcil
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { csvData, bankAccountId } = body;
+    const { csvData } = body;
 
     if (!csvData || !Array.isArray(csvData)) {
       return NextResponse.json({ error: 'csvData must be an array of bank statement rows' }, { status: 400 });
     }
-    if (!bankAccountId) {
-      return NextResponse.json({ error: 'bankAccountId is required' }, { status: 400 });
-    }
 
-    const result = await autoReconcileBankStatement(csvData as BankStatementRow[], Number(bankAccountId));
+    const result = await autoReconcileBankStatement(csvData as BankStatementRow[]);
     return NextResponse.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';

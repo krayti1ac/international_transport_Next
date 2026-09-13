@@ -20,6 +20,8 @@ import {
   Power,
   CheckCircle2,
   XCircle,
+  Calculator,
+  Wrench,
 } from 'lucide-react';
 import { UserAvatar } from '@/components/users/UserAvatar';
 import { PRESET_USER_AVATARS, saveUserPhotoLocal, resolveUserPhoto } from '@/lib/user-photos';
@@ -94,12 +96,12 @@ export function UserManagementView() {
   // Secretary can only change roles to secretary or driver (never admin or super_admin)
   const availableRoles = useMemo<UserRole[]>(() => {
     if (isSuperAdmin) {
-      return ['super_admin', 'admin', 'secretary', 'driver'];
+      return ['super_admin', 'admin', 'secretary', 'accountant', 'fleet_manager', 'driver'];
     }
     if (isSecretary) {
       return ['secretary', 'driver'];
     }
-    return ['admin', 'secretary', 'driver'];
+    return ['admin', 'secretary', 'accountant', 'fleet_manager', 'driver'];
   }, [isSuperAdmin, isSecretary]);
 
   const { data: users = [], isLoading } = useUsersQuery();
@@ -180,6 +182,20 @@ export function UserManagementView() {
       icon: FileText,
       desc: t('إدارة العمليات، الرحلات، الفواتير، والخزينة', 'Gestion des voyages, factures et trésorerie'),
     },
+    accountant: {
+      label: t('محاسب / مدقق مالي', 'Comptable'),
+      badgeClass:
+        'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+      icon: Calculator,
+      desc: t('الفواتير، الخزينة، والمطابقة البنكية والتقارير المالية', 'Factures, trésorerie, rapprochement et rapports'),
+    },
+    fleet_manager: {
+      label: t('مدير الأسطول والصيانة', 'Gestionnaire de flotte'),
+      badgeClass:
+        'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      icon: Wrench,
+      desc: t('الشاحنات، الصيانة، سندات الوقود، وتتبع الأسطول', 'Flotte, maintenance, carburant et suivi'),
+    },
     driver: {
       label: t('كابتن / سائق', 'Chauffeur'),
       badgeClass:
@@ -246,8 +262,10 @@ export function UserManagementView() {
     const superAdmins = visibleUsers.filter((u) => u.role === 'super_admin').length;
     const admins = visibleUsers.filter((u) => u.role === 'admin').length;
     const secretaries = visibleUsers.filter((u) => u.role === 'secretary').length;
+    const accountants = visibleUsers.filter((u) => u.role === 'accountant').length;
+    const fleetManagers = visibleUsers.filter((u) => u.role === 'fleet_manager').length;
     const drivers = visibleUsers.filter((u) => u.role === 'driver').length;
-    return { total, superAdmins, admins, secretaries, drivers };
+    return { total, superAdmins, admins, secretaries, accountants, fleetManagers, drivers };
   }, [visibleUsers]);
 
   const handleOpenAddModal = () => {
@@ -670,6 +688,22 @@ export function UserManagementView() {
                 className="rounded-xl text-xs"
               >
                 {t('سكرتارية', 'Secrétariat')} ({stats.secretaries})
+              </Button>
+              <Button
+                variant={roleFilter === 'accountant' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('accountant')}
+                className="rounded-xl text-xs"
+              >
+                {t('محاسبين', 'Comptables')} ({stats.accountants})
+              </Button>
+              <Button
+                variant={roleFilter === 'fleet_manager' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('fleet_manager')}
+                className="rounded-xl text-xs"
+              >
+                {t('مدراء الأسطول', 'Flotte')} ({stats.fleetManagers})
               </Button>
               <Button
                 variant={roleFilter === 'driver' ? 'default' : 'outline'}

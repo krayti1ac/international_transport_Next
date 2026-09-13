@@ -1,4 +1,10 @@
-export type UserRole = 'super_admin' | 'admin' | 'secretary' | 'driver';
+export type UserRole = 
+  | 'super_admin' 
+  | 'admin' 
+  | 'secretary' 
+  | 'driver' 
+  | 'accountant' 
+  | 'fleet_manager';
 
 export type MailProviderType = 'cpanel' | 'hostinger' | 'ovh' | 'custom';
 
@@ -42,6 +48,23 @@ export interface CompanyDevice {
   license_number?: string | null;
 }
 
+export interface CompanyBranch {
+  id: number;
+  company_id: number;
+  name: string;
+  code: string;
+  country: 'MA' | 'ES' | 'FR' | string;
+  city: string;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  is_headquarters: boolean;
+  is_active: boolean;
+  default_cash_box_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -55,6 +78,8 @@ export interface User {
   company?: Company;
   avatar_url?: string | null;
   is_active?: boolean;
+  branch_id?: number | null;
+  branch?: CompanyBranch | null;
 }
 
 export interface Client {
@@ -133,6 +158,8 @@ export interface Truck {
   weight_capacity?: number;
   power?: number;
   fuel_consumption_rate?: number;
+  home_branch_id?: number | null;
+  home_branch?: CompanyBranch | null;
 }
 
 export interface Trailer {
@@ -220,6 +247,8 @@ export interface TripOrder {
   unloading_longitude?: number;
   shipping_gps_url?: string | null;
   unloading_gps_url?: string | null;
+  origin_branch_id?: number | null;
+  destination_branch_id?: number | null;
 }
 
 export interface Trip {
@@ -340,6 +369,7 @@ export interface CashBox {
   name: string;
   code: string;
   currency: string;
+  branch_id?: number | null;
   created_at: string;
 }
 

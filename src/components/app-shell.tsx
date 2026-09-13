@@ -9,6 +9,8 @@ import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { navigationGroups } from '@/lib/navigation';
 import { useLanguage } from '@/components/language-provider';
 
+import { CopilotFloatingButton } from '@/features/ai-copilot/components/CopilotFloatingButton';
+
 export function AppShell({
   children,
   userRole,
@@ -96,6 +98,9 @@ export function AppShell({
 
       {/* PWA install prompt */}
       <PwaInstallPrompt />
+
+      {/* Trans Bodanon AI Copilot Floating Launcher */}
+      <CopilotFloatingButton />
     </div>
   );
 }
