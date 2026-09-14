@@ -9,7 +9,7 @@ import type { TruckLocationHistory, TruckMaintenance } from '@/types/database';
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 // Known highway transit fuel stations along Morocco-Spain international freight corridors
-export const CORRIDOR_FUEL_STATIONS: Record<string, { name: string; lat: number; lng: number; country: 'MA' | 'ES' | 'FR' }> = {
+const CORRIDOR_FUEL_STATIONS: Record<string, { name: string; lat: number; lng: number; country: 'MA' | 'ES' | 'FR' }> = {
   // Morocco TIR Corridor
   tanger_med_afriquia: { name: 'Afriquia Tanger Med Port', lat: 35.885, lng: -5.505, country: 'MA' },
   tanger_med_total: { name: 'TotalEnergies Tanger Med', lat: 35.882, lng: -5.512, country: 'MA' },
@@ -86,7 +86,7 @@ export interface FuelAuditResult {
 /**
  * Match a station text string to the corridor fuel stations catalog
  */
-export function resolveStationCoordinates(stationText?: string): { name: string; lat: number; lng: number } | null {
+function resolveStationCoordinates(stationText?: string): { name: string; lat: number; lng: number } | null {
   if (!stationText) return null;
   const lower = stationText.toLowerCase();
 

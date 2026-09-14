@@ -24,11 +24,8 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import {
-  getTripCustomsData,
-  generatePortNetXml,
-  generateTirEpdXml,
-} from '../services/customs-gateway.actions';
+import { getTripCustomsData } from '../services/customs-gateway.actions';
+import { generatePortNetXml, generateTirEpdXml } from '../utils/customs-xml';
 import type { PortNetGatePass, TirEpdDeclaration, CustomsPreCheckResult } from '../types';
 
 interface CustomsGatewayModalProps {

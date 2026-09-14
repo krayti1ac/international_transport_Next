@@ -13,13 +13,12 @@ import {
   Edit2,
   Trash2,
   Globe,
-  MapPin,
   Phone,
   Mail,
   ShieldCheck,
-  CheckCircle2,
   AlertCircle,
   X,
+  Wallet,
 } from 'lucide-react';
 import {
   getCompanyBranches,
@@ -27,8 +26,10 @@ import {
   updateBranch,
   deleteBranch,
 } from '../services/branches.actions';
-import type { CompanyBranch } from '@/types/database';
+import type { CompanyBranch, CashBox } from '@/types/database';
 import type { BranchFormData } from '../schemas/branch.schema';
+import { createClient } from '@/lib/supabase/client';
+import { useBranchStore } from '@/lib/stores/branch-store';
 
 const COUNTRY_FLAGS: Record<string, string> = {
   MA: '🇲🇦',
@@ -41,6 +42,7 @@ export function BranchManagementView() {
   const { toast } = useToast();
 
   const [branches, setBranches] = useState<CompanyBranch[]>([]);
+  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<CompanyBranch | null>(null);
@@ -55,13 +57,22 @@ export function BranchManagementView() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [isHq, setIsHq] = useState(false);
+  const [defaultCashBoxId, setDefaultCashBoxId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const loadBranches = useCallback(async () => {
     try {
-      const res = await getCompanyBranches();
+      const supabase = createClient();
+      const [res, cbRes] = await Promise.all([
+        getCompanyBranches(),
+        supabase.from('cash_boxes').select('*').order('name'),
+      ]);
       if (res.success && res.branches) {
         setBranches(res.branches);
+        useBranchStore.getState().setAvailableBranches(res.branches);
+      }
+      if (cbRes.data) {
+        setCashBoxes(cbRes.data as CashBox[]);
       }
     } finally {
       setLoading(false);
@@ -82,6 +93,7 @@ export function BranchManagementView() {
     setPhone('');
     setEmail('');
     setIsHq(branches.length === 0);
+    setDefaultCashBoxId(null);
     setFormError(null);
     setModalOpen(true);
   };
@@ -96,6 +108,7 @@ export function BranchManagementView() {
     setPhone(b.phone || '');
     setEmail(b.email || '');
     setIsHq(b.is_headquarters);
+    setDefaultCashBoxId(b.default_cash_box_id ?? null);
     setFormError(null);
     setModalOpen(true);
   };
@@ -115,6 +128,7 @@ export function BranchManagementView() {
       email: email || null,
       is_headquarters: isHq,
       is_active: true,
+      default_cash_box_id: defaultCashBoxId,
     };
 
     try {
@@ -179,6 +193,7 @@ export function BranchManagementView() {
 
   const hqBranch = branches.find((b) => b.is_headquarters);
   const internationalCount = branches.filter((b) => b.country !== 'MA').length;
+  const linkedCashBoxesCount = branches.filter((b) => Boolean(b.default_cash_box_id)).length;
 
   return (
     <div className="space-y-6 pb-12" dir={dir}>
@@ -208,7 +223,7 @@ export function BranchManagementView() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Card className="border-border">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -224,8 +239,8 @@ export function BranchManagementView() {
         <Card className="border-border">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">{t('المقر الرئيسي (Siège Social)', 'Siège social')}</p>
-              <p className="text-sm font-bold text-foreground mt-1 truncate max-w-[180px]">
+              <p className="text-xs text-muted-foreground">{t('المقر الرئيسي (Siège)', 'Siège social')}</p>
+              <p className="text-sm font-bold text-foreground mt-1 truncate max-w-[150px]">
                 {hqBranch ? hqBranch.name : t('غير محدد', 'Non défini')}
               </p>
               <p className="text-[10px] text-muted-foreground font-mono">
@@ -246,6 +261,20 @@ export function BranchManagementView() {
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
               <Globe className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">{t('الصناديق النقدية المربوطة', 'Caisses associées')}</p>
+              <p className="text-xl font-bold font-mono text-amber-600 mt-1">
+                {linkedCashBoxesCount} <span className="text-xs font-normal text-muted-foreground">/ {branches.length}</span>
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+              <Wallet className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>
@@ -276,6 +305,7 @@ export function BranchManagementView() {
                     <th className="py-3 px-4 text-start font-semibold">{t('الفرع / المركز', 'Agence')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('الرمز والكود', 'Code')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('المدينة والدولة', 'Ville & Pays')}</th>
+                    <th className="py-3 px-4 text-start font-semibold">{t('الصندوق الافتراضي', 'Caisse')}</th>
                     <th className="py-3 px-4 text-start font-semibold">{t('بيانات التواصل', 'Contact')}</th>
                     <th className="py-3 px-4 text-center font-semibold">{t('الصفة', 'Statut')}</th>
                     <th className="py-3 px-4 text-end font-semibold">{t('الإجراءات', 'Actions')}</th>
@@ -307,6 +337,16 @@ export function BranchManagementView() {
                         <td className="py-3 px-4">
                           <p className="font-medium text-foreground">{b.city}</p>
                           <p className="text-[10px] text-muted-foreground uppercase">{b.country}</p>
+                        </td>
+                        <td className="py-3 px-4">
+                          {b.default_cash_box_id ? (
+                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 flex items-center gap-1 w-fit">
+                              <Wallet className="w-3 h-3 text-amber-500 shrink-0" />
+                              <span className="truncate max-w-[120px]">{cashBoxes.find((c) => c.id === b.default_cash_box_id)?.name || `#${b.default_cash_box_id}`}</span>
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-[11px]">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <div className="space-y-0.5 text-[11px] text-muted-foreground">
@@ -489,6 +529,28 @@ export function BranchManagementView() {
                     placeholder="branch@company.com"
                     className="h-9 text-xs rounded-xl"
                   />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Wallet className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{t('الصندوق النقدي الافتراضي للفرع', 'Caisse par défaut')}</span>
+                  </label>
+                  <select
+                    value={defaultCashBoxId || ''}
+                    onChange={(e) => setDefaultCashBoxId(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full h-9 rounded-xl border border-input bg-background px-3 text-xs"
+                  >
+                    <option value="">{t('-- بدون صندوق نقدي افتراضي --', '-- Aucune caisse par défaut --')}</option>
+                    {cashBoxes.map((cb) => (
+                      <option key={cb.id} value={cb.id}>
+                        {cb.name || cb.code} ({cb.currency || 'MAD'})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground">
+                    {t('يتم ربط سلف السائقين ومصروفات العمليات لهذا الفرع بهذا الصندوق تلقائياً', 'Associe les dépenses et avances de cette agence à cette caisse')}
+                  </p>
                 </div>
               </div>
 

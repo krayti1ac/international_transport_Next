@@ -150,17 +150,19 @@ export function Sidebar({
 
   const isItemAllowed = useCallback((item: SidebarItem): boolean => {
     if (!item.roles) return true;
-    if (!userRole) return false;
-    const normalizedRole = userRole === 'super-admin' ? 'super_admin' : userRole;
+    const roleToCheck = effectiveRole || userRole;
+    if (!roleToCheck) return false;
+    const normalizedRole = roleToCheck === 'super-admin' ? 'super_admin' : roleToCheck;
     return item.roles.includes(normalizedRole);
-  }, [userRole]);
+  }, [effectiveRole, userRole]);
 
   const isGroupAllowed = useCallback((group: SidebarGroup): boolean => {
     if (!group.roles || group.roles.length === 0) return true;
-    if (!userRole) return false;
-    const normalizedRole = userRole === 'super-admin' ? 'super_admin' : userRole;
+    const roleToCheck = effectiveRole || userRole;
+    if (!roleToCheck) return false;
+    const normalizedRole = roleToCheck === 'super-admin' ? 'super_admin' : roleToCheck;
     return group.roles.includes(normalizedRole);
-  }, [userRole]);
+  }, [effectiveRole, userRole]);
 
   const filteredGroups = useMemo(() => {
     return normalizedGroups

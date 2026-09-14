@@ -1,6 +1,8 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { generateAiDiagnosticPrompt, sanitizePayload } from './ai-issue-prompt';
 import { runGeminiDiagnostic } from './gemini-diagnostics';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
@@ -10,6 +12,87 @@ import type {
   ScreenIssueSeverity,
   ScreenIssueStatus,
 } from '@/types/database';
+
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createSupabaseJsClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+/**
+ * التحقق الصارم من دور المشرف العام للمنظومة
+ */
+async function verifySuperAdminAction(): Promise<{ isAuthorized: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let role: string | null = null;
+  let isActive = true;
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role, is_active')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile) {
+      role = profile.role;
+      if (profile.is_active === false) isActive = false;
+    } else {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        const { data: adminProfile } = await adminClient
+          .from('users')
+          .select('role, is_active')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (adminProfile) {
+          role = adminProfile.role;
+          if (adminProfile.is_active === false) isActive = false;
+        }
+      }
+    }
+  }
+
+  // فحص الكوكيز الاحتياطية للجلسة
+  if (!role) {
+    try {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get('app_user_session')?.value;
+      if (sessionCookie) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(sessionCookie));
+          role = parsed.role || null;
+          if (parsed.is_active === false) isActive = false;
+        } catch {
+          const parsed = JSON.parse(sessionCookie);
+          role = parsed.role || null;
+          if (parsed.is_active === false) isActive = false;
+        }
+      }
+    } catch {}
+  }
+
+  if (!user && !role) {
+    return { isAuthorized: false, error: 'غير مصرح لك بالوصول (يجب تسجيل الدخول)' };
+  }
+
+  if (!isActive) {
+    return { isAuthorized: false, error: 'الحساب معطل أو غير نشط' };
+  }
+
+  if (role !== 'super_admin') {
+    return { isAuthorized: false, error: 'غير مصرح: هذه الشاشة والعمليات مخصصة حصرياً للمشرف العام' };
+  }
+
+  return { isAuthorized: true };
+}
 
 export interface RecordScreenIssueInput {
   device_id: string;
@@ -43,6 +126,11 @@ export async function getScreenIssuesAction(filters?: ScreenIssueFilters): Promi
   error?: string;
 }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     let query = supabase
       .from('system_screen_issues')
@@ -198,6 +286,11 @@ export async function updateScreenIssueStatusAction(
   aiNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -227,6 +320,11 @@ export async function updateScreenIssueStatusAction(
 
 export async function deleteScreenIssueAction(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { error } = await supabase.from('system_screen_issues').delete().eq('id', id);
     if (error) throw error;
@@ -242,6 +340,10 @@ export async function simulateTestIssueAction(scenario: 'fuel' | 'trip' | 'invoi
   issueId?: string;
   error?: string;
 }> {
+  const authCheck = await verifySuperAdminAction();
+  if (!authCheck.isAuthorized) {
+    return { success: false, error: authCheck.error };
+  }
   const scenarios: Record<string, RecordScreenIssueInput> = {
     fuel: {
       device_id: 'dev_sim_phone_android_99',
@@ -302,6 +404,11 @@ export async function diagnoseIssueWithGeminiAction(id: string): Promise<{
   error?: string;
 }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
 
     // جلب سجل المشكلة والبرومبت المجهز
@@ -347,6 +454,11 @@ export async function sendIssueWhatsAppAlertAction(id: string): Promise<{
   error?: string;
 }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { data: issue, error: fetchErr } = await supabase
       .from('system_screen_issues')
@@ -386,6 +498,12 @@ export async function bulkUpdateScreenIssuesStatusAction(
 ): Promise<{ success: boolean; count?: number; error?: string }> {
   try {
     if (!ids || ids.length === 0) return { success: true, count: 0 };
+
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -417,6 +535,12 @@ export async function bulkDeleteScreenIssuesAction(
 ): Promise<{ success: boolean; count?: number; error?: string }> {
   try {
     if (!ids || ids.length === 0) return { success: true, count: 0 };
+
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { error } = await supabase
       .from('system_screen_issues')

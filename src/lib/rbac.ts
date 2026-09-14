@@ -84,7 +84,26 @@ export const ROLE_DEFAULT_REDIRECT: Record<UserRole, string> = {
 };
 
 export function isRouteAllowed(role: UserRole, pathname: string): boolean {
+  // تجريد أي استعلامات أو خطوط مائلة زائدة في نهاية المسار للمقارنة الدقيقة
+  const cleanPath = (pathname.split('?')[0] || '').replace(/\/+$/, '') || '/';
+
+  // 1. مسارات المشرف العام محصورة حصرياً بدور super_admin (المشرف العام)
+  // ويُمنع منعاً باتاً وصول أي دور آخر إليها بما في ذلك مدير الشركة (admin) أو السكرتارية أو السائقين
+  const isSuperAdminRoute = cleanPath === '/super-admin' || cleanPath.startsWith('/super-admin/');
+  if (isSuperAdminRoute) {
+    return role === 'super_admin';
+  }
+
+  // 2. المشرف العام (super_admin) محصور في مسارات الإشراف العام المخصصة له فقط
+  if (role === 'super_admin') {
+    const allowed = ROLE_ALLOWED_ROUTES.super_admin || [];
+    return allowed.some((route) => cleanPath === route || cleanPath.startsWith(`${route}/`));
+  }
+
+  // 3. مدير الشركة (admin) له صلاحية الوصول لكافة مسارات النظام التشغيلية والإدارية عدا لوحة المشرف العام
   if (role === 'admin') return true;
+
+  // 4. بقية الأدوار (السكرتارية، السائقين، المحاسبين، مديري الأسطول) حسب المصفوفة
   const allowed = ROLE_ALLOWED_ROUTES[role] || [];
-  return allowed.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return allowed.some((route) => cleanPath === route || cleanPath.startsWith(`${route}/`));
 }

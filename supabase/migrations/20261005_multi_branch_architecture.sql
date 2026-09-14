@@ -47,7 +47,14 @@ BEGIN
   ) THEN
     CREATE POLICY "branch_tenant_isolation" ON public.company_branches
       FOR ALL TO authenticated
-      USING (company_id = public.current_company_id());
+      USING (
+        company_id = public.current_company_id() 
+        OR public.is_super_admin()
+      )
+      WITH CHECK (
+        company_id = public.current_company_id() 
+        OR public.is_super_admin()
+      );
   END IF;
 END $$;
 

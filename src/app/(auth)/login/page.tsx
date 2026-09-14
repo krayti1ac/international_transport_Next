@@ -195,10 +195,12 @@ export default function LoginPage() {
               <div className="relative flex items-center">
                 <Input
                   type="email"
+                  name="email"
+                  autoComplete="username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onBlur={handleEmailBlur}
-                  placeholder="example@domain.com"
+                  placeholder="admin@transbodanon.com"
                   required
                   dir="ltr"
                   className={`${isRTL ? 'pr-10 pl-3' : 'pl-10 pr-3'} h-11 rounded-xl bg-muted/40 dark:bg-slate-900/60 border-input dark:border-slate-800 focus-visible:ring-sky-500/30 focus-visible:border-sky-500`}
@@ -219,6 +221,8 @@ export default function LoginPage() {
               <div className="relative flex items-center">
                 <Input
                   type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

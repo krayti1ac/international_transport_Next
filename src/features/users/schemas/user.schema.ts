@@ -9,28 +9,60 @@ export const userRoleSchema = z.enum([
   'fleet_manager',
 ]);
 
-export const createUserSchema = z.object({
-  name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),
-  email: z.string().min(1, 'البريد الإلكتروني أو اسم المستخدم مطلوب'),
-  role: userRoleSchema,
-  password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف'),
-  preferred_language: z.enum(['ar', 'fr', 'es']).optional().default('ar'),
-  company_id: z.number().optional(),
-  avatar_url: z.string().optional().nullable(),
-  is_active: z.boolean().optional(),
-});
+export const createUserSchema = z
+  .object({
+    name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),
+    email: z.string().min(1, 'البريد الإلكتروني أو اسم المستخدم مطلوب'),
+    role: userRoleSchema,
+    password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف'),
+    confirmPassword: z.string().min(6, 'تأكيد كلمة المرور مطلوب').optional().or(z.literal('')),
+    phone: z.string().optional().nullable(),
+    personal_email: z.string().email('البريد الإلكتروني الشخصي غير صالح').optional().or(z.literal('')).nullable(),
+    preferred_language: z.enum(['ar', 'fr', 'es']).optional().default('ar'),
+    company_id: z.number().optional(),
+    avatar_url: z.string().optional().nullable(),
+    is_active: z.boolean().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.confirmPassword) {
+        return data.password === data.confirmPassword;
+      }
+      return true;
+    },
+    {
+      message: 'كلمة المرور وتأكيدها غير متطابقين',
+      path: ['confirmPassword'],
+    }
+  );
 
-export const updateUserSchema = z.object({
-  id: z.string().min(1, 'معرف المستخدم مطلوب'),
-  name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),
-  email: z.string().min(1, 'البريد الإلكتروني أو اسم المستخدم مطلوب').optional(),
-  role: userRoleSchema,
-  password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف').optional().or(z.literal('')),
-  preferred_language: z.enum(['ar', 'fr', 'es']).optional(),
-  company_id: z.number().optional(),
-  avatar_url: z.string().optional().nullable(),
-  is_active: z.boolean().optional(),
-});
+export const updateUserSchema = z
+  .object({
+    id: z.string().min(1, 'معرف المستخدم مطلوب'),
+    name: z.string().min(2, 'الاسم يجب أن يحتوي على حرفين على الأقل'),
+    email: z.string().min(1, 'البريد الإلكتروني أو اسم المستخدم مطلوب').optional(),
+    role: userRoleSchema,
+    password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف').optional().or(z.literal('')),
+    confirmPassword: z.string().optional().or(z.literal('')),
+    phone: z.string().optional().nullable(),
+    personal_email: z.string().email('البريد الإلكتروني الشخصي غير صالح').optional().or(z.literal('')).nullable(),
+    preferred_language: z.enum(['ar', 'fr', 'es']).optional(),
+    company_id: z.number().optional(),
+    avatar_url: z.string().optional().nullable(),
+    is_active: z.boolean().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.password && data.password.trim().length > 0) {
+        return data.password === data.confirmPassword;
+      }
+      return true;
+    },
+    {
+      message: 'كلمة المرور وتأكيدها غير متطابقين',
+      path: ['confirmPassword'],
+    }
+  );
 
 export const signupDriverSchema = z
   .object({

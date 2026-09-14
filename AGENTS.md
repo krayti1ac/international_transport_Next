@@ -27,7 +27,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Structure**: Feature-First (`src/features/[feature_name]/`).
 - **Data Flow**: Server Actions (`*.actions.ts`) for mutations with Zod validation. React Query (`*.queries.ts`) for data fetching.
 - **Supabase**: `@/lib/supabase/server` on server; `@/lib/supabase/browser` on client. Never bypass RLS.
-- **i18n & RTL**: Arabic first (`dir="rtl"`, `src/i18n/messages/ar.json`), French (`src/i18n/messages/fr.json`).
+- **i18n & RTL**: Trilingual system — Arabic first (`dir="rtl"`, `src/i18n/messages/ar.json`), French (`src/i18n/messages/fr.json`), and Spanish (`src/i18n/messages/es.json`). Full first-class parity across Arabic, French, and Spanish in all UI components, modals, translation keys, and user preferences.
 
 ## 4. Applied Migrations
 - `supabase/migrations/20260906_fine_penalties_and_risk.sql` — Phase 9: Driver Fines & Risk Management (`fine_penalties` table, RLS policies, indexes).
@@ -53,5 +53,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260930_add_client_and_trip_gps_urls.sql` — Add WhatsApp Google Maps GPS URL columns to clients (`loading_gps_url`, `unloading_gps_url`) and trip_orders (`shipping_gps_url`, `unloading_gps_url`).
 - `supabase/migrations/20260930_add_accountant_and_fleet_manager_roles.sql` — Expand User Roles with Accountant and Fleet Manager & configure RLS policies (`treasury_transactions`, `truck_maintenance`).
 - `supabase/migrations/20261005_multi_branch_architecture.sql` — Phase 4: Multi-Branch Architecture & Operations Hubs (`company_branches` table, RLS policies, operational entity links, indexes).
+- `supabase/migrations/20261006_add_user_phone_and_personal_email.sql` — Add user personal phone and email columns for credential notifications (`phone`, `personal_email`, indexes).
 
 

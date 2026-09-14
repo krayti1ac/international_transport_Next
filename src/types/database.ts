@@ -77,6 +77,8 @@ export interface User {
   company_id?: number | null;
   company?: Company;
   avatar_url?: string | null;
+  phone?: string | null;
+  personal_email?: string | null;
   is_active?: boolean;
   branch_id?: number | null;
   branch?: CompanyBranch | null;
@@ -369,6 +371,7 @@ export interface CashBox {
   name: string;
   code: string;
   currency: string;
+  current_balance?: number;
   branch_id?: number | null;
   created_at: string;
 }

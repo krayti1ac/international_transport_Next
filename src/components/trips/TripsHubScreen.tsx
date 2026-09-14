@@ -26,7 +26,9 @@ import {
   Eye,
   ArrowRight,
   Sparkles,
+  Building2,
 } from 'lucide-react';
+import { useBranchStore } from '@/lib/stores/branch-store';
 import { TruckIcon } from '@/components/icons/vehicle-icons';
 import { CMRPrintModal } from '@/components/cmr-print-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
@@ -59,6 +61,8 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { useTripsHubDataQuery } from '@/lib/query/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 
 const KANBAN_STAGES = [
   { id: 'pendingAssignment', labelAr: 'قيد التعيين', labelFr: 'En attente', labelEs: 'Pendiente de asignar', icon: ClipboardList, color: 'bg-amber-500', badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' },
@@ -147,6 +151,7 @@ interface TripCardProps {
 
 function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit, onPrint, onShare }: TripCardProps) {
   const { locale, t } = useLanguage();
+  const availableBranches = useBranchStore((s) => s.availableBranches);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: String(trip.id),
     data: { trip, stage: stage.id },
@@ -155,6 +160,8 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
   const assignedDriver = drivers.find((d) => d.id === trip.driver_id);
   const assignedTruck = trucks.find((t) => t.id === trip.truck_id);
   const assignedTrailer = trailers.find((tr) => tr.id === trip.trailer_id);
+  const originBranch = availableBranches.find((b) => b.id === trip.origin_branch_id);
+  const destBranch = availableBranches.find((b) => b.id === trip.destination_branch_id);
   const stageLabel = locale === 'fr' ? stage.labelFr : stage.labelAr;
 
   const style = transform
@@ -189,6 +196,17 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
             {stageLabel}
           </span>
         </div>
+
+        {(originBranch || destBranch) && (
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-primary/5 px-2 py-1 rounded-md border border-primary/20">
+            <Building2 className="w-3 h-3 text-primary shrink-0" />
+            <span className="truncate font-medium">
+              {originBranch ? `${originBranch.country === 'MA' ? '🇲🇦' : originBranch.country === 'ES' ? '🇪🇸' : '🏢'} ${originBranch.name}` : ''}
+              {originBranch && destBranch ? ' ➔ ' : ''}
+              {destBranch ? `${destBranch.country === 'MA' ? '🇲🇦' : destBranch.country === 'ES' ? '🇪🇸' : '🏢'} ${destBranch.name}` : ''}
+            </span>
+          </div>
+        )}
 
         <div className="space-y-1.5 text-xs text-muted-foreground bg-muted/30 p-2 rounded-lg border border-border/50">
           <div className="flex items-center justify-between gap-1">
@@ -261,13 +279,12 @@ function TripCard({ trip, drivers, trucks, trailers, stage, onTripClick, onEdit,
     </div>
   );
 }
-
-import { useTripsHubDataQuery } from '@/lib/query/hooks';
-import { useQueryClient } from '@tanstack/react-query';
-
+ 
 export default function TripsHubScreen() {
   const { data: hubData, isLoading } = useTripsHubDataQuery();
   const queryClient = useQueryClient();
+  const selectedBranchId = useBranchStore((s) => s.selectedBranchId);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
 
   const trips = hubData?.trips || [];
   const clients = hubData?.clients || [];
@@ -288,6 +305,21 @@ export default function TripsHubScreen() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingTrip, setEditingTrip] = useState<TripOrder | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<TripOrder | null>(null);
+
+  const tripMatchesBranch = useCallback(
+    (trip: TripOrder) => {
+      if (selectedBranchId === 'all') return true;
+      if (trip.origin_branch_id === selectedBranchId || trip.destination_branch_id === selectedBranchId) {
+        return true;
+      }
+      const truck = trucks.find((t) => t.id === trip.truck_id);
+      if (truck?.home_branch_id === selectedBranchId) {
+        return true;
+      }
+      return false;
+    },
+    [selectedBranchId, trucks]
+  );
 
   const { toast } = useToast();
   const { locale, dir, t } = useLanguage();
@@ -369,14 +401,18 @@ export default function TripsHubScreen() {
 
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const branchTrips = selectedBranchId === 'all' ? trips : trips.filter(tripMatchesBranch);
     for (const stage of KANBAN_STAGES) {
-      counts[stage.id] = trips.filter((t) => mapDbStatusToKanbanStage(t.status) === stage.id).length;
+      counts[stage.id] = branchTrips.filter((t) => mapDbStatusToKanbanStage(t.status) === stage.id).length;
     }
     return counts;
-  }, [trips]);
+  }, [trips, selectedBranchId, tripMatchesBranch]);
 
   const filteredTrips = useMemo(() => {
     let result = trips;
+    if (selectedBranchId !== 'all') {
+      result = result.filter(tripMatchesBranch);
+    }
     if (selectedStageFilter) result = result.filter((t) => mapDbStatusToKanbanStage(t.status) === selectedStageFilter);
     if (!searchQuery) return result;
     const q = searchQuery.toLowerCase();
@@ -385,7 +421,7 @@ export default function TripsHubScreen() {
         (trip.cmr_number ?? '').toLowerCase().includes(q) || 
         String(trip.id).includes(q)
     );
-  }, [trips, selectedStageFilter, searchQuery]);
+  }, [trips, selectedBranchId, tripMatchesBranch, selectedStageFilter, searchQuery]);
 
   const groupedTrips = useMemo(() => {
     const groups: Record<string, TripOrder[]> = {};
@@ -507,6 +543,7 @@ export default function TripsHubScreen() {
               <tr>
                 <th className="px-4 py-3">{t('الرحلة', 'Voyage')}</th>
                 <th className="px-4 py-3">{t('المسار', 'Trajet')}</th>
+                <th className="px-4 py-3">{t('الفرع / المحطة', 'Hub / Agence')}</th>
                 <th className="px-4 py-3">{t('السائق', 'Chauffeur')}</th>
                 <th className="px-4 py-3">{t('القيمة', 'Montant')}</th>
                 <th className="px-4 py-3 text-center">{t('الإجراءات', 'Actions')}</th>
@@ -524,6 +561,33 @@ export default function TripsHubScreen() {
                   </td>
                 </tr>
               ))}
+              {filteredTrips.map(trip => {
+                const origin = availableBranches.find(b => b.id === trip.origin_branch_id);
+                const dest = availableBranches.find(b => b.id === trip.destination_branch_id);
+                return (
+                  <tr key={trip.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedTrip(trip)}>
+                    <td className="px-4 py-3 font-mono">#{trip.id}</td>
+                    <td className="px-4 py-3">{trip.route}</td>
+                    <td className="px-4 py-3">
+                      {(origin || dest) ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-primary/5 text-primary px-2 py-0.5 rounded border border-primary/20">
+                          <Building2 className="w-3 h-3 shrink-0" />
+                          {origin ? `${origin.country === 'MA' ? '🇲🇦' : '🏢'} ${origin.name}` : ''}
+                          {origin && dest ? ' ➔ ' : ''}
+                          {dest ? `${dest.country === 'ES' ? '🇪🇸' : '🏢'} ${dest.name}` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">{drivers.find(d => d.id === trip.driver_id)?.name || t('غير مسند', 'Non assigné')}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">{trip.price?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" onClick={() => setActiveCMRTrip(trip)}><Printer className="w-4 h-4" /></Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Card>

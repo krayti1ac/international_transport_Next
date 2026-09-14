@@ -25,7 +25,10 @@ import {
   CheckSquare,
   Square,
   CheckCheck,
+  ShieldAlert,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,8 +66,18 @@ const STATUS_CONFIG: Record<ScreenIssueStatus, { label: string; badge: string; i
 };
 
 export function SuperAdminScreenIssuesView() {
+  const { user, role, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const isSuperAdmin = role === 'super_admin' || user?.role === 'super_admin';
+
   const [issues, setIssues] = useState<SystemScreenIssue[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authLoading && !isSuperAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, isSuperAdmin, router]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -88,17 +101,24 @@ export function SuperAdminScreenIssuesView() {
   const { toast } = useToast();
 
   const fetchIssues = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setIssues([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const res = await getScreenIssuesAction();
     if (res.success && res.data) {
       setIssues(res.data);
     }
     setLoading(false);
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
-    fetchIssues();
-  }, [fetchIssues]);
+    if (!authLoading && isSuperAdmin) {
+      fetchIssues();
+    }
+  }, [authLoading, isSuperAdmin, fetchIssues]);
 
   const filteredIssues = useMemo(() => {
     return issues.filter((i) => {
@@ -355,6 +375,23 @@ export function SuperAdminScreenIssuesView() {
     if (type === 'tablet') return <Tablet className="w-3.5 h-3.5 text-purple-500" />;
     return <Laptop className="w-3.5 h-3.5 text-emerald-500" />;
   };
+
+  if (!authLoading && !isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4" dir="rtl">
+        <div className="p-4 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+          <ShieldAlert className="w-12 h-12" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">غير مصرح لك بالوصول</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          هذه الشاشة مخصصة حصرياً للمشرف العام للمنظومة (Super Admin). دورك الحالي لا يمتلك صلاحية الوصول.
+        </p>
+        <Button onClick={() => router.replace('/dashboard')} className="gap-2">
+          العودة للوحة التحكم
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6" dir="rtl">

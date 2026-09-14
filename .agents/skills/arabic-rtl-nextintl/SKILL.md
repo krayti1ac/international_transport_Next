@@ -1,21 +1,21 @@
 ---
 name: arabic-rtl-nextintl
 description: >-
-  Provides guidelines and checklists for implementing bilingual Arabic (RTL) and French (LTR)
-  features using next-intl and Tailwind CSS v4. Use when building UI components, forms,
+  Provides guidelines and checklists for implementing trilingual Arabic (RTL), French (LTR),
+  and Spanish (LTR) features using next-intl and Tailwind CSS v4. Use when building UI components, forms,
   tables, modals, or modifying translations in Trans Bodanon TMS.
 ---
 
-# Arabic & RTL UI Implementation Guide (next-intl)
+# Arabic, French & Spanish UI Implementation Guide (next-intl)
 
-Trans Bodanon TMS is primarily an Arabic-first system (RTL) with full French support (LTR).
+Trans Bodanon TMS is a trilingual international transport system: Arabic-first (RTL), with full first-class support for French (LTR) and Spanish (LTR).
 
 ## 1. i18n Architecture
 
 - Translations are located in:
-  - `src/i18n/messages/ar.json` (Arabic - Primary)
-  - `src/i18n/messages/fr.json` (French)
-  - `src/i18n/messages/en.json` (English)
+  - `src/i18n/messages/ar.json` (Arabic - Primary RTL)
+  - `src/i18n/messages/fr.json` (French - LTR)
+  - `src/i18n/messages/es.json` (Spanish - LTR)
 - Routes are wrapped in `[locale]` dynamic route segments.
 - Configuration resides in `src/i18n/routing.ts` and `src/i18n/request.ts`.
 
@@ -37,7 +37,7 @@ export function TripCard({ trip }: TripCardProps) {
 }
 ```
 
-### RTL Layout Conventions
+### RTL/LTR Layout Conventions
 - **Directional Utilities**: Use logical Tailwind properties where possible:
   - Use `ms-*` (margin-inline-start) and `me-*` (margin-inline-end) instead of `ml-*` and `mr-*`.
   - Use `ps-*` (padding-inline-start) and `pe-*` (padding-inline-end) instead of `pl-*` and `pr-*`.
@@ -49,6 +49,7 @@ export function TripCard({ trip }: TripCardProps) {
 When adding a new translation key:
 1. Add key under appropriate namespace in `src/i18n/messages/ar.json`.
 2. Add corresponding key in `src/i18n/messages/fr.json`.
-3. Verify that dynamic interpolation variables (e.g. `{count}`, `{name}`) match exactly across all languages.
-4. Ensure error alerts and validation messages are presented in the active locale.
+3. Add corresponding key in `src/i18n/messages/es.json`.
+4. Verify that dynamic interpolation variables (e.g. `{count}`, `{name}`) match exactly across all 3 languages.
+5. Ensure error alerts and validation messages are presented in the active locale.
 

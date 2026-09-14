@@ -41,6 +41,8 @@ import { getClientPortalDataAction, getAvailablePortalClientsAction } from '../s
 import type { ClientPortalData, PortalTripItem } from '../types';
 import type { Invoice, Client, DeliverySignature } from '@/types/database';
 
+import { SPANISH_DICTIONARY } from '@/i18n/dictionary';
+
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 interface CustomerPortalViewProps {
@@ -54,7 +56,7 @@ export function CustomerPortalView({
   initialClientId,
   initialCmr,
 }: CustomerPortalViewProps) {
-  const [lang, setLang] = useState<'ar' | 'fr'>('ar');
+  const [lang, setLang] = useState<'ar' | 'fr' | 'es'>('ar');
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
 
   // Client Data State
@@ -80,7 +82,18 @@ export function CustomerPortalView({
   const [isPending, startTransition] = useTransition();
 
   // Helper translations
-  const t = (ar: string, fr: string) => (lang === 'ar' ? ar : fr);
+  const t = (ar: string, fr: string, es?: string) => {
+    if (lang === 'fr') return fr;
+    if (lang === 'es') {
+      if (es) return es;
+      const trimmedAr = ar?.trim();
+      if (trimmedAr && SPANISH_DICTIONARY[trimmedAr]) return SPANISH_DICTIONARY[trimmedAr];
+      const trimmedFr = fr?.trim();
+      if (trimmedFr && SPANISH_DICTIONARY[trimmedFr]) return SPANISH_DICTIONARY[trimmedFr];
+      return fr || ar;
+    }
+    return ar;
+  };
 
   // Fetch client portal data
   const loadPortalData = async (identifier: {
@@ -183,7 +196,7 @@ export function CustomerPortalView({
             </div>
 
             {/* Language Switcher */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold sm:hidden">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold sm:hidden">
               <button
                 type="button"
                 onClick={() => setLang('ar')}
@@ -197,6 +210,13 @@ export function CustomerPortalView({
                 className={`px-2 py-1 rounded ${lang === 'fr' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
               >
                 FR
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('es')}
+                className={`px-2 py-1 rounded ${lang === 'es' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+              >
+                ES
               </button>
             </div>
           </div>
@@ -242,6 +262,13 @@ export function CustomerPortalView({
                 className={`px-2.5 py-1 rounded ${lang === 'fr' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
               >
                 Français
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('es')}
+                className={`px-2.5 py-1 rounded ${lang === 'es' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+              >
+                Español
               </button>
             </div>
           </div>
@@ -806,7 +833,7 @@ export function CustomerPortalView({
                               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                                 <span className="text-slate-400 block">{t('توقيت التسليم:', 'Horodatage :')}</span>
                                 <span className="font-bold text-slate-800 dark:text-slate-200">
-                                  {proof?.signed_at ? new Date(proof.signed_at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'ar-MA') : trip.departure_date}
+                                  {proof?.signed_at ? new Date(proof.signed_at).toLocaleString(lang === 'fr' ? 'fr-FR' : lang === 'es' ? 'es-ES' : 'ar-MA') : trip.departure_date}
                                 </span>
                               </div>
                             </div>
@@ -986,7 +1013,7 @@ export function CustomerPortalView({
                   <p className="text-slate-400">{t('توقيت التسليم الموثق:', 'Date & Heure :')}</p>
                   <p className="font-bold text-sm mt-0.5 text-slate-900 dark:text-white">
                     {selectedPodTrip.deliveryProof?.signed_at
-                      ? new Date(selectedPodTrip.deliveryProof.signed_at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'ar-MA')
+                      ? new Date(selectedPodTrip.deliveryProof.signed_at).toLocaleString(lang === 'fr' ? 'fr-FR' : lang === 'es' ? 'es-ES' : 'ar-MA')
                       : selectedPodTrip.departure_date}
                   </p>
                 </div>

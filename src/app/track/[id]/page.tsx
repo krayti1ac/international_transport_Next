@@ -3,42 +3,67 @@
 import { useState, useEffect, useMemo, use } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
-import type { TripOrder, Truck, TruckLocation, Client } from '@/types/database';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { TruckIcon } from '@/components/icons/vehicle-icons';
-import { MapPin, Navigation, Calendar, Clock, ShieldCheck } from 'lucide-react';
+import type { TripOrder, Truck, TruckLocation, Client, DeliverySignature } from '@/types/database';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Truck as TruckLucide,
+  MapPin,
+  Calendar,
+  Clock,
+  ShieldCheck,
+  Package,
+  Ship,
+  Navigation,
+  ExternalLink,
+  AlertCircle,
+  Building2,
+} from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
+import { PublicTripShareBar } from '@/features/tracking/components/PublicTripShareBar';
+import { PublicTripTimeline } from '@/features/tracking/components/PublicTripTimeline';
+import { PublicTripPodCard } from '@/features/tracking/components/PublicTripPodCard';
 
 const TrackingMap = dynamic(
   () => import('@/features/tracking/components/TrackingMap').then((mod) => ({ default: mod.TrackingMap })),
   {
     ssr: false,
     loading: () => (
-      <div className="h-[400px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-xl">
-        <p className="text-muted-foreground text-sm font-medium">Loading map...</p>
+      <div className="h-[420px] flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-xl">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin mb-2" />
+        <p className="text-muted-foreground text-xs font-medium">Loading interactive map...</p>
       </div>
     ),
   }
 );
 
 export default function PublicClientTrackingPage({ params }: { params: Promise<{ id: string }> }) {
-  const { t, dir, locale } = useLanguage();
+  const { t, dir } = useLanguage();
   const resolvedParams = use(params);
   const tripId = parseInt(resolvedParams.id, 10);
 
   const [trip, setTrip] = useState<TripOrder | null>(null);
   const [truck, setTruck] = useState<Truck | null>(null);
   const [client, setClient] = useState<Client | null>(null);
+  const [deliverySignature, setDeliverySignature] = useState<DeliverySignature | null>(null);
   const [locations, setLocations] = useState<Map<number, TruckLocation[]>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadingPod, setLoadingPod] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
+  // 1. Initial Load of Trip & Related Public Tracking Data
   useEffect(() => {
     async function loadTrackingData() {
+      if (!tripId || isNaN(tripId)) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
+        // Query trip order
         const { data: tripData, error: tripErr } = await supabase
           .from('trip_orders')
           .select('*')
@@ -52,90 +77,153 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
         setTrip(tripData);
 
-        const [truckRes, clientRes, locsRes] = await Promise.all([
+        // Concurrently fetch truck, client, historical locations, and POD signature
+        const [truckRes, clientRes, locsRes, podRes] = await Promise.all([
           tripData.truck_id
             ? supabase.from('trucks').select('*').eq('id', tripData.truck_id).single()
             : Promise.resolve({ data: null }),
           tripData.client_id
-            ? supabase.from('clients').select('*').eq('id', tripData.client_id).single()
+            ? supabase.from('clients').select('id, name, city, client_type').eq('id', tripData.client_id).single()
             : Promise.resolve({ data: null }),
           tripData.truck_id
-            ? supabase.from('truck_locations').select('*').eq('truck_id', tripData.truck_id).order('recorded_at', { ascending: false }).limit(20)
+            ? supabase
+                .from('truck_locations')
+                .select('*')
+                .eq('truck_id', tripData.truck_id)
+                .order('recorded_at', { ascending: false })
+                .limit(25)
             : Promise.resolve({ data: [] }),
+          supabase
+            .from('delivery_signatures')
+            .select('*')
+            .eq('trip_order_id', tripId)
+            .maybeSingle(),
         ]);
 
-        if (truckRes.data) setTruck(truckRes.data);
-        if (clientRes.data) setClient(clientRes.data);
+        if (truckRes.data) setTruck(truckRes.data as Truck);
+        if (clientRes.data) setClient(clientRes.data as unknown as Client);
+        if (podRes.data) setDeliverySignature(podRes.data as DeliverySignature);
 
         if (tripData.truck_id && locsRes.data) {
           const locMap = new Map<number, TruckLocation[]>();
-          const normalized: TruckLocation[] = locsRes.data.map((l: any) => ({
-            ...l,
-            speed: l.speed ?? 0,
+          const normalized: TruckLocation[] = (locsRes.data as Array<Record<string, unknown>>).map((l) => ({
+            ...(l as unknown as TruckLocation),
+            speed: typeof l.speed === 'number' ? l.speed : 0,
             latitude: Number(l.latitude),
             longitude: Number(l.longitude),
-            timestamp: l.recorded_at || l.timestamp,
-            recorded_at: l.recorded_at || l.timestamp,
+            timestamp: (l.recorded_at as string) || (l.timestamp as string),
+            recorded_at: (l.recorded_at as string) || (l.timestamp as string),
           }));
           locMap.set(tripData.truck_id, normalized);
           setLocations(locMap);
         }
       } catch (e) {
-        console.error('Failed to load tracking data', e);
+        console.error('Failed to load public tracking data', e);
         setNotFound(true);
       } finally {
         setLoading(false);
+        setLoadingPod(false);
       }
     }
 
-    if (tripId) {
-      loadTrackingData();
-    }
+    loadTrackingData();
   }, [tripId, supabase]);
 
+  // 2. Real-time Subscriptions for live updates
   useEffect(() => {
-    if (!trip?.truck_id) return;
+    if (!tripId) return;
 
-    const channel = supabase
-      .channel(`public-truck-${trip.truck_id}`)
+    // A) Trip Status Updates
+    const tripChannel = supabase
+      .channel(`public-trip-${tripId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: 'UPDATE',
           schema: 'public',
-          table: 'truck_locations',
-          filter: `truck_id=eq.${trip.truck_id}`,
+          table: 'trip_orders',
+          filter: `id=eq.${tripId}`,
         },
         (payload) => {
-          const rawLoc = payload.new as any;
-          const normalized: TruckLocation = {
-            ...rawLoc,
-            speed: rawLoc.speed ?? 0,
-            latitude: Number(rawLoc.latitude),
-            longitude: Number(rawLoc.longitude),
-            timestamp: rawLoc.recorded_at || rawLoc.timestamp,
-            recorded_at: rawLoc.recorded_at || rawLoc.timestamp,
-          };
-          setLocations((prev) => {
-            const next = new Map(prev);
-            const list = next.get(trip.truck_id!) || [];
-            next.set(trip.truck_id!, [normalized, ...list.slice(0, 19)]);
-            return next;
-          });
+          if (payload.new) {
+            setTrip((prev) => (prev ? { ...prev, ...(payload.new as TripOrder) } : (payload.new as TripOrder)));
+          }
         }
       )
       .subscribe();
 
+    // B) Delivery Signature / POD Updates
+    const podChannel = supabase
+      .channel(`public-pod-${tripId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'delivery_signatures',
+          filter: `trip_order_id=eq.${tripId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setDeliverySignature(payload.new as DeliverySignature);
+          } else if (payload.eventType === 'DELETE') {
+            setDeliverySignature(null);
+          }
+        }
+      )
+      .subscribe();
+
+    // C) Live Truck GPS Location Inserts
+    let locChannel: ReturnType<typeof supabase.channel> | null = null;
+    if (trip?.truck_id) {
+      locChannel = supabase
+        .channel(`public-loc-${trip.truck_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'truck_locations',
+            filter: `truck_id=eq.${trip.truck_id}`,
+          },
+          (payload) => {
+            const rawLoc = payload.new as Record<string, unknown>;
+            const normalized: TruckLocation = {
+              ...(rawLoc as unknown as TruckLocation),
+              speed: typeof rawLoc.speed === 'number' ? rawLoc.speed : 0,
+              latitude: Number(rawLoc.latitude),
+              longitude: Number(rawLoc.longitude),
+              timestamp: (rawLoc.recorded_at as string) || (rawLoc.timestamp as string),
+              recorded_at: (rawLoc.recorded_at as string) || (rawLoc.timestamp as string),
+            };
+            setLocations((prev) => {
+              const next = new Map(prev);
+              const list = next.get(trip.truck_id!) || [];
+              next.set(trip.truck_id!, [normalized, ...list.slice(0, 24)]);
+              return next;
+            });
+          }
+        )
+        .subscribe();
+    }
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tripChannel);
+      supabase.removeChannel(podChannel);
+      if (locChannel) supabase.removeChannel(locChannel);
     };
-  }, [trip?.truck_id, supabase]);
+  }, [tripId, trip?.truck_id, supabase]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir={dir}>
-        <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin mb-4" />
-        <p className="text-foreground font-amiri text-lg">{t('جاري تحديد موقع الشحنة مباشرة...', 'Localisation de l\'expédition en cours...')}</p>
+        <div className="w-12 h-12 rounded-2xl border-4 border-primary border-t-transparent animate-spin mb-4 shadow-sm" />
+        <p className="text-foreground font-amiri text-lg font-bold">
+          {t('جاري تحديد موقع الشحنة الدولية مباشرة...', 'Localisation de l\'expédition internationale en direct...', 'Localizando el envío internacional en directo...')}
+        </p>
+        <p className="text-muted-foreground text-xs mt-1">
+          {t('Trans Bodanon • نظام التتبع اللوجستي المباشر', 'Trans Bodanon • Système de Suivi Logistique en Temps Réel', 'Trans Bodanon • Sistema de Seguimiento Logístico en Tiempo Real')}
+        </p>
       </div>
     );
   }
@@ -144,108 +232,275 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4" dir={dir}>
         <Card className="max-w-md w-full text-center p-6 shadow-xl border-border">
-          <MapPin className="w-12 h-12 mx-auto text-rose-500 mb-3" />
-          <CardTitle className="text-xl font-bold font-amiri mb-2">{t('الشحنة غير موجودة', 'Expédition introuvable')}</CardTitle>
-          <CardDescription>{t('لم يتم العثور على رحلة مسجلة بهذا المعرّف، يرجى مراجعة الرابط والتأكد من رقمه.', 'Aucun trajet trouvé pour cet identifiant. Veuillez vérifier le lien.')}</CardDescription>
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto mb-3">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <CardTitle className="text-xl font-bold font-amiri mb-2">
+            {t('الشحنة غير موجودة أو انتهت صلاحية الرابط', 'Expédition introuvable', 'Envío no encontrado')}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {t(
+              'لم يتم العثور على رحلة مسجلة بهذا المعرّف. يرجى مراجعة الرابط والتأكد من رقم الشحنة أو التواصل مع قسم العمليات.',
+              'Aucune expédition trouvée pour cette référence. Veuillez vérifier le lien ou contacter le support logistique.',
+              'No se encontró ningún envío con esta referencia. Verifique el enlace o contacte con soporte logístico.'
+            )}
+          </p>
         </Card>
       </div>
     );
   }
 
   const latestLoc = truck?.id ? locations.get(truck.id)?.[0] : null;
+  const cmrCode = trip.cmr_number || trip.cmr_export_number || `CMR-${trip.id}`;
 
-  const statusLabel = trip.status === 'completed'
-    ? t('تم التسليم بنجاح', 'Livraison effectuée avec succès')
-    : trip.status === 'in_transit'
-      ? t('الشحنة في الطريق', 'En cours de transport')
-      : t('قيد التجهيز', 'En préparation');
+  // Route breakdown
+  const routeParts = (trip.route || '').split(/[-–—>→]/).map((s) => s.trim()).filter(Boolean);
+  const originCity = routeParts[0] || t('المغرب', 'Maroc', 'Marruecos');
+  const destCity = routeParts[1] || routeParts[routeParts.length - 1] || t('أوروبا', 'Europe', 'Europa');
 
-  const statusClass = trip.status === 'completed'
-    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
-    : trip.status === 'in_transit'
-      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 animate-pulse'
-      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30';
+  // Status configuration
+  const getStatusBadge = () => {
+    switch (trip.status) {
+      case 'completed':
+      case 'settled':
+        return {
+          label: t('تم التسليم بنجاح (e-POD)', 'Livré avec succès (e-POD)', 'Entregado con éxito (e-POD)'),
+          class: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
+          dot: 'bg-emerald-500',
+        };
+      case 'at_destination_export':
+        return {
+          label: t('في الوجهة - جارٍ التفريغ', 'À destination - Déchargement', 'En destino - Descarga'),
+          class: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 animate-pulse',
+          dot: 'bg-indigo-500',
+        };
+      case 'customs_export':
+        return {
+          label: t('إجراءات الجمارك والعبور', 'En dédouanement', 'En aduana y tránsito'),
+          class: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
+          dot: 'bg-purple-500',
+        };
+      case 'in_transit':
+        return {
+          label: t('الشحنة في الطريق الدولي', 'En transit international', 'En tránsito internacional'),
+          class: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 animate-pulse',
+          dot: 'bg-blue-500',
+        };
+      case 'pending':
+      default:
+        return {
+          label: t('قيد التجهيز والانطلاق', 'En préparation', 'En preparación'),
+          class: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
+          dot: 'bg-amber-500',
+        };
+    }
+  };
+
+  const statusBadge = getStatusBadge();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 dark:from-[#070a12] dark:to-[#090d16] p-4 md:p-8" dir={dir}>
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200 dark:from-[#070a12] dark:via-[#090d16] dark:to-[#0d131f] text-foreground p-3 sm:p-5 md:p-8" dir={dir}>
+      <div className="max-w-4xl mx-auto space-y-5 md:space-y-6">
 
-        <div className="flex items-center justify-between bg-card p-6 rounded-2xl border border-border shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/15 text-primary flex items-center justify-center border border-primary/20">
-              <TruckIcon className="w-6 h-6" />
+        {/* 1. Share & Language Switcher Bar */}
+        <PublicTripShareBar
+          tripId={trip.id}
+          cmrNumber={cmrCode}
+          route={trip.route}
+        />
+
+        {/* 2. Main Shipment Header Card */}
+        <div className="bg-card rounded-2xl border border-border p-5 md:p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 shadow-xs">
+                <TruckLucide className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                    {t('نقل لوجستي دولي', 'Transport International', 'Transporte Internacional')}
+                  </span>
+                  <span className="text-xs font-mono font-bold text-foreground">
+                    {t('رقم الإرسالية:', 'Réf CMR :', 'Ref CMR :')} <span className="text-primary">{cmrCode}</span>
+                  </span>
+                </div>
+                <h1 className="text-xl md:text-2xl font-black font-amiri tracking-tight text-foreground">
+                  {trip.route}
+                </h1>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{originCity}</span>
+                  <span className="text-muted-foreground font-mono">⟶</span>
+                  <span className="font-semibold text-foreground">{destCity}</span>
+                  {client?.name && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        {client.name}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black font-amiri text-foreground">{trip.route}</h1>
-              <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-                {t('وثيقة الشحن: ', 'Document de transport : ')}<span className="font-mono font-bold text-foreground">{trip.cmr_number || `CMR-${trip.id}`}</span>
-              </p>
+
+            {/* Status Badge */}
+            <div className="self-start md:self-center">
+              <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border shadow-xs ${statusBadge.class}`}>
+                <span className={`w-2 h-2 rounded-full ${statusBadge.dot}`} />
+                <span>{statusBadge.label}</span>
+              </div>
             </div>
-          </div>
-          <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass}`}>
-              {statusLabel}
-            </span>
           </div>
         </div>
 
-        <Card className="border-border">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative">
-              <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
-                <Calendar className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('تاريخ الانطلاق', 'Date de départ')}</p>
-                  <p className="font-bold text-sm text-foreground mt-0.5">{trip.departure_date}</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
-                <Navigation className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('المعبر / العبّارة', 'Traversée / Ferry')}</p>
-                  <p className="font-bold text-sm text-foreground mt-0.5">{trip.ferry_company || t('طنجة المتوسط - الجزيرة الخضراء', 'Tanger Med - Algésiras')}</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-xl border border-border">
-                <Clock className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('آخر تحديث للموقع', 'Dernière mise à jour')}</p>
-                  <p className="font-bold text-sm text-foreground mt-0.5">
-                    {latestLoc
-                      ? new Date(latestLoc.recorded_at || latestLoc.timestamp || '').toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'ar-MA', { hour: '2-digit', minute: '2-digit' })
-                      : t('الآن', 'Maintenant')}
-                  </p>
-                </div>
-              </div>
+        {/* 3. Operational Specs Strip (Completely Free of Sensitive Financials) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Departure Date */}
+          <div className="bg-card p-3.5 rounded-xl border border-border shadow-xs flex items-start gap-2.5">
+            <Calendar className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <div className="overflow-hidden">
+              <span className="text-[11px] text-muted-foreground block truncate">
+                {t('تاريخ الانطلاق', 'Date départ', 'Fecha salida')}
+              </span>
+              <span className="text-xs font-bold text-foreground block mt-0.5 font-mono">
+                {trip.departure_date || '—'}
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card className="border-border overflow-hidden shadow-lg">
-          <CardHeader className="pb-3 border-b border-border">
-            <CardTitle className="text-base font-amiri flex items-center gap-2 text-foreground">
-              <MapPin className="w-5 h-5 text-primary" />
-              {t('الموقع الجغرافي الحي للشاحنة', 'Position GPS en temps réel du véhicule')}
-            </CardTitle>
+          {/* Expected Delivery */}
+          <div className="bg-card p-3.5 rounded-xl border border-border shadow-xs flex items-start gap-2.5">
+            <Clock className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+            <div className="overflow-hidden">
+              <span className="text-[11px] text-muted-foreground block truncate">
+                {t('الوصول المتوقع', 'Arrivée estimée', 'Llegada estimada')}
+              </span>
+              <span className="text-xs font-bold text-foreground block mt-0.5 font-mono">
+                {trip.unloading_date_export || t('جارٍ التحديث', 'En cours', 'En curso')}
+              </span>
+            </div>
+          </div>
+
+          {/* Ferry Crossing */}
+          <div className="bg-card p-3.5 rounded-xl border border-border shadow-xs flex items-start gap-2.5">
+            <Ship className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+            <div className="overflow-hidden">
+              <span className="text-[11px] text-muted-foreground block truncate">
+                {t('المعبر البحري', 'Traversée', 'Travesía')}
+              </span>
+              <span className="text-xs font-bold text-foreground block mt-0.5 truncate">
+                {trip.ferry_company || t('طنجة المتوسط - الجزيرة الخضراء', 'Tanger Med - Algésiras', 'Tánger Med - Algeciras')}
+              </span>
+            </div>
+          </div>
+
+          {/* Cargo Specs */}
+          <div className="bg-card p-3.5 rounded-xl border border-border shadow-xs flex items-start gap-2.5">
+            <Package className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+            <div className="overflow-hidden">
+              <span className="text-[11px] text-muted-foreground block truncate">
+                {t('نوع الشحنة', 'Marchandise', 'Mercancía')}
+              </span>
+              <span className="text-xs font-bold text-foreground block mt-0.5 truncate">
+                {trip.goods_description_export || t('بضائع دولية عامة', 'Marchandises diverses', 'Carga general')}
+                {trip.weight_export ? ` (${trip.weight_export} T)` : ''}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Interactive 4-Stage Transport Corridor Timeline */}
+        <PublicTripTimeline trip={trip} />
+
+        {/* 5. Live GPS Interactive Tracking Map */}
+        <Card className="border-border overflow-hidden shadow-md">
+          <CardHeader className="pb-3 border-b border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base font-bold font-amiri flex items-center gap-2 text-foreground">
+                <MapPin className="w-5 h-5 text-primary" />
+                <span>{t('الموقع الجغرافي الحي للشاحنة', 'Position GPS en Temps Réel du Véhicule', 'Ubicación GPS en Tiempo Real del Vehículo')}</span>
+              </CardTitle>
+
+              {latestLoc ? (
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    {t('إشارة GPS نشطة', 'Signal GPS Actif', 'Señal GPS Activa')}
+                  </span>
+                  {typeof latestLoc.speed === 'number' && (
+                    <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border">
+                      {Math.round(latestLoc.speed)} km/h
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  {t('بانتظار التقاط أول إشارة', 'En attente du signal GPS', 'Esperando señal GPS')}
+                </span>
+              )}
+            </div>
           </CardHeader>
-          <CardContent className="p-0 h-[450px]">
-            <TrackingMap
-              locations={locations}
-              selectedTruck={truck}
-              isSatellite={false}
-              geofenceZones={[]}
-            />
+          <CardContent className="p-0 relative">
+            <div className="h-[420px] md:h-[480px] w-full">
+              <TrackingMap
+                locations={locations}
+                selectedTruck={truck}
+                isSatellite={false}
+                geofenceZones={[]}
+              />
+            </div>
+
+            {/* Destination GPS Pin Button if available */}
+            {trip.unloading_gps_url && (
+              <div className="absolute bottom-3 start-3 z-[1000]">
+                <a
+                  href={trip.unloading_gps_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card/90 backdrop-blur-md text-foreground text-xs font-bold border border-border shadow-lg hover:bg-card hover:border-primary transition-all"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-primary" />
+                  <span>{t('موقع مستودع الوصول (Google Maps)', 'Entrepôt de déchargement', 'Almacén de descarga')}</span>
+                  <ExternalLink className="w-3 h-3 text-muted-foreground ms-0.5" />
+                </a>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5 pt-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>{t('نظام النقل الدولي اللوجستي • التتبع المباشر مشفر ومؤمن', 'Trans Bodanon TMS • Suivi GPS sécurisé et chiffré')}</span>
+        {/* 6. Proof of Delivery (e-POD) Card */}
+        <PublicTripPodCard
+          trip={trip}
+          deliverySignature={deliverySignature}
+          loading={loadingPod}
+        />
+
+        {/* 7. Security & Transport Carrier Assurance Footer */}
+        <div className="pt-2 pb-6 text-center space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 text-muted-foreground text-xs border border-border">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>
+              {t(
+                'منظومة النقل الدولي ترانس بودانون • تتبع مشفر وموثوق e-CMR',
+                'Système Trans Bodanon TMS • Suivi sécurisé et e-CMR certifié',
+                'Sistema Trans Bodanon TMS • Seguimiento seguro y e-CMR certificado'
+              )}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground/80">
+            {t(
+              'البيانات المعروضة تُحدث تلقائياً عبر الأقمار الصناعية (IoT GPS Telematics) بدون الحاجة لتحديث الصفحة.',
+              'Données télématiques GPS actualisées en continu sans rechargement.',
+              'Datos telemáticos GPS actualizados continuamente sin recargar.'
+            )}
+          </p>
         </div>
 
       </div>
     </div>
   );
 }
+

@@ -1,5 +1,6 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
@@ -27,20 +28,126 @@ function getAdminClient() {
   });
 }
 
+/**
+ * التحقق الصارم من هوية ودور المشرف العام للمنظومة (Super Admin)
+ */
+async function verifySuperAdminAction(): Promise<{ isAuthorized: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let role: string | null = null;
+  let isActive = true;
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role, is_active')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile) {
+      role = profile.role;
+      if (profile.is_active === false) isActive = false;
+    } else {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        const { data: adminProfile } = await adminClient
+          .from('users')
+          .select('role, is_active')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (adminProfile) {
+          role = adminProfile.role;
+          if (adminProfile.is_active === false) isActive = false;
+        }
+      }
+    }
+  }
+
+  // فحص الكوكيز الاحتياطية للجلسة في وضع الأوفلاين
+  if (!role) {
+    try {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get('app_user_session')?.value;
+      if (sessionCookie) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(sessionCookie));
+          role = parsed.role || null;
+          if (parsed.is_active === false) isActive = false;
+        } catch {
+          const parsed = JSON.parse(sessionCookie);
+          role = parsed.role || null;
+          if (parsed.is_active === false) isActive = false;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!user && !role) {
+    return { isAuthorized: false, error: 'غير مصرح لك بالوصول (يجب تسجيل الدخول)' };
+  }
+
+  if (!isActive) {
+    return { isAuthorized: false, error: 'الحساب معطل أو غير نشط' };
+  }
+
+  if (role !== 'super_admin') {
+    return { isAuthorized: false, error: 'غير مصرح: هذه العملية مخصصة حصرياً للمشرف العام' };
+  }
+
+  return { isAuthorized: true };
+}
+
+/**
+ * التحقق من صلاحية إدارة الأجهزة (مشرف عام أو مدير الشركة الخاصة بالجهاز)
+ */
+async function verifyCompanyDeviceAccess(companyId?: number): Promise<{ isAuthorized: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { isAuthorized: false, error: 'غير مصرح لك بالوصول (يجب تسجيل الدخول)' };
+  }
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('role, company_id, is_active')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (!profile || profile.is_active === false) {
+    return { isAuthorized: false, error: 'الحساب غير نشط أو غير موجود' };
+  }
+
+  if (profile.role === 'super_admin') {
+    return { isAuthorized: true };
+  }
+
+  if (profile.role === 'admin' && companyId && profile.company_id === companyId) {
+    return { isAuthorized: true };
+  }
+
+  return { isAuthorized: false, error: 'غير مصرح لك بإدارة أجهزة هذه الشركة' };
+}
+
 export async function getCompaniesAction(): Promise<{
   success: boolean;
   data?: Company[];
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: 'غير مصرح لك بالوصول (يجب تسجيل الدخول)' };
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
     }
+
+    const supabase = await createClient();
 
     let companiesData: Company[] | null = null;
     const { data, error } = await supabase
@@ -241,14 +348,12 @@ export async function createCompanyAction(
       return { success: false, error: parsed.error.issues[0]?.message || 'بيانات غير صالحة' };
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: 'غير مصرح لك بتأسيس شركات جديدة' };
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
     }
+
+    const supabase = await createClient();
 
     const cleanDomain = parsed.data.email_domain
       ? parsed.data.email_domain.replace(/^@+/, '').trim().toLowerCase()
@@ -393,14 +498,12 @@ export async function updateCompanyAction(
       return { success: false, error: parsed.error.issues[0]?.message || 'بيانات غير صالحة' };
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: 'غير مصرح لك بتعديل بيانات الشركة' };
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
     }
+
+    const supabase = await createClient();
 
     const cleanDomain =
       parsed.data.email_domain !== undefined
@@ -530,6 +633,11 @@ export async function toggleCompanyStatusAction(
   isActive: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { error } = await supabase
       .from('companies')
@@ -563,6 +671,11 @@ export async function getCompanyDevicesAction(
   companyId: number
 ): Promise<{ success: boolean; data?: CompanyDevice[]; error?: string }> {
   try {
+    const authCheck = await verifyCompanyDeviceAccess(companyId);
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('company_devices')
@@ -599,6 +712,18 @@ export async function toggleDeviceStatusAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();
+
+    const { data: dev } = await supabase
+      .from('company_devices')
+      .select('company_id')
+      .eq('id', deviceId)
+      .maybeSingle();
+
+    const authCheck = await verifyCompanyDeviceAccess(dev?.company_id);
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from('company_devices')
       .update({ is_active: isActive })
@@ -640,6 +765,11 @@ export async function createCompanyDeviceAction(
 ): Promise<{ success: boolean; data?: CompanyDevice; error?: string }> {
   const licenseNumber = generateLicenseNumber(companyId, device.device_id);
   try {
+    const authCheck = await verifyCompanyDeviceAccess(companyId);
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('company_devices')
@@ -697,6 +827,18 @@ export async function deleteCompanyDeviceAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();
+
+    const { data: dev } = await supabase
+      .from('company_devices')
+      .select('company_id')
+      .eq('id', deviceId)
+      .maybeSingle();
+
+    const authCheck = await verifyCompanyDeviceAccess(dev?.company_id);
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from('company_devices')
       .delete()
@@ -730,6 +872,11 @@ export async function replaceStaleDeviceAction(
   deviceId: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const authCheck = await verifyCompanyDeviceAccess(companyId);
+    if (!authCheck.isAuthorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const supabase = await createClient();
 
     const { data: targetDevice } = await supabase
@@ -806,6 +953,15 @@ export async function testCompanyEmailConnectionAction(
   error?: string;
 }> {
   try {
+    const authCheck = await verifySuperAdminAction();
+    if (!authCheck.isAuthorized) {
+      return {
+        success: false,
+        smtpVerified: false,
+        error: authCheck.error,
+      };
+    }
+
     const parsed = testEmailConnectionSchema.safeParse(rawInput);
     if (!parsed.success) {
       return {

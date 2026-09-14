@@ -208,6 +208,118 @@ function checkRequiredVars() {
 }
 
 /**
+ * Step 1.5 — Trilingual i18n Key Parity Check (Arabic, French, Spanish).
+ */
+function checkTrilingualParity() {
+  process.stdout.write('\n');
+  process.stdout.write('=== Step 1.5: Trilingual i18n Key Parity (AR / FR / ES) ===\n');
+  process.stdout.write('\n');
+
+  const fs = require('fs');
+  const path = require('path');
+
+  const arPath = path.resolve(__dirname, '../src/i18n/messages/ar.json');
+  const frPath = path.resolve(__dirname, '../src/i18n/messages/fr.json');
+  const esPath = path.resolve(__dirname, '../src/i18n/messages/es.json');
+
+  const files = [
+    { lang: 'ar (Arabic)', path: arPath },
+    { lang: 'fr (French)', path: frPath },
+    { lang: 'es (Spanish)', path: esPath },
+  ];
+
+  let loaded = {};
+  for (const f of files) {
+    if (!fs.existsSync(f.path)) {
+      fail(`Missing translation file: ${f.path}`);
+      errors++;
+      return;
+    }
+    try {
+      loaded[f.lang] = JSON.parse(fs.readFileSync(f.path, 'utf8'));
+      ok(`Loaded translation catalog: ${f.lang}`);
+    } catch (err) {
+      fail(`Invalid JSON in ${f.path}: ${err.message}`);
+      errors++;
+      return;
+    }
+  }
+
+  function getLeaves(obj, prefix = '') {
+    let res = {};
+    for (const k in obj) {
+      const full = prefix ? prefix + '.' + k : k;
+      if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k])) {
+        Object.assign(res, getLeaves(obj[k], full));
+      } else {
+        res[full] = obj[k];
+      }
+    }
+    return res;
+  }
+
+  const arLeaves = getLeaves(loaded['ar (Arabic)']);
+  const frLeaves = getLeaves(loaded['fr (French)']);
+  const esLeaves = getLeaves(loaded['es (Spanish)']);
+
+  const arKeys = Object.keys(arLeaves);
+  const frKeys = new Set(Object.keys(frLeaves));
+  const esKeys = new Set(Object.keys(esLeaves));
+
+  let missingInFr = [];
+  let missingInEs = [];
+  let extraInFr = [];
+  let extraInEs = [];
+
+  for (const k of arKeys) {
+    if (!frKeys.has(k)) missingInFr.push(k);
+    if (!esKeys.has(k)) missingInEs.push(k);
+  }
+  for (const k of Object.keys(frLeaves)) {
+    if (!arLeaves[k]) extraInFr.push(k);
+  }
+  for (const k of Object.keys(esLeaves)) {
+    if (!arLeaves[k]) extraInEs.push(k);
+  }
+
+  if (missingInEs.length > 0 || extraInEs.length > 0) {
+    fail(`Spanish translation parity failed: ${missingInEs.length} missing, ${extraInEs.length} extra keys.`);
+    if (missingInEs.length > 0) {
+      process.stdout.write(`  Missing in es.json: ${missingInEs.slice(0, 5).join(', ')}${missingInEs.length > 5 ? '...' : ''}\n`);
+    }
+    errors++;
+  } else {
+    ok(`Spanish (es.json) has 100% key parity with Arabic (${arKeys.length} keys)`);
+  }
+
+  if (missingInFr.length > 0 || extraInFr.length > 0) {
+    fail(`French translation parity failed: ${missingInFr.length} missing, ${extraInFr.length} extra keys.`);
+    errors++;
+  } else {
+    ok(`French (fr.json) has 100% key parity with Arabic (${arKeys.length} keys)`);
+  }
+
+  // Variable verification
+  let varMismatches = 0;
+  for (const [k, arVal] of Object.entries(arLeaves)) {
+    const arMatches = (String(arVal).match(/\{[a-zA-Z0-9_]+\}/g) || []).sort().join(',');
+    const frMatches = (String(frLeaves[k]).match(/\{[a-zA-Z0-9_]+\}/g) || []).sort().join(',');
+    const esMatches = (String(esLeaves[k]).match(/\{[a-zA-Z0-9_]+\}/g) || []).sort().join(',');
+
+    if (arMatches !== esMatches || arMatches !== frMatches) {
+      varMismatches++;
+    }
+  }
+
+  if (varMismatches > 0) {
+    fail(`${varMismatches} interpolation variable mismatches found across languages.`);
+    errors++;
+  } else {
+    ok(`All interpolation parameters match across Arabic, French, and Spanish`);
+  }
+}
+
+/**
  * Step 2 — Test Supabase database connectivity.
  */
 async function checkSupabaseConnection() {
@@ -261,9 +373,14 @@ async function checkSupabaseConnection() {
   // Attempt a lightweight query on the seed "users" table.
   // Using count head:true avoids fetching actual rows.
   try {
-    const { count, error } = await supabase
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase request timed out after 8s')), 8000)
+    );
+    const queryPromise = supabase
       .from('users')
       .select('*', { count: 'exact', head: true });
+
+    const { count, error } = await Promise.race([queryPromise, timeoutPromise]);
 
      if (error) {
       if (error.code === 'PGRST301' || error.message?.includes('table') || error.message?.includes('relation')) {
@@ -328,6 +445,7 @@ async function main() {
   process.stdout.write('└────────────────────────────────────────────┘\n');
 
   checkRequiredVars();
+  checkTrilingualParity();
   await checkSupabaseConnection();
   printSummary();
 }

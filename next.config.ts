@@ -93,6 +93,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'storage.supabase.co',
       },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
     ],
   },
   turbopack: {},

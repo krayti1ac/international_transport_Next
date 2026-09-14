@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Decimal from 'decimal.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/components/auth-provider';
 import {
   Building2,
   Plus,
@@ -254,9 +256,19 @@ function addRenewalRecord(companyId: number, record: SubscriptionRenewalRecord) 
 }
 
 export function SuperAdminCompaniesView() {
+  const { user, role, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const isSuperAdmin = role === 'super_admin' || user?.role === 'super_admin';
+
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && !isSuperAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, isSuperAdmin, router]);
 
   useEffect(() => {
     try {
@@ -403,22 +415,13 @@ export function SuperAdminCompaniesView() {
   }, []);
 
   const fetchCompanies = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setCompanies([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    const fallbackList: Company[] = [
-      {
-        id: 1,
-        name: 'Trans Bodanon',
-        ice: '001928374000082',
-        currency: 'MAD',
-        is_active: true,
-        subscription_cost: 12000,
-        subscription_start_date: '2026-01-01',
-        subscription_end_date: '2027-01-01',
-        max_devices: 5,
-        email_domain: 'transbodanon.com',
-        created_at: new Date().toISOString(),
-      },
-    ];
 
     // 1. Try Server Action first
     const res = await getCompaniesAction();
@@ -438,18 +441,20 @@ export function SuperAdminCompaniesView() {
       if (!error && data && data.length > 0) {
         setCompanies(mergeWithLocal(data as Company[]));
       } else {
-        setCompanies(mergeWithLocal(fallbackList));
+        setCompanies([]);
       }
     } catch {
-      setCompanies(mergeWithLocal(fallbackList));
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
-  }, [mergeWithLocal]);
+  }, [isSuperAdmin, mergeWithLocal]);
 
   useEffect(() => {
-    fetchCompanies();
-  }, [fetchCompanies]);
+    if (!authLoading && isSuperAdmin) {
+      fetchCompanies();
+    }
+  }, [authLoading, isSuperAdmin, fetchCompanies]);
 
   // Auto-configure server settings when provider or domain changes
   const applyProviderDefaults = (provider: MailProviderType, domain: string) => {
@@ -1072,6 +1077,23 @@ export function SuperAdminCompaniesView() {
 
     return list;
   }, [companies, statusFilter, searchQuery, sortBy]);
+
+  if (!authLoading && !isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4" dir="rtl">
+        <div className="p-4 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+          <ShieldAlert className="w-12 h-12" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">غير مصرح لك بالوصول</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          هذه الشاشة مخصصة حصرياً للمشرف العام للمنظومة (Super Admin). دورك الحالي لا يمتلك صلاحية الوصول.
+        </p>
+        <Button onClick={() => router.replace('/dashboard')} className="gap-2">
+          العودة للوحة التحكم
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-6" dir="rtl">

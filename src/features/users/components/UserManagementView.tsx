@@ -11,6 +11,9 @@ import {
   Edit2,
   Trash2,
   Mail,
+  Phone,
+  Eye,
+  EyeOff,
   User as UserIcon,
   FileText,
   Loader2,
@@ -115,11 +118,16 @@ export function UserManagementView() {
   const [showPresets, setShowPresets] = useState(false);
   const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
+    personal_email: '',
     role: 'driver' as UserRole,
     password: '',
+    confirmPassword: '',
     preferred_language: 'ar' as 'ar' | 'fr' | 'es',
     avatar_url: '',
   });
@@ -273,11 +281,16 @@ export function UserManagementView() {
     setFormData({
       name: '',
       email: '',
+      phone: '',
+      personal_email: '',
       role: 'driver',
       password: '',
+      confirmPassword: '',
       preferred_language: 'ar',
       avatar_url: '',
     });
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setShowPresets(false);
     setModalOpen(true);
   };
@@ -304,11 +317,16 @@ export function UserManagementView() {
     setFormData({
       name: userToEdit.name || '',
       email: usernamePart,
+      phone: userToEdit.phone || '',
+      personal_email: userToEdit.personal_email || '',
       role: userToEdit.role || 'secretary',
       password: '',
+      confirmPassword: '',
       preferred_language: ((userToEdit.preferred_language as any) === 'en' ? 'ar' : userToEdit.preferred_language) || 'ar',
       avatar_url: resolvedPhoto,
     });
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setShowPresets(false);
     setModalOpen(true);
   };
@@ -414,13 +432,41 @@ export function UserManagementView() {
       return;
     }
 
-    if (!editingUser && (!formData.password || formData.password.length < 6)) {
-      toast({
-        title: t('خطأ', 'Erreur'),
-        description: t('كلمة المرور يجب أن لا تقل عن 6 أحرف', 'Le mot de passe doit comporter au moins 6 caractères'),
-        variant: 'destructive',
-      });
-      return;
+    // Password matching validation
+    if (!editingUser) {
+      if (!formData.password || formData.password.length < 6) {
+        toast({
+          title: t('خطأ في كلمة المرور', 'Erreur de mot de passe'),
+          description: t('كلمة المرور يجب أن لا تقل عن 6 أحرف', 'Le mot de passe doit comporter au moins 6 caractères'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        toast({
+          title: t('خطأ في مطابقة كلمة المرور', 'Erreur de correspondance'),
+          description: t('كلمة المرور وتأكيدها غير متطابقين، يرجى إعادة التحقق', 'Les mots de passe ne correspondent pas'),
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else if (formData.password && formData.password.length > 0) {
+      if (formData.password.length < 6) {
+        toast({
+          title: t('خطأ في كلمة المرور', 'Erreur de mot de passe'),
+          description: t('كلمة المرور يجب أن لا تقل عن 6 أحرف', 'Le mot de passe doit comporter au moins 6 caractères'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        toast({
+          title: t('خطأ في مطابقة كلمة المرور', 'Erreur de correspondance'),
+          description: t('كلمة المرور وتأكيدها غير متطابقين، يرجى إعادة التحقق', 'Les mots de passe ne correspondent pas'),
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     if (usernameConflict) {
@@ -448,7 +494,10 @@ export function UserManagementView() {
           name: formData.name.trim(),
           email: finalEmail,
           role: formData.role,
+          phone: formData.phone.trim() || null,
+          personal_email: formData.personal_email.trim() || null,
           password: formData.password ? formData.password : undefined,
+          confirmPassword: formData.confirmPassword ? formData.confirmPassword : undefined,
           preferred_language: formData.preferred_language,
           avatar_url: formData.avatar_url || null,
         });
@@ -476,6 +525,8 @@ export function UserManagementView() {
             name: formData.name.trim(),
             email: finalEmail,
             role: formData.role,
+            phone: formData.phone.trim() || null,
+            personal_email: formData.personal_email.trim() || null,
             preferred_language: formData.preferred_language,
             avatar_url: formData.avatar_url || null,
           };
@@ -506,6 +557,8 @@ export function UserManagementView() {
                 name: formData.name.trim(),
                 email: finalEmail,
                 role: formData.role,
+                phone: formData.phone.trim() || null,
+                personal_email: formData.personal_email.trim() || null,
                 preferred_language: formData.preferred_language,
                 avatar_url: formData.avatar_url || null,
               };
@@ -518,12 +571,29 @@ export function UserManagementView() {
           title: t('تم التحديث بنجاح', 'Mis à jour avec succès'),
           description: t('تم تحديث بيانات المستخدم وصلاحياته', "Données de l'utilisateur mises à jour"),
         });
+        if (res.emailSent && res.emailRecipient) {
+          toast({
+            title: t('تم التحديث وإرسال الإشعار', 'Mis à jour et e-mail envoyé'),
+            description: t(
+              `تم تحديث الحساب وإرسال بيانات المرور المحدثة إلى: ${res.emailRecipient}`,
+              `Compte mis à jour et identifiants envoyés à : ${res.emailRecipient}`
+            ),
+          });
+        } else {
+          toast({
+            title: t('تم التحديث بنجاح', 'Mis à jour avec succès'),
+            description: t('تم تحديث بيانات المستخدم وصلاحياته', "Données de l'utilisateur mises à jour"),
+          });
+        }
       } else {
         const res = await createUserAction({
           name: formData.name.trim(),
           email: finalEmail,
           role: formData.role,
+          phone: formData.phone.trim() || null,
+          personal_email: formData.personal_email.trim() || null,
           password: formData.password,
+          confirmPassword: formData.confirmPassword,
           preferred_language: formData.preferred_language,
           avatar_url: formData.avatar_url || null,
         });
@@ -540,6 +610,39 @@ export function UserManagementView() {
           title: t('تمت الإضافة بنجاح', 'Ajouté avec succès'),
           description: t('تم إنشاء الحساب بنجاح ويمكن للمستخدم تسجيل الدخول', 'Compte créé avec succès'),
         });
+        try {
+          const raw = localStorage.getItem('registered_users');
+          let reg: User[] = raw ? JSON.parse(raw) : [];
+          const newUserObj: User = {
+            id: res.data?.id || crypto.randomUUID(),
+            name: formData.name.trim(),
+            email: finalEmail,
+            role: formData.role,
+            phone: formData.phone.trim() || null,
+            personal_email: formData.personal_email.trim() || null,
+            preferred_language: formData.preferred_language,
+            avatar_url: formData.avatar_url || null,
+            is_active: true,
+            created_at: new Date().toISOString(),
+          };
+          reg.push(newUserObj);
+          localStorage.setItem('registered_users', JSON.stringify(reg));
+        } catch {}
+
+        if (res.emailSent && res.emailRecipient) {
+          toast({
+            title: t('تمت الإضافة بنجاح وإرسال البريد', 'Ajouté et e-mail envoyé'),
+            description: t(
+              `تم إنشاء الحساب بنجاح وإرسال معلومات الدخول والسرية إلى: ${res.emailRecipient}`,
+              `Compte créé avec succès et identifiants envoyés à : ${res.emailRecipient}`
+            ),
+          });
+        } else {
+          toast({
+            title: t('تمت الإضافة بنجاح', 'Ajouté avec succès'),
+            description: t('تم إنشاء الحساب بنجاح ويمكن للمستخدم تسجيل الدخول', 'Compte créé avec succès'),
+          });
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: usersKeys.list() });
@@ -799,6 +902,12 @@ export function UserManagementView() {
                                 <Mail className="w-3 h-3 shrink-0" />
                                 <span>{u.email}</span>
                               </p>
+                              {u.phone && (
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5 font-mono truncate" dir="ltr">
+                                  <Phone className="w-3 h-3 shrink-0 text-emerald-500" />
+                                  <span>{u.phone}</span>
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -860,6 +969,10 @@ export function UserManagementView() {
                           {u.preferred_language === 'fr' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-foreground font-medium">
                               🇫🇷 Français
+                            </span>
+                          ) : u.preferred_language === 'es' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-foreground font-medium">
+                              🇪🇸 Español
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-foreground font-medium">
@@ -1175,24 +1288,134 @@ export function UserManagementView() {
                 </div>
               )}
             </div>
+            {/* Personal Phone Number & Personal Email */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-primary" />
+                  <span>{t('رقم الهاتف الشخصي', 'Numéro de téléphone personnel')}</span>
+                </label>
+                <Input
+                  type="tel"
+                  name="phone"
+                  autoComplete="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="06 12 34 56 78"
+                  dir="ltr"
+                  className="rounded-xl h-10 font-mono text-xs"
+                />
+              </div>
 
-            {/* Password */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                {editingUser
-                  ? t('كلمة المرور الجديدة (اختياري)', 'Nouveau mot de passe (optionnel)')
-                  : t('كلمة المرور', 'Mot de passe') + ' *'}
-              </label>
-              <Input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder={editingUser ? t('اتركها فارغة للإبقاء عليها', 'Laisser vide pour ne pas modifier') : '••••••••'}
-                required={!editingUser}
-                dir="ltr"
-                className="rounded-xl h-10"
-              />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-primary" />
+                  <span>{t('البريد في هاتفه (لاستلام البيانات)', 'Email sur téléphone')}</span>
+                </label>
+                <Input
+                  type="email"
+                  name="personal_email"
+                  autoComplete="email"
+                  value={formData.personal_email}
+                  onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })}
+                  placeholder="example@gmail.com"
+                  dir="ltr"
+                  className="rounded-xl h-10 font-mono text-xs"
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              {t(
+                'سيتم إرسال بريد إلكتروني يحتوي على اسم المستخدم وكلمة المرور ورابط الدخول إلى هاتف المستخدم فور نجاح التسجيل.',
+                'Un e-mail contenant les identifiants (nom d’utilisateur et mot de passe) sera envoyé automatiquement sur son téléphone.'
+              )}
+            </p>
+
+            {/* Password and Confirm Password */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Password */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  {editingUser
+                    ? t('كلمة المرور الجديدة (اختياري)', 'Nouveau mot de passe (optionnel)')
+                    : t('كلمة المرور', 'Mot de passe') + ' *'}
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="new-password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder={editingUser ? t('اتركها فارغة للإبقاء عليها', 'Laisser vide pour ne pas modifier') : '••••••••'}
+                    required={!editingUser}
+                    dir="ltr"
+                    className="rounded-xl h-10 pe-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 end-0 pe-2.5 flex items-center text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  {editingUser
+                    ? t('تأكيد كلمة المرور الجديدة', 'Confirmer le nouveau mot de passe')
+                    : t('تأكيد كلمة المرور', 'Confirmer le mot de passe') + ' *'}
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    autoComplete="new-password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    placeholder={editingUser ? t('اتركها فارغة للإبقاء عليها', 'Laisser vide pour ne pas modifier') : '••••••••'}
+                    required={!editingUser || !!formData.password}
+                    dir="ltr"
+                    className={`rounded-xl h-10 pe-9 ${
+                      formData.password && formData.confirmPassword
+                        ? formData.password === formData.confirmPassword
+                          ? 'border-emerald-500 focus-visible:ring-emerald-500'
+                          : 'border-rose-500 focus-visible:ring-rose-500'
+                        : ''
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 end-0 pe-2.5 flex items-center text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Password Match Status Indicator */}
+            {formData.password && formData.confirmPassword && (
+              <div className="pt-0.5">
+                {formData.password === formData.confirmPassword ? (
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{t('كلمتا المرور متطابقتان بنجاح', 'Les mots de passe correspondent parfaitement')}</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>{t('كلمة المرور وتأكيدها غير متطابقين، يرجى إعادة التحقق', 'Les mots de passe ne correspondent pas')}</span>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Role Selection */}
             {!editingUser ? (
@@ -1305,6 +1528,15 @@ export function UserManagementView() {
                 >
                   🇫🇷 Français
                 </Button>
+                <Button
+                  type="button"
+                  variant={formData.preferred_language === 'es' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormData({ ...formData, preferred_language: 'es' })}
+                  className="flex-1 rounded-xl text-xs"
+                >
+                  🇪🇸 Español
+                </Button>
               </div>
             </div>
 
@@ -1320,7 +1552,12 @@ export function UserManagementView() {
               </Button>
               <Button
                 type="submit"
-                disabled={submitting || !!usernameConflict}
+                disabled={
+                  submitting ||
+                  !!usernameConflict ||
+                  (!editingUser && (!formData.password || formData.password !== formData.confirmPassword)) ||
+                  (!!formData.password && formData.password !== formData.confirmPassword)
+                }
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl"
               >
                 {submitting ? (

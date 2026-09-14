@@ -4,11 +4,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Ship, Package, MapPin, Anchor } from 'lucide-react';
+import { X, Save, Navigation, PlaneTakeoff, PlaneLanding, Coins, Ship, Package, MapPin, Anchor, Building2 } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui/collapsible-section';
 import { GpsLinkInput } from '@/components/ui/gps-link-input';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import { useLanguage } from '@/components/language-provider';
+import { useBranchStore } from '@/lib/stores/branch-store';
 import Decimal from 'decimal.js';
 import type { TripOrder, Client, Driver, Truck, Trailer, TransportRoute } from '@/types/database';
 import { DEFAULT_CLIENTS, DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
@@ -43,6 +44,7 @@ export function TripFormModal({
   const availableTrucks = fallbackArray(trucks, DEFAULT_TRUCKS);
   const availableTrailers = fallbackArray(trailers, DEFAULT_TRAILERS);
   const availableRoutes = fallbackArray(transportRoutes, []);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
 
   // العملاء مخصصون إما لرحلات الذهاب أو رحلات العودة حصرياً (وليس معاً)
   const exportClients = useMemo(
@@ -99,6 +101,8 @@ export function TripFormModal({
     driver_id: undefined,
     truck_id: undefined,
     trailer_id: undefined,
+    origin_branch_id: undefined,
+    destination_branch_id: undefined,
     ferry_company: 'Baleària / FRS',
     ferry_localizador: '',
     ferry_company_import: 'Baleària / FRS',
@@ -167,6 +171,8 @@ export function TripFormModal({
         marsa_maroc_cost: initialData.marsa_maroc_cost ?? 800,
         shipping_gps_url: initialData.shipping_gps_url || coordsToGoogleMapsUrl(initialData.shipping_latitude, initialData.shipping_longitude) || '',
         unloading_gps_url: initialData.unloading_gps_url || coordsToGoogleMapsUrl(initialData.unloading_latitude, initialData.unloading_longitude) || '',
+        origin_branch_id: initialData.origin_branch_id ? Number(initialData.origin_branch_id) : undefined,
+        destination_branch_id: initialData.destination_branch_id ? Number(initialData.destination_branch_id) : undefined,
       });
     } else {
       const ts = Date.now().toString().slice(-5);
@@ -190,6 +196,8 @@ export function TripFormModal({
         driver_id: undefined,
         truck_id: undefined,
         trailer_id: undefined,
+        origin_branch_id: undefined,
+        destination_branch_id: undefined,
         ferry_company: 'Baleària / FRS',
         ferry_localizador: '',
         ferry_company_import: 'Baleària / FRS',
@@ -542,6 +550,8 @@ export function TripFormModal({
       triptik_cost: formData.triptik_cost,
       transit_almeria_cost: formData.transit_almeria_cost,
       marsa_maroc_cost: formData.marsa_maroc_cost,
+      origin_branch_id: formData.origin_branch_id ? Number(formData.origin_branch_id) : null,
+      destination_branch_id: formData.destination_branch_id ? Number(formData.destination_branch_id) : null,
     };
 
     try {
@@ -1235,6 +1245,47 @@ export function TripFormModal({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* الفروع والمراكز التشغيلية للرحلة (Operational Hubs) */}
+                <div className="p-3.5 bg-muted/40 border border-border/80 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <Building2 className="w-4 h-4 text-primary" />
+                    <span>{t('الفروع والمراكز التشغيلية للرحلة (Hubs)', 'Agences et hubs opérationnels')}</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">{t('فرع الانطلاق التشغيلي (Origin Hub)', 'Agence de départ')}</label>
+                      <select
+                        value={formData.origin_branch_id || ''}
+                        onChange={(e) => setFormData({ ...formData, origin_branch_id: e.target.value ? Number(e.target.value) : undefined })}
+                        className="w-full h-9 px-3 py-1.5 border border-input bg-card rounded-lg text-xs text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="">{t('-- بدون تحديد فرع انطلاق --', '-- Sans agence de départ --')}</option>
+                        {availableBranches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.country === 'MA' ? '🇲🇦' : branch.country === 'ES' ? '🇪🇸' : branch.country === 'FR' ? '🇫🇷' : '🏢'} {branch.name} ({branch.city})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">{t('فرع الوجهة / محطة الوصول (Destination Hub)', 'Agence d\'arrivée')}</label>
+                      <select
+                        value={formData.destination_branch_id || ''}
+                        onChange={(e) => setFormData({ ...formData, destination_branch_id: e.target.value ? Number(e.target.value) : undefined })}
+                        className="w-full h-9 px-3 py-1.5 border border-input bg-card rounded-lg text-xs text-foreground focus:ring-2 focus:ring-ring shadow-2xs [color-scheme:light] dark:[color-scheme:dark]"
+                      >
+                        <option value="">{t('-- بدون تحديد فرع وصول --', '-- Sans agence d\'arrivée --')}</option>
+                        {availableBranches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.country === 'MA' ? '🇲🇦' : branch.country === 'ES' ? '🇪🇸' : branch.country === 'FR' ? '🇫🇷' : '🏢'} {branch.name} ({branch.city})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 

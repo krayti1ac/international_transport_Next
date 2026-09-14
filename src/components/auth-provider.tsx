@@ -61,14 +61,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.company_id, company?.id, fetchCompany, setAuthStoreCompany]);
 
   useEffect(() => {
+    const fetchUserProfile = async (userId: string, userEmail?: string | null) => {
+      const isUuid = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim());
+      let profileData: any = null;
+
+      if (isUuid) {
+        try {
+          const res = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          profileData = res.data;
+        } catch {}
+
+        if (!profileData) {
+          try {
+            const fallbackRes = await supabase
+              .from('users')
+              .select('id, email, role, name, preferred_language, company_id, is_active')
+              .eq('id', userId)
+              .maybeSingle();
+            profileData = fallbackRes.data;
+          } catch {}
+        }
+      }
+
+      if (!profileData && userEmail) {
+        try {
+          const emailRes = await supabase
+            .from('users')
+            .select('*')
+            .ilike('email', userEmail.trim())
+            .maybeSingle();
+          profileData = emailRes.data;
+        } catch {}
+      }
+
+      return profileData;
+    };
+
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        const data = await fetchUserProfile(session.user.id, session.user.email);
         
         if (data) {
           if (data.is_active === false) {
@@ -132,11 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        const data = await fetchUserProfile(session.user.id, session.user.email);
         
         if (data) {
           if (data.is_active === false) {

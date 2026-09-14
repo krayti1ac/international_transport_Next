@@ -30,16 +30,25 @@ import { DEFAULT_BANK_ACCOUNTS, DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/
 import { useTreasuryDataQuery } from '@/lib/query/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import Decimal from 'decimal.js';
+import { useBranchStore } from '@/lib/stores/branch-store';
 
 export default function TreasuryPage() {
   const { t, dir, locale } = useLanguage();
   const { data: treasuryData, isLoading } = useTreasuryDataQuery();
   const queryClient = useQueryClient();
+  const selectedBranchId = useBranchStore((s) => s.selectedBranchId);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranch = useBranchStore((s) => s.getSelectedBranch());
 
   const transactions = treasuryData?.transactions || [];
   const bankAccounts = treasuryData?.bankAccounts || [];
   const cashBoxes = treasuryData?.cashBoxes || [];
   const loading = isLoading;
+
+  const filteredCashBoxes = useMemo(() => {
+    if (selectedBranchId === 'all') return cashBoxes;
+    return cashBoxes.filter((cb) => cb.branch_id === selectedBranchId || !cb.branch_id);
+  }, [cashBoxes, selectedBranchId]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -121,6 +130,12 @@ export default function TreasuryPage() {
           const newBal = new Decimal(targetBank.current_balance || 0).plus(decAmount).toNumber();
           await supabase.from('bank_accounts').update({ current_balance: newBal }).eq('id', targetBank.id);
         }
+      } else if (formData.destinationType === 'cashbox' && formData.destinationId) {
+        const targetCashBox = cashBoxes.find((c) => c.id === parseInt(formData.destinationId));
+        if (targetCashBox) {
+          const newBal = new Decimal(targetCashBox.current_balance || 0).plus(decAmount).toNumber();
+          await supabase.from('cash_boxes').update({ current_balance: newBal }).eq('id', targetCashBox.id);
+        }
       }
 
        toast({ title: t('تم تسجيل المعاملة وتحديث الرصيد بنجاح', 'Transaction enregistrée et solde mis à jour avec succès', 'Transaction recorded and balance updated') });
@@ -147,12 +162,21 @@ export default function TreasuryPage() {
   };
 
   const bankBalances = groupBalancesByCurrency(bankAccounts);
-  const filteredTransactions = transactions.filter(
-    (item) =>
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.reference?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((item) => {
+      if (selectedBranchId !== 'all' && item.cash_box_id) {
+        const cb = cashBoxes.find((c) => c.id === item.cash_box_id);
+        if (cb?.branch_id && cb.branch_id !== selectedBranchId) {
+          return false;
+        }
+      }
+      return (
+        item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.reference?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    });
+  }, [transactions, selectedBranchId, cashBoxes, searchQuery]);
 
   const getTypeText = (type: string) => {
     switch (type) {
@@ -257,11 +281,79 @@ export default function TreasuryPage() {
           <div className="relative z-10">
             <div className="text-3xl font-extrabold font-mono text-foreground">
               {formatCurrency(groupBalancesByCurrency(cashBoxes)['MAD'] || 0, 'MAD')}
+              {formatCurrency(groupBalancesByCurrency(filteredCashBoxes)['MAD'] || 0, 'MAD')}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
                {cashBoxes.length} {t('صناديق نقدية للمصاريف وسلف السائقين', 'caisses pour menues dépenses et avances')}
+               {filteredCashBoxes.length} {t('صناديق نقدية للمصاريف وسلف السائقين', 'caisses pour menues dépenses et avances')}
+               {selectedBranch && ` • ${selectedBranch.name}`}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Cash Boxes & Branch Wallets Grid */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-amber-500" />
+            <h2 className="text-sm sm:text-base font-bold font-amiri text-foreground">
+              {t('الصناديق النقدية والعهد', 'Caisses et Fonds d\'Avances', 'Cash Boxes & Advances')}
+              {selectedBranch && (
+                <span className="text-xs font-normal text-muted-foreground ms-2">
+                  ({t('مصفاة حسب:', 'Filtré par :')} {selectedBranch.country === 'MA' ? '🇲🇦' : selectedBranch.country === 'ES' ? '🇪🇸' : '🏢'} {selectedBranch.name})
+                </span>
+              )}
+            </h2>
+          </div>
+          <Badge variant="outline" className="text-xs font-mono">
+            {filteredCashBoxes.length} {t('صندوق', 'caisse(s)', 'boxes')}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredCashBoxes.map((box) => {
+            const branch = availableBranches.find((b) => b.id === box.branch_id);
+            return (
+              <div
+                key={box.id}
+                className="bg-card border border-border/80 p-4 rounded-xl shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-foreground font-amiri truncate">
+                      {box.name || box.code || `${t('صندوق', 'Caisse')} #${box.id}`}
+                    </p>
+                    <p className="text-[10px] font-mono text-muted-foreground truncate">
+                      {box.code}
+                    </p>
+                  </div>
+                  {branch ? (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-primary/30 text-primary bg-primary/5 flex items-center gap-1 shrink-0">
+                      <Building2 className="w-2.5 h-2.5" />
+                      <span>{branch.country === 'MA' ? '🇲🇦' : branch.country === 'ES' ? '🇪🇸' : '🏢'} {branch.name}</span>
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 text-muted-foreground bg-muted shrink-0">
+                      {t('عام / رئيسي', 'Général', 'General')}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-baseline justify-between pt-2 border-t border-border/40">
+                  <span className="text-[11px] text-muted-foreground">{t('الرصيد:', 'Solde :')}</span>
+                  <span className="text-base font-bold font-mono text-foreground">
+                    {formatCurrency(box.current_balance || 0, box.currency || 'MAD')}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {filteredCashBoxes.length === 0 && (
+            <div className="col-span-full py-6 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
+              {t('لا توجد صناديق نقدية تابعة لهذا الفرع', 'Aucune caisse associée à cette agence')}
+            </div>
+          )}
         </div>
       </div>
 
@@ -446,11 +538,17 @@ export default function TreasuryPage() {
                           </option>
                         ))}
                       {formData.destinationType === 'cashbox' &&
-                        cashBoxes.map((c) => (
-                          <option key={c.id} value={c.id}>
-                             {c.name || c.code || `${t('صندوق', 'Caisse', 'Cash Box')} #${c.id}`} ({c.currency || 'MAD'})
-                          </option>
-                        ))}
+                        cashBoxes
+                          .filter((c) => selectedBranchId === 'all' || !c.branch_id || c.branch_id === selectedBranchId)
+                          .map((c) => {
+                            const branch = availableBranches.find((b) => b.id === c.branch_id);
+                            return (
+                              <option key={c.id} value={c.id}>
+                                 {c.name || c.code || `${t('صندوق', 'Caisse', 'Cash Box')} #${c.id}`} ({c.currency || 'MAD'})
+                                 {branch ? ` [${branch.country === 'MA' ? '🇲🇦' : branch.country === 'ES' ? '🇪🇸' : '🏢'} ${branch.name}]` : ''}
+                              </option>
+                            );
+                          })}
                     </select>
                   </div>
                 </div>

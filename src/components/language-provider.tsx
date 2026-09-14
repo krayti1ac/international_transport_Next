@@ -8,9 +8,12 @@ export type Locale = 'ar' | 'fr' | 'es';
 
 interface LanguageContextType {
   locale: Locale;
+  localeCode: 'ar-MA' | 'fr-FR' | 'es-ES';
   dir: 'rtl' | 'ltr';
   setLocale: (newLocale: Locale, userKey?: string) => Promise<void>;
   t: (ar: string, fr: string, es?: string) => string;
+  formatDate: (date: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatNumber: (num: number, options?: Intl.NumberFormatOptions) => string;
   getUserPreferredLanguage: (userKey: string) => Locale | null;
 }
 
@@ -91,22 +94,25 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         );
       } catch (e) {}
 
-      // Try updating in Supabase users table if user is logged in
+      // Update in Supabase users table if user is logged in with valid UUID
       try {
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
-        // Only update if we have a valid authenticated session (userKey might be email on login page)
-        if (session?.user?.id) {
-          await supabase
-            .from('users')
-            .update({ preferred_language: newLocale })
-            .eq('id', session.user.id);
-        }
-        if (session?.user?.email) {
-          localStorage.setItem(`user_lang_${session.user.email.trim().toLowerCase()}`, newLocale);
-        }
-        if (session?.user?.id) {
-          localStorage.setItem(`user_lang_${session.user.id.trim().toLowerCase()}`, newLocale);
+        const userId = session?.user?.id;
+        const userEmail = session?.user?.email;
+
+        if (userId) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim());
+          if (isUuid) {
+            await supabase
+              .from('users')
+              .update({ preferred_language: newLocale })
+              .eq('id', userId);
+          }
+          if (userEmail) {
+            localStorage.setItem(`user_lang_${userEmail.trim().toLowerCase()}`, newLocale);
+          }
+          localStorage.setItem(`user_lang_${userId.trim().toLowerCase()}`, newLocale);
         }
       } catch (err) {
         console.warn('Could not sync preferred_language to database:', err);
@@ -114,28 +120,46 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-
   const t = useCallback((ar: string, fr: string, es?: string): string => {
     if (locale === 'fr') return fr;
     if (locale === 'es') {
+      if (es && !/^(general dashboard|manage trips|total trips|active trips|refresh|in transit|in progress|completed|delivered|loaded|pending|cancelled)$/i.test(es.trim())) {
+        return es;
+      }
       const trimmedAr = ar?.trim();
       if (trimmedAr && SPANISH_DICTIONARY[trimmedAr]) return SPANISH_DICTIONARY[trimmedAr];
       const trimmedFr = fr?.trim();
       if (trimmedFr && SPANISH_DICTIONARY[trimmedFr]) return SPANISH_DICTIONARY[trimmedFr];
       const trimmedFrLower = fr?.trim()?.toLowerCase();
       if (trimmedFrLower && SPANISH_DICTIONARY[trimmedFrLower]) return SPANISH_DICTIONARY[trimmedFrLower];
-      if (es && !/^(general dashboard|manage trips|total trips|active trips|refresh|in transit|in progress|completed|delivered|loaded|pending|cancelled)$/i.test(es.trim())) {
-        return es;
-      }
-      return fr || ar;
+      return es || fr || ar;
     }
     return ar;
   }, [locale]);
 
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
+  const localeCode: 'ar-MA' | 'fr-FR' | 'es-ES' = locale === 'ar' ? 'ar-MA' : locale === 'es' ? 'es-ES' : 'fr-FR';
+
+  const formatDate = useCallback((date: Date | string | number, options?: Intl.DateTimeFormatOptions): string => {
+    try {
+      const d = typeof date === 'object' ? date : new Date(date);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString(localeCode, options);
+    } catch {
+      return '';
+    }
+  }, [localeCode]);
+
+  const formatNumber = useCallback((num: number, options?: Intl.NumberFormatOptions): string => {
+    try {
+      return num.toLocaleString(localeCode, options);
+    } catch {
+      return String(num);
+    }
+  }, [localeCode]);
 
   return (
-    <LanguageContext.Provider value={{ locale, dir, setLocale, t, getUserPreferredLanguage }}>
+    <LanguageContext.Provider value={{ locale, localeCode, dir, setLocale, t, formatDate, formatNumber, getUserPreferredLanguage }}>
       {children}
     </LanguageContext.Provider>
   );
@@ -146,9 +170,12 @@ export function useLanguage() {
   if (!context) {
     return {
       locale: 'ar' as Locale,
+      localeCode: 'ar-MA' as const,
       dir: 'rtl' as const,
       setLocale: async () => {},
       t: (ar: string, _fr: string, es?: string) => es || ar,
+      formatDate: (d: Date | string | number) => String(d),
+      formatNumber: (n: number) => String(n),
       getUserPreferredLanguage: () => null,
     };
   }

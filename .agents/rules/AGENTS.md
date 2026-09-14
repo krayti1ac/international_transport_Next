@@ -6,5 +6,5 @@
 - **Next.js 16 App Router**: Observe breaking conventions documented in `node_modules/next/dist/docs/`.
 - **Feature-First**: All feature code resides in `src/features/[feature_name]/`.
 - **Supabase SSR**: Strictly separate server client (`@/lib/supabase/server`) from browser client (`@/lib/supabase/browser`).
-- **i18n & RTL**: Support Arabic (RTL) first, then French (LTR), using `next-intl` and logical Tailwind classes.
+- **i18n & RTL**: Trilingual system — Support Arabic (RTL) first, alongside French (LTR) and Spanish (LTR), using `next-intl` and logical Tailwind classes. Maintain 100% key parity across `ar.json`, `fr.json`, and `es.json`.
 

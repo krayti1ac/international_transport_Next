@@ -23,6 +23,7 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/public') ||
+    pathname.startsWith('/api/pod') ||
     pathname.includes('/favicon.ico') ||
     pathname.includes('/manifest.json') ||
     normalizedPath === '/' ||

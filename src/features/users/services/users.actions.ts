@@ -15,6 +15,7 @@ import {
 } from '../schemas/user.schema';
 import type { User } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
+import { sendDomainEmail } from '@/lib/email-smtp';
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,6 +24,11 @@ function getAdminClient() {
   return createSupabaseJsClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+function isUuid(val: string | null | undefined): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 }
 
 async function getCurrentUserContext(supabase: any, adminClient: any) {
@@ -228,7 +234,13 @@ export async function getUsersAction(): Promise<{ success: boolean; data?: User[
   }
 }
 
-export async function createUserAction(rawInput: CreateUserInput): Promise<{ success: boolean; data?: User; error?: string }> {
+export async function createUserAction(rawInput: CreateUserInput): Promise<{
+  success: boolean;
+  data?: User;
+  error?: string;
+  emailSent?: boolean;
+  emailRecipient?: string;
+}> {
   try {
     const input = createUserSchema.parse(rawInput);
     const supabase = await createClient();
@@ -255,6 +267,7 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
 
     // Determine and enforce company email domain
     let companyEmailDomain: string | null = null;
+    let companyDisplayName: string = 'Trans Bodanon';
     if (companyIdToAssign) {
       try {
         const { data: comp } = await supabase
@@ -262,6 +275,10 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
           .select('id, name, email_domain')
           .eq('id', companyIdToAssign)
           .maybeSingle();
+
+        if (comp?.name) {
+          companyDisplayName = comp.name;
+        }
 
         if (comp?.email_domain) {
           companyEmailDomain = comp.email_domain.replace(/^@+/, '').trim().toLowerCase();
@@ -322,6 +339,8 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
           user_metadata: {
             name: input.name,
             role: input.role,
+            phone: input.phone || null,
+            personal_email: input.personal_email || null,
             company_id: companyIdToAssign,
           },
         });
@@ -347,6 +366,8 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
       name: input.name,
       email: finalEmail,
       role: input.role,
+      phone: input.phone || null,
+      personal_email: input.personal_email || null,
       preferred_language: input.preferred_language || 'ar',
       company_id: companyIdToAssign,
       avatar_url: input.avatar_url || null,
@@ -361,14 +382,19 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
       .single();
 
     // If preferred_language, avatar_url, or is_active column doesn't exist in Supabase schema cache, retry without it
+    // If preferred_language, avatar_url, phone, personal_email, or is_active column doesn't exist in Supabase schema cache, retry without it
     if (
       error &&
       (isMissingColumnError(error, 'preferred_language') ||
         isMissingColumnError(error, 'avatar_url') ||
+        isMissingColumnError(error, 'phone') ||
+        isMissingColumnError(error, 'personal_email') ||
         isMissingColumnError(error, 'is_active'))
     ) {
       if (isMissingColumnError(error, 'preferred_language')) delete payload.preferred_language;
       if (isMissingColumnError(error, 'avatar_url')) delete payload.avatar_url;
+      if (isMissingColumnError(error, 'phone')) delete payload.phone;
+      if (isMissingColumnError(error, 'personal_email')) delete payload.personal_email;
       if (isMissingColumnError(error, 'is_active')) delete payload.is_active;
       const retry = await supabase
         .from('users')
@@ -387,9 +413,17 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
         .select()
         .single();
 
-      if (adminInsert.error && (isMissingColumnError(adminInsert.error, 'preferred_language') || isMissingColumnError(adminInsert.error, 'avatar_url'))) {
+      if (
+        adminInsert.error &&
+        (isMissingColumnError(adminInsert.error, 'preferred_language') ||
+          isMissingColumnError(adminInsert.error, 'avatar_url') ||
+          isMissingColumnError(adminInsert.error, 'phone') ||
+          isMissingColumnError(adminInsert.error, 'personal_email'))
+      ) {
         if (isMissingColumnError(adminInsert.error, 'preferred_language')) delete payload.preferred_language;
         if (isMissingColumnError(adminInsert.error, 'avatar_url')) delete payload.avatar_url;
+        if (isMissingColumnError(adminInsert.error, 'phone')) delete payload.phone;
+        if (isMissingColumnError(adminInsert.error, 'personal_email')) delete payload.personal_email;
         adminInsert = await adminClient
           .from('users')
           .insert(payload)
@@ -422,15 +456,125 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{ suc
       data.preferred_language = input.preferred_language;
     }
 
+    // 3. Send welcome & private credentials email to user's phone / email
+    const targetEmailRecipient = input.personal_email?.trim() || finalEmail;
+    let emailSent = false;
+
+    if (targetEmailRecipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmailRecipient)) {
+      try {
+        const roleTitle = getRoleLabelArabic(input.role);
+        const portalUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://transbodanon.com';
+        const loginUrl = `${portalUrl}/login`;
+        const formattedPhone = input.phone?.trim() || 'غير مسجل';
+
+        const emailHtml = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بيانات حسابك الجديد</title>
+</head>
+<body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; color: #1e293b; direction: rtl;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 28px 24px; text-align: center;">
+      <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700;">منظومة إدارة النقل الدولي</h1>
+      <p style="margin: 0; font-size: 13px; color: #94a3b8;">${companyDisplayName}</p>
+    </div>
+    
+    <div style="padding: 28px 24px; text-align: right;">
+      <div style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #e0f2fe; color: #0284c7; margin-bottom: 16px;">
+        🔐 بيانات الدخول والمعلومات الخاصة
+      </div>
+      
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">
+        مرحباً بك <strong>${input.name}</strong>،<br>
+        يسرنا إعلامك بأنه تم إنشاء وتفعيل حسابك بنجاح في منظومة <strong>${companyDisplayName}</strong>. تجد أدناه المعلومات الخاصة وبيانات الاعتماد الرسمية لتسجيل الدخول إلى حسابك:
+      </p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">الاسم الكامل:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #0f172a; text-align: left; direction: rtl;">${input.name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">الدور والصلاحية:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #0f172a; text-align: left; direction: rtl;">${roleTitle}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">اسم المستخدم / البريد المعتمد:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #0284c7; font-family: monospace; text-align: left; direction: ltr;">${finalEmail}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">كلمة المرور:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #dc2626; background: #fee2e2; padding-left: 8px; padding-right: 8px; border-radius: 6px; font-family: monospace; text-align: left; direction: ltr; display: inline-block;">${input.password}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">رقم الهاتف الشخصي:</td>
+            <td style="padding: 10px 0; font-weight: 600; color: #0f172a; text-align: left; direction: ltr;">${formattedPhone}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+          تسجيل الدخول إلى المنظومة
+        </a>
+      </div>
+
+      <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px; padding: 14px 16px; font-size: 12px; color: #92400e; line-height: 1.6;">
+        ⚠️ <strong>توصيات أمان هامة:</strong><br>
+        • هذه الرسالة سرية وتحتوي على معلومات اعتماد شخصية، يرجى عدم مشاركتها مع أي طرف.<br>
+        • يُنصح بتغيير كلمة المرور فور أول تسجيل دخول من خلال شاشة إعدادات الحساب الشخصي.
+      </div>
+    </div>
+
+    <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 20px; text-align: center; font-size: 11px; color: #94a3b8;">
+      تم إرسال هذا البريد تلقائياً من منظومة ${companyDisplayName}.<br>
+      © ${new Date().getFullYear()} ${companyDisplayName}. جميع الحقوق محفوظة.
+    </div>
+  </div>
+</body>
+</html>
+        `;
+
+        const sendRes = await sendDomainEmail({
+          to: targetEmailRecipient,
+          subject: `🔐 بيانات حسابك الجديد في منظومة ${companyDisplayName} (${input.name})`,
+          html: emailHtml,
+          companyId: companyIdToAssign,
+          senderName: `${companyDisplayName} - إدارة المنظومة`,
+        });
+
+        if (sendRes.success) {
+          emailSent = true;
+        }
+      } catch (mailErr) {
+        console.warn('Welcome credentials email sending failed:', mailErr);
+      }
+    }
+
     revalidatePath('/users');
     revalidatePath('/settings');
-    return { success: true, data: data as User };
+    return {
+      success: true,
+      data: data as User,
+      emailSent,
+      emailRecipient: targetEmailRecipient,
+    };
   } catch (err: any) {
     return { success: false, error: err?.message || 'فشل إضافة المستخدم' };
   }
 }
 
-export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ success: boolean; data?: User; error?: string }> {
+export async function updateUserAction(rawInput: UpdateUserInput): Promise<{
+  success: boolean;
+  data?: User;
+  error?: string;
+  emailSent?: boolean;
+  emailRecipient?: string;
+}> {
   try {
     const input = updateUserSchema.parse(rawInput);
     const supabase = await createClient();
@@ -438,22 +582,36 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
     const { currentCompanyId, currentUserRole, isSuperAdmin } = await getCurrentUserContext(supabase, adminClient);
 
     // Fetch existing user to verify permissions
+    const isInputUuid = isUuid(input.id);
+    const clientToQuery = adminClient || supabase;
     let existingUser: User | null = null;
-    const { data: existingData } = await supabase
-      .from('users')
-      .select('id, email, role, company_id')
-      .eq('id', input.id)
-      .maybeSingle();
 
-    existingUser = existingData as User | null;
-
-    if (!existingUser && adminClient) {
-      const { data: adminExisting } = await adminClient
+    if (isInputUuid) {
+      const { data: existingData } = await clientToQuery
         .from('users')
         .select('id, email, role, company_id')
         .eq('id', input.id)
         .maybeSingle();
-      existingUser = adminExisting as User | null;
+      existingUser = existingData as User | null;
+    } else {
+      // If input.id is an email (or non-UUID), search by email directly (never id=email!)
+      const { data: existingData } = await clientToQuery
+        .from('users')
+        .select('id, email, role, company_id')
+        .ilike('email', input.id.trim())
+        .maybeSingle();
+      existingUser = existingData as User | null;
+    }
+
+    if (!existingUser && input.email) {
+      const { data: byFinalEmail } = await clientToQuery
+        .from('users')
+        .select('id, email, role, company_id')
+        .ilike('email', input.email.trim())
+        .maybeSingle();
+      if (byFinalEmail) {
+        existingUser = byFinalEmail as User | null;
+      }
     }
 
     // If target is super_admin or attempting to elevate to super_admin, require isSuperAdmin
@@ -478,6 +636,14 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
 
     if (input.avatar_url !== undefined) {
       updatePayload.avatar_url = input.avatar_url;
+    }
+
+    if (input.phone !== undefined) {
+      updatePayload.phone = input.phone;
+    }
+
+    if (input.personal_email !== undefined) {
+      updatePayload.personal_email = input.personal_email;
     }
 
     if (input.is_active !== undefined) {
@@ -558,108 +724,87 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
       updatePayload.company_id = input.role === 'super_admin' ? null : input.company_id;
     }
 
-    // Resolve user ID if given ID was a mock ID or if user exists with finalEmail
-    let targetUserId = input.id;
-    try {
-      const matchQuery = finalEmail
-        ? `id.eq.${input.id},email.ilike.${finalEmail}`
-        : `id.eq.${input.id}`;
-      const { data: matched } = await supabase
-        .from('users')
-        .select('id, email, company_id')
-        .or(matchQuery)
-        .maybeSingle();
-
-      if (matched) {
-        targetUserId = matched.id;
-      }
-    } catch {
-      // ignore
+    // Resolve target user ID (must be a valid UUID for id column)
+    let targetUserId: string | null = null;
+    if (existingUser?.id && isUuid(existingUser.id)) {
+      targetUserId = existingUser.id;
+    } else if (isInputUuid) {
+      targetUserId = input.id;
     }
 
-    let { data, error } = await supabase
-      .from('users')
-      .update(updatePayload)
-      .eq('id', targetUserId)
-      .select()
-      .maybeSingle();
+    const clientToMutate = adminClient || supabase;
 
-    // Graceful fallback if preferred_language, avatar_url, or is_active column is not yet in Supabase schema cache
-    if (
-      error &&
-      (isMissingColumnError(error, 'preferred_language') ||
-        isMissingColumnError(error, 'avatar_url') ||
-        isMissingColumnError(error, 'is_active'))
-    ) {
-      if (isMissingColumnError(error, 'preferred_language')) delete updatePayload.preferred_language;
-      if (isMissingColumnError(error, 'avatar_url')) delete updatePayload.avatar_url;
-      if (isMissingColumnError(error, 'is_active')) delete updatePayload.is_active;
-      const retry = await supabase
-        .from('users')
-        .update(updatePayload)
-        .eq('id', targetUserId)
-        .select()
-        .maybeSingle();
-      data = retry.data;
-      error = retry.error;
+    if (!targetUserId && finalEmail) {
+      try {
+        const { data: matched } = await clientToMutate
+          .from('users')
+          .select('id, email, company_id')
+          .ilike('email', finalEmail)
+          .maybeSingle();
+        if (matched?.id && isUuid(matched.id)) {
+          targetUserId = matched.id;
+        }
+      } catch {}
     }
 
-    if (error && adminClient) {
-      let adminUpdate = await adminClient
+    // Helper to perform update with missing column fallback
+    const performUpdate = async (filterCol: 'id' | 'email', filterVal: string) => {
+      let res = await clientToMutate
         .from('users')
         .update(updatePayload)
-        .eq('id', targetUserId)
+        .eq(filterCol, filterVal)
         .select()
         .maybeSingle();
 
       if (
-        adminUpdate.error &&
-        (isMissingColumnError(adminUpdate.error, 'preferred_language') ||
-          isMissingColumnError(adminUpdate.error, 'avatar_url') ||
-          isMissingColumnError(adminUpdate.error, 'is_active'))
+        res.error &&
+        (isMissingColumnError(res.error, 'preferred_language') ||
+          isMissingColumnError(res.error, 'avatar_url') ||
+          isMissingColumnError(res.error, 'phone') ||
+          isMissingColumnError(res.error, 'personal_email') ||
+          isMissingColumnError(res.error, 'is_active'))
       ) {
-        if (isMissingColumnError(adminUpdate.error, 'preferred_language')) delete updatePayload.preferred_language;
-        if (isMissingColumnError(adminUpdate.error, 'avatar_url')) delete updatePayload.avatar_url;
-        if (isMissingColumnError(adminUpdate.error, 'is_active')) delete updatePayload.is_active;
-        adminUpdate = await adminClient
+        if (isMissingColumnError(res.error, 'preferred_language')) delete updatePayload.preferred_language;
+        if (isMissingColumnError(res.error, 'avatar_url')) delete updatePayload.avatar_url;
+        if (isMissingColumnError(res.error, 'phone')) delete updatePayload.phone;
+        if (isMissingColumnError(res.error, 'personal_email')) delete updatePayload.personal_email;
+        if (isMissingColumnError(res.error, 'is_active')) delete updatePayload.is_active;
+
+        res = await clientToMutate
           .from('users')
           .update(updatePayload)
-          .eq('id', targetUserId)
+          .eq(filterCol, filterVal)
           .select()
           .maybeSingle();
       }
 
-      if (!adminUpdate.error) {
-        data = adminUpdate.data;
-        error = null;
-      }
-    }
+      return res;
+    };
 
-    // If update returned 0 rows (e.g. ID was from localStorage or mock user that isn't yet in DB)
-    if (!data && !error && finalEmail) {
-      // Check if user exists by email
-      const { data: userByEmail } = await supabase
-        .from('users')
-        .select('id')
-        .ilike('email', finalEmail)
-        .maybeSingle();
+    let data: any = null;
+    let error: any = null;
 
-      if (userByEmail) {
-        targetUserId = userByEmail.id;
-        const retryByEmail = await supabase
-          .from('users')
-          .update(updatePayload)
-          .eq('id', targetUserId)
-          .select()
-          .maybeSingle();
-        if (retryByEmail.data) {
-          data = retryByEmail.data;
-        }
+    if (targetUserId) {
+      // Safe update by valid UUID
+      const res = await performUpdate('id', targetUserId);
+      data = res.data;
+      error = res.error;
+    } else if (finalEmail || existingUser?.email) {
+      // Safe update by email (never id=email!)
+      const emailFilter = (finalEmail || existingUser?.email || '').trim();
+      const res = await performUpdate('email', emailFilter);
+      data = res.data;
+      error = res.error;
+      if (data?.id && isUuid(data.id)) {
+        targetUserId = data.id;
       }
     }
 
     // If still no row in database, upsert it
     if (!data && !error) {
+      if (!targetUserId || !isUuid(targetUserId)) {
+        targetUserId = crypto.randomUUID();
+      }
       const upsertPayload: Record<string, any> = {
         id: targetUserId,
         name: input.name,
@@ -670,22 +815,36 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
         created_at: new Date().toISOString(),
       };
       if (input.avatar_url) upsertPayload.avatar_url = input.avatar_url;
-      const upsertRes = await supabase
+      if (input.phone) upsertPayload.phone = input.phone;
+      if (input.personal_email) upsertPayload.personal_email = input.personal_email;
+
+      let upsertRes = await clientToMutate
         .from('users')
         .upsert(upsertPayload, { onConflict: 'id' })
         .select()
         .maybeSingle();
-      if (upsertRes.data) {
-        data = upsertRes.data;
-      } else if (adminClient) {
-        const adminUpsert = await adminClient
+
+      if (
+        upsertRes.error &&
+        (isMissingColumnError(upsertRes.error, 'phone') ||
+          isMissingColumnError(upsertRes.error, 'personal_email') ||
+          isMissingColumnError(upsertRes.error, 'preferred_language') ||
+          isMissingColumnError(upsertRes.error, 'avatar_url'))
+      ) {
+        if (isMissingColumnError(upsertRes.error, 'phone')) delete upsertPayload.phone;
+        if (isMissingColumnError(upsertRes.error, 'personal_email')) delete upsertPayload.personal_email;
+        if (isMissingColumnError(upsertRes.error, 'preferred_language')) delete upsertPayload.preferred_language;
+        if (isMissingColumnError(upsertRes.error, 'avatar_url')) delete upsertPayload.avatar_url;
+
+        upsertRes = await clientToMutate
           .from('users')
           .upsert(upsertPayload, { onConflict: 'id' })
           .select()
           .maybeSingle();
-        if (adminUpsert.data) {
-          data = adminUpsert.data;
-        }
+      }
+
+      if (upsertRes.data) {
+        data = upsertRes.data;
       }
     }
 
@@ -731,6 +890,8 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
           user_metadata: {
             name: input.name,
             role: input.role,
+            ...(input.phone ? { phone: input.phone } : {}),
+            ...(input.personal_email ? { personal_email: input.personal_email } : {}),
             ...(finalEmail ? { email: finalEmail } : {}),
             ...(input.preferred_language ? { preferred_language: input.preferred_language } : {}),
           },
@@ -742,16 +903,95 @@ export async function updateUserAction(rawInput: UpdateUserInput): Promise<{ suc
         if (input.password && input.password.trim().length >= 6) {
           authUpdates.password = input.password.trim();
         }
-        await adminClient.auth.admin.updateUserById(targetUserId, authUpdates);
+        if (targetUserId && isUuid(targetUserId)) {
+          await adminClient.auth.admin.updateUserById(targetUserId, authUpdates);
+        }
       } catch (pwdErr) {
-        console.warn('Could not update auth user metadata/password:', pwdErr);
         console.warn('Could not update auth user metadata/password/email:', pwdErr);
+      }
+    }
+
+    // If a new password was set, notify the user via email on their phone / email
+    const recipientForUpdate = input.personal_email?.trim() || existingUser?.personal_email || finalEmail || existingUser?.email;
+    let updateEmailSent = false;
+    if (input.password && input.password.trim().length >= 6 && recipientForUpdate && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientForUpdate)) {
+      try {
+        const portalUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://transbodanon.com';
+        const loginUrl = `${portalUrl}/login`;
+        const roleTitle = getRoleLabelArabic(input.role);
+        const compName = 'Trans Bodanon';
+
+        const updateEmailHtml = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>تحديث كلمة المرور الخاصة بحسابك</title>
+</head>
+<body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; color: #1e293b; direction: rtl;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 28px 24px; text-align: center;">
+      <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700;">منظومة إدارة النقل الدولي</h1>
+      <p style="margin: 0; font-size: 13px; color: #94a3b8;">إشعار تحديث بيانات الحساب</p>
+    </div>
+    <div style="padding: 28px 24px; text-align: right;">
+      <div style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #fef3c7; color: #b45309; margin-bottom: 16px;">
+        🔑 تم تعيين كلمة مرور جديدة
+      </div>
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">
+        مرحباً <strong>${input.name}</strong>،<br>
+        نحيطك علماً بأنه تم تحديث كلمة المرور الخاصة بحسابك في منظومة النقل الدولي. تجد أدناه بياناتك المعتمدة:
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">اسم المستخدم / البريد المعتمد:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #0284c7; font-family: monospace; text-align: left; direction: ltr;">${finalEmail || existingUser?.email}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">كلمة المرور الجديدة:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #dc2626; background: #fee2e2; padding-left: 8px; padding-right: 8px; border-radius: 6px; font-family: monospace; text-align: left; direction: ltr; display: inline-block;">${input.password}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #64748b; font-weight: 600;">الدور والصلاحية:</td>
+            <td style="padding: 10px 0; font-weight: 700; color: #0f172a; text-align: left; direction: rtl;">${roleTitle}</td>
+          </tr>
+        </table>
+      </div>
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+          تسجيل الدخول بالبيانات الجديدة
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+        `;
+
+        const updateSendRes = await sendDomainEmail({
+          to: recipientForUpdate,
+          subject: `🔑 تم تعيين كلمة مرور جديدة لحسابك (${input.name})`,
+          html: updateEmailHtml,
+          companyId: targetCompanyId,
+          senderName: `${compName} - إدارة المنظومة`,
+        });
+        if (updateSendRes.success) {
+          updateEmailSent = true;
+        }
+      } catch (mailErr) {
+        console.warn('Update credentials email sending failed:', mailErr);
       }
     }
 
     revalidatePath('/users');
     revalidatePath('/settings');
-    return { success: true, data: data as User };
+    return {
+      success: true,
+      data: data as User,
+      emailSent: updateEmailSent,
+      emailRecipient: recipientForUpdate,
+    };
   } catch (err: any) {
     return { success: false, error: err?.message || 'فشل تحديث بيانات المستخدم' };
   }
@@ -768,21 +1008,21 @@ export async function deleteUserAction(userId: string): Promise<{ success: boole
       return { success: false, error: 'لا يمكنك حذف حسابك الشخصي المسجل به حالياً' };
     }
 
+    const isTargetUuid = isUuid(userId);
+    const clientToUse = adminClient || supabase;
+
     // Check target user role
     let targetRole: string | null = null;
-    const { data: targetData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle();
+    let targetQuery = clientToUse.from('users').select('id, role');
+    targetQuery = isTargetUuid ? targetQuery.eq('id', userId) : targetQuery.ilike('email', userId);
+    const { data: targetData } = await targetQuery.maybeSingle();
     targetRole = targetData?.role || null;
+    const resolvedUserId = targetData?.id || (isTargetUuid ? userId : null);
 
     if (!targetRole && adminClient) {
-      const { data: adminTarget } = await adminClient
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
+      let adminQuery = adminClient.from('users').select('id, role');
+      adminQuery = isTargetUuid ? adminQuery.eq('id', userId) : adminQuery.ilike('email', userId);
+      const { data: adminTarget } = await adminQuery.maybeSingle();
       targetRole = adminTarget?.role || null;
     }
 
@@ -795,23 +1035,23 @@ export async function deleteUserAction(userId: string): Promise<{ success: boole
       return { success: false, error: 'غير مصرح لك بحذف حساب المدير العام' };
     }
 
-    let { error } = await supabase.from('users').delete().eq('id', userId);
-
-    if (error && adminClient) {
-      const adminDelete = await adminClient.from('users').delete().eq('id', userId);
-      if (!adminDelete.error) {
-        error = null;
-      }
+    let error: any = null;
+    if (resolvedUserId && isUuid(resolvedUserId)) {
+      const del = await clientToUse.from('users').delete().eq('id', resolvedUserId);
+      error = del.error;
+    } else {
+      const del = await clientToUse.from('users').delete().ilike('email', userId);
+      error = del.error;
     }
 
     if (error) {
       return { success: false, error: error.message };
     }
 
-    // Also delete auth user if admin client available
-    if (adminClient) {
+    // Also delete auth user if admin client available and valid UUID
+    if (adminClient && resolvedUserId && isUuid(resolvedUserId)) {
       try {
-        await adminClient.auth.admin.deleteUser(userId);
+        await adminClient.auth.admin.deleteUser(resolvedUserId);
       } catch (authDelErr) {
         console.warn('Could not delete auth user:', authDelErr);
       }
@@ -833,28 +1073,27 @@ export async function toggleUserActiveAction(
     const supabase = await createClient();
     const adminClient = getAdminClient();
     const { currentUser, currentUserRole } = await getCurrentUserContext(supabase, adminClient);
+    const clientToUse = adminClient || supabase;
 
     // Prevent deactivating own current account
     if (currentUser && currentUser.id === userId && !isActive) {
       return { success: false, error: 'لا يمكنك تعطيل حسابك الشخصي المسجل به حالياً' };
     }
 
+    const isTargetUuid = isUuid(userId);
+    let targetRole: string | null = null;
+    let targetQuery = clientToUse.from('users').select('id, role');
+    targetQuery = isTargetUuid ? targetQuery.eq('id', userId) : targetQuery.ilike('email', userId);
+    const { data: targetData } = await targetQuery.maybeSingle();
+    targetRole = targetData?.role || null;
+    const resolvedUserId = targetData?.id || (isTargetUuid ? userId : null);
+
     // Prevent secretary from toggling admin or super_admin accounts
     if (currentUserRole === 'secretary') {
-      let targetRole: string | null = null;
-      const { data: targetData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-      targetRole = targetData?.role || null;
-
       if (!targetRole && adminClient) {
-        const { data: adminTarget } = await adminClient
-          .from('users')
-          .select('role')
-          .eq('id', userId)
-          .maybeSingle();
+        let adminQuery = adminClient.from('users').select('id, role');
+        adminQuery = isTargetUuid ? adminQuery.eq('id', userId) : adminQuery.ilike('email', userId);
+        const { data: adminTarget } = await adminQuery.maybeSingle();
         targetRole = adminTarget?.role || null;
       }
 
@@ -863,20 +1102,29 @@ export async function toggleUserActiveAction(
       }
     }
 
-    let { error } = await supabase
-      .from('users')
-      .update({ is_active: isActive })
-      .eq('id', userId);
+    let error: any = null;
+    if (resolvedUserId && isUuid(resolvedUserId)) {
+      const updateRes = await clientToUse
+        .from('users')
+        .update({ is_active: isActive })
+        .eq('id', resolvedUserId);
+      error = updateRes.error;
+    } else {
+      const updateRes = await clientToUse
+        .from('users')
+        .update({ is_active: isActive })
+        .ilike('email', userId);
+      error = updateRes.error;
+    }
 
     if (error && isMissingColumnError(error, 'is_active')) {
       return { success: true };
     }
 
     if (error && adminClient) {
-      const adminUpdate = await adminClient
-        .from('users')
-        .update({ is_active: isActive })
-        .eq('id', userId);
+      const adminUpdate = resolvedUserId && isUuid(resolvedUserId)
+        ? await adminClient.from('users').update({ is_active: isActive }).eq('id', resolvedUserId)
+        : await adminClient.from('users').update({ is_active: isActive }).ilike('email', userId);
       if (!adminUpdate.error || isMissingColumnError(adminUpdate.error, 'is_active')) {
         error = null;
       }

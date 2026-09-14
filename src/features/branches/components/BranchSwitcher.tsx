@@ -59,18 +59,20 @@ export function BranchSwitcher() {
           className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-xl border border-border/70 bg-background/80 hover:bg-muted/40 transition-all text-xs font-semibold cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring select-none shadow-2xs"
           title={t('اختيار وتحديد الفرع التشغيلي', 'Sélectionner l’agence')}
         >
-          <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+          {activeBranch ? (
+            COUNTRY_FLAGS[activeBranch.country] ? (
+              <span className="text-sm shrink-0 leading-none">{COUNTRY_FLAGS[activeBranch.country]}</span>
+            ) : (
+              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+            )
+          ) : (
+            <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+          )}
           <span className="truncate max-w-[90px] sm:max-w-[130px]">
             {activeBranch ? (
-              <span className="flex items-center gap-1">
-                <span>{COUNTRY_FLAGS[activeBranch.country] || '🏢'}</span>
-                <span>{activeBranch.city || activeBranch.name}</span>
-              </span>
+              <span>{activeBranch.city || activeBranch.name}</span>
             ) : (
-              <span className="flex items-center gap-1">
-                <span>🌐</span>
-                <span>{t('كافة الفروع', 'Toutes agences')}</span>
-              </span>
+              <span>{t('كافة الفروع', 'Toutes agences')}</span>
             )}
           </span>
           <ChevronDown
@@ -113,37 +115,43 @@ export function BranchSwitcher() {
 
         {/* List of individual branches */}
         <div className="max-h-60 overflow-y-auto space-y-1 py-1">
-          {availableBranches.map((branch) => {
-            const isSelected = selectedBranchId === branch.id;
-            const flag = COUNTRY_FLAGS[branch.country] || '🏢';
-            return (
-              <DropdownMenuItem
-                key={branch.id}
-                onClick={() => setSelectedBranchId(branch.id)}
-                className={`flex items-center justify-between p-2 rounded-xl cursor-pointer ${
-                  isSelected ? 'bg-primary/10 text-primary font-bold' : ''
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm shrink-0">{flag}</span>
-                  <div className="truncate">
-                    <p className="font-semibold truncate">{branch.name}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono">
-                      {branch.code} • {branch.city}
-                    </p>
+          {availableBranches.length === 0 ? (
+            <div className="py-3 px-2 text-center text-muted-foreground text-[11px]">
+              {t('لا توجد فروع مسجلة حالياً', 'Aucune agence enregistrée')}
+            </div>
+          ) : (
+            availableBranches.map((branch) => {
+              const isSelected = selectedBranchId === branch.id;
+              const flag = COUNTRY_FLAGS[branch.country] || '🏢';
+              return (
+                <DropdownMenuItem
+                  key={branch.id}
+                  onClick={() => setSelectedBranchId(branch.id)}
+                  className={`flex items-center justify-between p-2 rounded-xl cursor-pointer ${
+                    isSelected ? 'bg-primary/10 text-primary font-bold' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm shrink-0">{flag}</span>
+                    <div className="truncate">
+                      <p className="font-semibold truncate">{branch.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        {branch.code} • {branch.city}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 ms-2">
-                  {branch.is_headquarters && (
-                    <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                      HQ
-                    </Badge>
-                  )}
-                  {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
-                </div>
-              </DropdownMenuItem>
-            );
-          })}
+                  <div className="flex items-center gap-1.5 shrink-0 ms-2">
+                    {branch.is_headquarters && (
+                      <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
+                        HQ
+                      </Badge>
+                    )}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </div>
+                </DropdownMenuItem>
+              );
+            })
+          )}
         </div>
 
         <DropdownMenuSeparator />

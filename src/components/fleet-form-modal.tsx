@@ -4,11 +4,12 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Save, User, Camera, Upload, Trash2, Sparkles, Fuel } from 'lucide-react';
+import { X, Save, User, Camera, Upload, Trash2, Sparkles, Fuel, Building2 } from 'lucide-react';
 import { TruckIcon, TrailerIcon } from '@/components/icons/vehicle-icons';
 import type { Truck as TruckType, Driver, Trailer } from '@/types/database';
 import { DEFAULT_DRIVERS, DEFAULT_TRUCKS, DEFAULT_TRAILERS, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
+import { useBranchStore } from '@/lib/stores/branch-store';
 import { DriverAvatar } from '@/components/drivers/DriverAvatar';
 import { PRESET_DRIVER_AVATARS, compressImageFile, saveDriverPhotoLocal, resolveDriverPhoto } from '@/lib/driver-photos';
 import { CollapsibleSection } from '@/components/ui/collapsible-section';
@@ -37,6 +38,7 @@ export function FleetFormModal({
   onSave,
 }: FleetModalProps) {
   const { locale, dir, t } = useLanguage();
+  const availableBranches = useBranchStore((s) => s.availableBranches);
   const availableDrivers = fallbackArray(driversList, DEFAULT_DRIVERS);
   const availableTrucks = fallbackArray(trucksList, DEFAULT_TRUCKS);
   const availableTrailers = fallbackArray(trailersList, DEFAULT_TRAILERS);
@@ -74,6 +76,10 @@ export function FleetFormModal({
       const resolvedPhoto = (initialData as any)?.photo_url || resolveDriverPhoto(initialData as any) || '';
       setFormData({
         ...initialData,
+        home_branch_id:
+          (initialData as any)?.home_branch_id !== undefined && (initialData as any)?.home_branch_id !== null
+            ? Number((initialData as any).home_branch_id)
+            : undefined,
         fuel_consumption_rate:
           (initialData as any)?.fuel_consumption_rate !== undefined && (initialData as any)?.fuel_consumption_rate !== null
             ? (initialData as any).fuel_consumption_rate
@@ -91,6 +97,7 @@ export function FleetFormModal({
           fuel_consumption_rate: 36.0,
           default_driver_id: undefined,
           default_trailer_id: undefined,
+          home_branch_id: undefined,
         });
       } else if (entityType === 'driver') {
         setFormData({
@@ -187,6 +194,7 @@ export function FleetFormModal({
           weight_capacity: formData.weight_capacity ? parseFloat(formData.weight_capacity) : null,
           power: formData.power ? parseFloat(formData.power) : null,
           fuel_consumption_rate: formData.fuel_consumption_rate !== undefined && formData.fuel_consumption_rate !== '' ? parseFloat(formData.fuel_consumption_rate) : 36.0,
+          home_branch_id: formData.home_branch_id ? parseInt(String(formData.home_branch_id)) : null,
         };
       } else if (entityType === 'driver') {
         payload = {
@@ -253,7 +261,7 @@ export function FleetFormModal({
             {/* حقول الشاحنة */}
             {entityType === 'truck' && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('رقم اللوحة (Matricule) *', 'Numéro d\'immatriculation (Matricule) *')}</label>
                     <Input
@@ -283,6 +291,24 @@ export function FleetFormModal({
                       <option value="active">{t('جاهزة للعمل (Actif)', 'Disponible (Actif)')}</option>
                       <option value="in_maintenance">{t('في الصيانة (En maintenance)', 'En maintenance')}</option>
                       <option value="inactive">{t('متوقفة (Inactif)', 'Arrêté (Inactif)')}</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-primary" />
+                      <span>{t('الفرع المعتمد (Home Branch)', 'Agence d\'attachement')}</span>
+                    </label>
+                    <select
+                      value={formData.home_branch_id || ''}
+                      onChange={(e) => setFormData({ ...formData, home_branch_id: e.target.value ? Number(e.target.value) : undefined })}
+                      className="w-full h-10 px-3 py-2 border border-input bg-card rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary shadow-2xs transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                    >
+                      <option value="">{t('-- بدون فرع محدد (عام) --', '-- Sans agence spécifique (Général) --')}</option>
+                      {availableBranches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.country === 'MA' ? '🇲🇦' : branch.country === 'ES' ? '🇪🇸' : branch.country === 'FR' ? '🇫🇷' : '🏢'} {branch.name} ({branch.city})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

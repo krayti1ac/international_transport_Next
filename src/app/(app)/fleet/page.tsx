@@ -19,6 +19,7 @@ import {
   FileText,
   Upload,
   Fuel,
+  Building2,
 } from 'lucide-react';
 import { FleetFormModal } from '@/components/fleet-form-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
@@ -30,6 +31,7 @@ import { DEFAULT_TRUCKS, DEFAULT_DRIVERS, DEFAULT_TRAILERS, fallbackArray } from
 import { useFleetDataQuery } from '@/lib/query/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '@/components/language-provider';
+import { useBranchStore } from '@/lib/stores/branch-store';
 import { saveDriverWithUserAction } from '@/features/drivers/services/driver.actions';
 import { saveDriverPhotoLocal } from '@/lib/driver-photos';
 
@@ -42,10 +44,17 @@ export default function FleetPage() {
   const { data: fleetData, isLoading } = useFleetDataQuery();
   const queryClient = useQueryClient();
 
+  const { selectedBranchId, availableBranches } = useBranchStore();
+
   const trucks = fleetData?.trucks || [];
   const drivers = fleetData?.drivers || [];
   const trailers = fleetData?.trailers || [];
   const loading = isLoading;
+
+  const branchFilteredTrucks = useMemo(() => {
+    if (selectedBranchId === 'all') return trucks;
+    return trucks.filter((t) => t.home_branch_id === selectedBranchId);
+  }, [trucks, selectedBranchId]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [cardLayout, setCardLayout] = useCardViewMode('fleet', 'grid');
@@ -248,8 +257,8 @@ export default function FleetPage() {
     }
   };
 
-  const activeTrucksCount = trucks.filter((t) => t.status === 'active' || t.status === 'in_trip').length;
-  const inTripTrucksCount = trucks.filter((t) => t.status === 'in_trip').length;
+  const activeTrucksCount = branchFilteredTrucks.filter((t) => t.status === 'active' || t.status === 'in_trip').length;
+  const inTripTrucksCount = branchFilteredTrucks.filter((t) => t.status === 'in_trip').length;
   const currentEntityType: EntityType = activeTab === 'trucks' ? 'truck' : 'trailer';
 
   return (
@@ -357,6 +366,7 @@ export default function FleetPage() {
           >
             <TruckIcon className="w-3.5 h-3.5" />
             <span>{t('الشاحنات', 'Camions')} ({trucks.length})</span>
+            <span>{t('الشاحنات', 'Camions')} ({branchFilteredTrucks.length})</span>
           </button>
 
           <button
@@ -397,7 +407,7 @@ export default function FleetPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Trucks Tab */}
           {activeTab === 'trucks' &&
-            trucks
+            branchFilteredTrucks
               .filter(
                 (truck) =>
                   truck.plate_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -443,6 +453,20 @@ export default function FleetPage() {
                             const trl = trailers.find((t) => t.id === truck.default_trailer_id);
                             if (!trl) return <span className="text-muted-foreground">{t('غير مسندة', 'Non assignée')}</span>;
                             return <MatriculeBadge plate={trl.plate_number} variant="badge" size="xs" />;
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Building2 className="w-3.5 h-3.5 text-primary" />
+                          {t('الفرع المعتمد:', 'Agence :')}
+                        </span>
+                        <span className="font-semibold text-foreground text-[11px]">
+                          {(() => {
+                            const b = availableBranches.find((br) => br.id === truck.home_branch_id);
+                            if (!b) return <span className="text-muted-foreground">{t('غير محدد (عام)', 'Général')}</span>;
+                            const flag = b.country === 'MA' ? '🇲🇦' : b.country === 'ES' ? '🇪🇸' : b.country === 'FR' ? '🇫🇷' : '🏢';
+                            return `${flag} ${b.name}`;
                           })()}
                         </span>
                       </div>
@@ -611,7 +635,7 @@ export default function FleetPage() {
         <div className="flex flex-col gap-3">
           {/* Trucks List Cards */}
           {activeTab === 'trucks' &&
-            trucks
+            branchFilteredTrucks
               .filter(
                 (truck) =>
                   truck.plate_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -640,6 +664,18 @@ export default function FleetPage() {
 
                     {/* Middle: Driver, Trailer, Weight, Location */}
                     <div className="flex flex-wrap items-center gap-3 text-xs">
+                      {(() => {
+                        const b = availableBranches.find((br) => br.id === truck.home_branch_id);
+                        if (!b) return null;
+                        const flag = b.country === 'MA' ? '🇲🇦' : b.country === 'ES' ? '🇪🇸' : b.country === 'FR' ? '🇫🇷' : '🏢';
+                        return (
+                          <div className="bg-primary/5 text-primary px-3 py-1.5 rounded-xl border border-primary/20 flex items-center gap-1.5 font-semibold text-[11px]">
+                            <Building2 className="w-3.5 h-3.5 text-primary" />
+                            <span>{flag} {b.name}</span>
+                          </div>
+                        );
+                      })()}
+
                       <div className="bg-muted/30 px-3 py-1.5 rounded-xl border border-border/40 flex items-center gap-1.5">
                         <span className="text-muted-foreground text-[11px]">{t('السائق:', 'Chauffeur :')}</span>
                         <span className="font-semibold text-foreground">
