@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     }
 
     // 5. إرسال تنبيه مجمع للإدارة عبر WhatsApp عند توفر التوكن
-    if (process.env.WHATSAPP_API_TOKEN && (overdueInvoices?.length || expiringDocs?.length)) {
+    if ((process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY) && (overdueInvoices?.length || expiringDocs?.length)) {
       const summaryMsg = `⚠️ *تقرير التنبيهات الصباحية - Trans Bodanon*\n` +
         `• فواتير متأخرة جديدة: ${overdueInvoices?.length || 0}\n` +
         `• وثائق أسطول تشارف على الانتهاء: ${expiringDocs?.length || 0}\n` +

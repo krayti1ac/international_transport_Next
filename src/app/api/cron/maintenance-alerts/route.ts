@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const urgentItems = res.data.filter((s) => s.urgency === 'overdue' || s.urgency === 'due_soon');
 
-    if (urgentItems.length > 0 && process.env.WHATSAPP_API_TOKEN) {
+    if (urgentItems.length > 0 && (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY)) {
       const lines = [
         `⚠️ *تنبيه الصيانة الوقائية للأسطول - Trans Bodanon*`,
         `يوجد عدد (${urgentItems.length}) تنبيهات مستحقة:`,

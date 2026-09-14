@@ -66,7 +66,7 @@ export async function createFinePenalty(input: {
       .eq('id', input.driverId)
       .single<Driver>();
 
-    if (driver?.phone && process.env.WHATSAPP_API_TOKEN) {
+    if (driver?.phone && (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY)) {
       const msg = [
         `⚠️ *إشعار تسجيل مخالفة تشغيلية - Trans Bodanon*`,
         `السيد السائق: ${input.driverName}`,

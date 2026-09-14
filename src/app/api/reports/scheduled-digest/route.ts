@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     const recipientPhone = process.env.ADMIN_ALERT_PHONE;
-    if (recipientPhone && process.env.WHATSAPP_API_TOKEN) {
+    if (recipientPhone && (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY)) {
       const message = [
         `📊 *التقرير التنفيذي الشهري - Trans Bodanon*`,
         `📅 الفترة: من ${kpi.periodStart} إلى ${kpi.periodEnd}`,

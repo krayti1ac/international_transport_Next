@@ -48,7 +48,7 @@ export async function dispatchTripLifecycleNotifications(
       });
     }
 
-    if (client.phone && process.env.WHATSAPP_API_TOKEN) {
+    if (client.phone && (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY)) {
       let message = '';
       if (eventType === 'delivery_completed') {
         message = `مرحباً ${client.name}،\n\nنود إشعاركم بأنه قد تم تسليم شحنتكم الخاصة بالرحلة (#${trip.id}) بنجاح تام.\n\nالمسار: ${trip.route}\nرابط إثبات التسليم المباشر:\n${trackingLink}\n\nشكراً لثقتكم بشركة Trans Bodanon.`;
