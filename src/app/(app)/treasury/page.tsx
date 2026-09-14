@@ -197,6 +197,17 @@ export default function TreasuryPage() {
     }
   };
 
+  const getTxTypeText = (type: string) => {
+    const types: Record<string, string> = {
+      deposit: t('إيداع', 'Dépôt', 'Deposit'),
+      withdrawal: t('سحب', 'Retrait', 'Withdrawal'),
+      trip_revenue: t('إيراد رحلة', 'Revenu de trajet', 'Trip Revenue'),
+      expense: t('مصروف تشغيلي', 'Dépense opérationnelle', 'Operating Expense'),
+      payment: t('دفعة عميل', 'Paiement client', 'Client Payment')
+    };
+    return types[type] || type;
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto" dir={dir}>
       {/* Header */}

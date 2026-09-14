@@ -17,6 +17,7 @@ import {
   Clock,
   RefreshCw,
   Gauge,
+  DollarSign,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
@@ -89,6 +90,20 @@ export default function MaintenancePage() {
     return { overdue, dueSoon, total };
   }, [schedules]);
 
+  const totalMaintenanceCost = useMemo(() => {
+    return records.reduce((acc, r) => acc.plus(new Decimal(r.amount || 0)), new Decimal(0)).toNumber();
+  }, [records]);
+
+  const getMaintenanceType = (type: string) => {
+    const types: Record<string, string> = {
+      preventive: t('صيانة وقائية', 'Maintenance préventive', 'Preventive Maintenance'),
+      repair: t('إصلاح أعطال', 'Réparation', 'Repair'),
+      tires: t('تغيير إطارات', 'Changement de pneus', 'Tire Replacement'),
+      oil: t('تغيير زيت / تشحيم', 'Vidange / Lubrification', 'Oil Change / Lubrication')
+    };
+    return types[type] || type;
+  };
+
   return (
     <div className="space-y-6 pb-12" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -114,7 +129,7 @@ export default function MaintenancePage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         <Card className="border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
@@ -152,6 +167,34 @@ export default function MaintenancePage() {
               <p className="text-xs text-muted-foreground">{t('إجمالي العمليات المجدولة', 'Total des tâches programmées')}</p>
               <p className="text-xl font-bold font-mono text-foreground mt-0.5">
                 {scheduleStats.total} {t('مهام', 'tâches')}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+              <Wrench className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t('شاحنات في الورشة', 'Camions au garage', 'Trucks in Workshop')}</p>
+              <p className="text-xl font-bold font-mono text-foreground mt-0.5">
+                {trucks.length} {t('شاحنة', 'camions', 'trucks')}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
+              <DollarSign className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t('تكلفة الصيانة الإجمالية', 'Coût total de maintenance', 'Total Maintenance Cost')}</p>
+              <p className="text-xl font-bold font-mono text-foreground mt-0.5">
+                {formatCurrency(totalMaintenanceCost, 'MAD')}
               </p>
             </div>
           </CardContent>
@@ -294,7 +337,7 @@ export default function MaintenancePage() {
                           <td className="py-3 px-4 font-mono font-bold">
                             {truck ? <MatriculeBadge plate={truck.plate_number} variant="badge" size="xs" /> : `${t('شاحنة #', 'Camion #')}${rec.truck_id}`}
                           </td>
-                          <td className="py-3 px-4 font-medium">{rec.expense_type || rec.type || t('صيانة عامة', 'Entretien général')}</td>
+                          <td className="py-3 px-4 font-medium">{getMaintenanceType(rec.expense_type || rec.type || '')}</td>
                           <td className="py-3 px-4 font-mono">{rec.maintenance_date || rec.date || '—'}</td>
                           <td className="py-3 px-4 font-mono font-bold text-rose-600" dir="ltr">
                             -{formatCurrency(rec.amount, rec.currency || 'MAD')}

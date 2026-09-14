@@ -1,149 +1,173 @@
 import * as XLSX from 'xlsx';
 
-export interface ImportValidationResult<T> {
-  validData: T[];
-  errors: { row: number; reasons: string[] }[];
+export type ImportRow = Record<string, unknown>;
+
+export interface BulkImportResult {
+  success: boolean;
   totalRows: number;
+  validRows: ImportRow[];
+  invalidRows: { row: number; errors: string[]; data: ImportRow }[];
+  headers: string[];
 }
 
-export interface ImportedClient {
-  name: string;
-  ice_number?: string;
-  client_type: 'export' | 'import' | 'both';
-  currency: 'MAD' | 'EUR';
-  address?: string;
-  contact_number?: string;
+export interface ValidationOptions {
+  requiredFields: string[];
+  fieldValidators?: Record<string, (value: unknown) => string | null>;
+  headerAliases?: Record<string, string[]>;
 }
 
-export interface ImportedTruck {
-  plate_number: string;
-  brand?: string;
-  model?: string;
-  status: 'active' | 'inactive' | 'maintenance' | 'in_transit';
-}
+const normalizeHeader = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
 
-// 1. قارئ الملفات العام (يستقبل File ويخرج JSON)
-export async function readExcelFile(file: File): Promise<Record<string, unknown>[]> {
+const normalizeCellValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) return String(value);
+    return String(value);
+  }
+  return String(value).trim();
+};
+
+const resolveFieldName = (rawHeader: string, aliases?: Record<string, string[]>): string | null => {
+  const normalized = rawHeader.toLowerCase();
+  if (aliases) {
+    for (const [canonical, variants] of Object.entries(aliases)) {
+      const all = [canonical.toLowerCase(), ...variants.map((v) => v.toLowerCase())];
+      if (all.includes(normalized)) return canonical;
+    }
+  }
+  return normalized || null;
+};
+
+export const parseExcelFile = (file: File): Promise<BulkImportResult> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = () => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // تحويل البيانات إلى JSON متجاوزاً الأسطر الفارغة
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
-        resolve(jsonData);
+        const workbook = XLSX.read(reader.result as string, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) {
+          return resolve({
+            success: false,
+            totalRows: 0,
+            validRows: [],
+            invalidRows: [],
+            headers: [],
+          });
+        }
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+          defval: '',
+          raw: false,
+        });
+
+        const headers = Object.keys(jsonData[0] || {}).map(normalizeHeader);
+        resolve({
+          success: true,
+          totalRows: jsonData.length,
+          validRows: jsonData,
+          invalidRows: [],
+          headers,
+        });
       } catch {
-        reject(new Error('فشل قراءة ملف الإكسيل. تأكد من صحة الصيغة (.xlsx أو .csv)'));
+        reject(new Error('فشل في قراءة الملف. يرجى التأكد من صيغة الملف (Excel/CSV).'));
       }
     };
-    reader.onerror = () => reject(new Error('خطأ في قراءة الملف'));
-    reader.readAsArrayBuffer(file);
+    reader.onerror = () => reject(new Error('حدث خطأ أثناء قراءة الملف.'));
+    reader.readAsBinaryString(file);
   });
-}
+};
 
-// 2. مدقق ومترجم بيانات العملاء
-export function validateClientsImport(rawData: Record<string, unknown>[]): ImportValidationResult<ImportedClient> {
-  const validData: ImportedClient[] = [];
-  const errors: { row: number; reasons: string[] }[] = [];
+export const validateRows = (
+  rows: ImportRow[],
+  options: ValidationOptions
+): BulkImportResult => {
+  const { requiredFields, fieldValidators = {}, headerAliases = {} } = options;
+  const validRows: ImportRow[] = [];
+  const invalidRows: { row: number; errors: string[]; data: ImportRow }[] = [];
+  const canonicalHeaders = Object.keys(headerAliases);
 
-  rawData.forEach((row, index) => {
-    const rowNum = index + 2; // +2 لأن الصف 1 هو العناوين و index يبدأ من 0
-    const rowErrors: string[] = [];
+  rows.forEach((rawRow, index) => {
+    const rowNumber = index + 2;
+    const normalizedRow: ImportRow = {};
+    const errors: string[] = [];
+    const seenCanonical = new Set<string>();
 
-    // دعم مرن للعناوين باللغات الثلاث
-    const name = row['الاسم'] || row['Name'] || row['Nom'];
-    const ice = row['ICE'] || row['رقم التعريف'] || row['Identifiant'];
-    const type = row['النوع'] || row['Type'];
-    const currency = row['العملة'] || row['Currency'] || row['Devise'];
-    const address = row['العنوان'] || row['Address'] || row['Adresse'];
-    const phone = row['الهاتف'] || row['Phone'] || row['Téléphone'];
-
-    if (!name || String(name).trim() === '') {
-      rowErrors.push('اسم العميل مفقود (Name is required)');
+    for (const [key, value] of Object.entries(rawRow)) {
+      const rawHeader = normalizeHeader(key);
+      if (!rawHeader) continue;
+      const canonical = resolveFieldName(rawHeader, headerAliases);
+      if (!canonical || seenCanonical.has(canonical)) continue;
+      seenCanonical.add(canonical);
+      normalizedRow[canonical] = normalizeCellValue(value);
     }
-    
-    // فحص صارم لـ ICE المغربي (15 رقم متصل)
-    if (ice && String(ice).trim() !== '') {
-      const iceStr = String(ice).trim().replace(/\s/g, '');
-      if (!/^\d{15}$/.test(iceStr)) {
-        rowErrors.push(`رقم ICE غير صالح (${iceStr}). يجب أن يتكون من 15 رقماً بالضبط.`);
+
+    for (const field of requiredFields) {
+      const value = normalizedRow[field];
+      if (!value || String(value).trim() === '') {
+        const aliases = headerAliases[field] || [];
+        const display = [field, ...aliases].filter(Boolean).join(' / ');
+        errors.push(`الحقل المطلوب "${display}" فارغ`);
       }
     }
 
-    // مطابقة نوع العميل
-    let clientType: 'export' | 'import' | 'both' = 'both';
-    const typeStr = String(type || '').toLowerCase();
-    if (typeStr.includes('export') || typeStr.includes('تصدير')) clientType = 'export';
-    else if (typeStr.includes('import') || typeStr.includes('استيراد')) clientType = 'import';
-
-    // مطابقة العملة
-    let clientCurrency: 'MAD' | 'EUR' = 'MAD';
-    const currStr = String(currency || '').toUpperCase();
-    if (currStr.includes('EUR') || currStr.includes('يورو') || currStr.includes('€')) clientCurrency = 'EUR';
-
-    if (rowErrors.length > 0) {
-      errors.push({ row: rowNum, reasons: rowErrors });
-    } else {
-      validData.push({
-        name: String(name).trim(),
-        ice_number: ice ? String(ice).trim().replace(/\s/g, '') : undefined,
-        client_type: clientType,
-        currency: clientCurrency,
-        address: address ? String(address).trim() : undefined,
-        contact_number: phone ? String(phone).trim() : undefined,
-      });
-    }
-  });
-
-  return { validData, errors, totalRows: rawData.length };
-}
-
-// 3. مدقق ومترجم بيانات الأسطول (الشاحنات)
-export function validateTrucksImport(rawData: Record<string, unknown>[]): ImportValidationResult<ImportedTruck> {
-  const validData: ImportedTruck[] = [];
-  const errors: { row: number; reasons: string[] }[] = [];
-
-  rawData.forEach((row, index) => {
-    const rowNum = index + 2;
-    const rowErrors: string[] = [];
-
-    const plate = row['رقم اللوحة'] || row['Plate'] || row['Matricule'];
-    const brand = row['العلامة التجارية'] || row['Brand'] || row['Marque'];
-    const model = row['الموديل'] || row['Model'] || row['Modèle'];
-    const status = row['الحالة'] || row['Status'] || row['Statut'];
-
-    if (!plate || String(plate).trim() === '') {
-      rowErrors.push('رقم اللوحة مفقود (Plate number is required)');
-    } else {
-      const plateStr = String(plate).trim();
-      if (plateStr.length < 4) {
-        rowErrors.push('تنسيق رقم اللوحة قصير جداً أو غير صالح');
+    for (const [field, validator] of Object.entries(fieldValidators)) {
+      const value = normalizedRow[field];
+      if (value && String(value).trim() !== '') {
+        const issue = validator(value);
+        if (issue) errors.push(issue);
       }
     }
 
-    // مطابقة حالة الشاحنة
-    let truckStatus: 'active' | 'inactive' | 'maintenance' | 'in_transit' = 'active';
-    const statStr = String(status || '').toLowerCase();
-    if (statStr.includes('inactive') || statStr.includes('متوقف')) truckStatus = 'inactive';
-    else if (statStr.includes('maintenance') || statStr.includes('صيانة') || statStr.includes('ورشة')) truckStatus = 'maintenance';
-    else if (statStr.includes('transit') || statStr.includes('طريق') || statStr.includes('رحلة')) truckStatus = 'in_transit';
-
-    if (rowErrors.length > 0) {
-      errors.push({ row: rowNum, reasons: rowErrors });
+    if (errors.length > 0) {
+      invalidRows.push({ row: rowNumber, errors, data: normalizedRow });
     } else {
-      validData.push({
-        plate_number: String(plate).trim(),
-        brand: brand ? String(brand).trim() : undefined,
-        model: model ? String(model).trim() : undefined,
-        status: truckStatus,
-      });
+      validRows.push(normalizedRow);
     }
   });
 
-  return { validData, errors, totalRows: rawData.length };
-}
+  return {
+    success: invalidRows.length === 0,
+    totalRows: rows.length,
+    validRows,
+    invalidRows,
+    headers: canonicalHeaders,
+  };
+};
 
+export const validateMoroccanPlate = (value: unknown): string | null => {
+  const plate = String(value).trim();
+  if (!plate) return null;
+  if (!/^\d{1,6}-\d{1,4}-[A-Za-z]{1,3}$/.test(plate)) {
+    return 'صيغة لوحة التسجيل غير صحيحة. استخدم الصيغة: 12345-67-89';
+  }
+  return null;
+};
+
+export const validateICE = (value: unknown): string | null => {
+  const ice = String(value).trim();
+  if (!ice) return null;
+  const digits = ice.replace(/\s/g, '');
+  if (!/^\d{15}$/.test(digits)) {
+    return 'رقم ICE يجب أن يتكون من 15 رقماً بالضبط';
+  }
+  return null;
+};
+
+export const validateEmail = (value: unknown): string | null => {
+  const email = String(value).trim();
+  if (!email) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return 'عنوان البريد الإلكتروني غير صحيح';
+  }
+  return null;
+};
+
+export const validatePhone = (value: unknown): string | null => {
+  const phone = String(value).trim();
+  if (!phone) return null;
+  if (!/^\+?[0-9\s-]{7,20}$/.test(phone)) {
+    return 'رقم الهاتف غير صحيح';
+  }
+  return null;
+};

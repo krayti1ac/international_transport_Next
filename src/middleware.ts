@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { isRouteAllowed, ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
+import { verifySession } from '@/lib/session';
 import type { UserRole } from '@/types/database';
 
 export async function middleware(request: NextRequest) {
@@ -61,16 +62,24 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // فحص الجلسة المحلية/الاحتياطية إن وجدت (للتوافق مع وضع الأوفلاين وبيئات العمل المشتركة)
+  // فحص الجلسة المحلية/الاحتياطية الموقّعة إن وجدت (للتوافق مع وضع الأوفلاين)
   const userSessionCookie = request.cookies.get('app_user_session')?.value;
-  let customSession: { id: string; email: string; name?: string; role: string; is_active?: boolean } | null = null;
+  let customSession: { sub: string; email?: string; name?: string; role: string; companyId?: number | null; isActive?: boolean } | null = null;
   if (userSessionCookie) {
     try {
-      customSession = JSON.parse(decodeURIComponent(userSessionCookie));
+      const verified = await verifySession(decodeURIComponent(userSessionCookie));
+      if (verified) {
+        customSession = {
+          sub: verified.sub,
+          email: verified.email,
+          name: verified.name,
+          role: verified.role,
+          companyId: verified.companyId,
+          isActive: verified.isActive,
+        };
+      }
     } catch {
-      try {
-        customSession = JSON.parse(userSessionCookie);
-      } catch {}
+      customSession = null;
     }
   }
 
@@ -100,13 +109,13 @@ export async function middleware(request: NextRequest) {
       }
     } else if (customSession) {
       role = (customSession.role as UserRole) || 'driver';
-      if (customSession.is_active === false) {
+      if (customSession.isActive === false) {
         isActive = false;
       }
     }
   } else if (customSession) {
     role = (customSession.role as UserRole) || 'driver';
-    if (customSession.is_active === false) {
+    if (customSession.isActive === false) {
       isActive = false;
     }
   }

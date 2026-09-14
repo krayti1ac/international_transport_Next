@@ -1,6 +1,5 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
@@ -16,6 +15,7 @@ import {
 } from '../schemas/company.schema';
 import type { Company, CompanyDevice } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
+import { requireSuperAdmin } from '@/lib/rbac';
 import nodemailer from 'nodemailer';
 import imaps from 'imap-simple';
 
@@ -26,80 +26,6 @@ function getAdminClient() {
   return createSupabaseJsClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-}
-
-/**
- * التحقق الصارم من هوية ودور المشرف العام للمنظومة (Super Admin)
- */
-async function verifySuperAdminAction(): Promise<{ isAuthorized: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let role: string | null = null;
-  let isActive = true;
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role, is_active')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profile) {
-      role = profile.role;
-      if (profile.is_active === false) isActive = false;
-    } else {
-      const adminClient = getAdminClient();
-      if (adminClient) {
-        const { data: adminProfile } = await adminClient
-          .from('users')
-          .select('role, is_active')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (adminProfile) {
-          role = adminProfile.role;
-          if (adminProfile.is_active === false) isActive = false;
-        }
-      }
-    }
-  }
-
-  // فحص الكوكيز الاحتياطية للجلسة في وضع الأوفلاين
-  if (!role) {
-    try {
-      const cookieStore = await cookies();
-      const sessionCookie = cookieStore.get('app_user_session')?.value;
-      if (sessionCookie) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-          role = parsed.role || null;
-          if (parsed.is_active === false) isActive = false;
-        } catch {
-          const parsed = JSON.parse(sessionCookie);
-          role = parsed.role || null;
-          if (parsed.is_active === false) isActive = false;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (!user && !role) {
-    return { isAuthorized: false, error: 'غير مصرح لك بالوصول (يجب تسجيل الدخول)' };
-  }
-
-  if (!isActive) {
-    return { isAuthorized: false, error: 'الحساب معطل أو غير نشط' };
-  }
-
-  if (role !== 'super_admin') {
-    return { isAuthorized: false, error: 'غير مصرح: هذه العملية مخصصة حصرياً للمشرف العام' };
-  }
-
-  return { isAuthorized: true };
 }
 
 /**
@@ -142,9 +68,11 @@ export async function getCompaniesAction(): Promise<{
   error?: string;
 }> {
   try {
-    const authCheck = await verifySuperAdminAction();
-    if (!authCheck.isAuthorized) {
-      return { success: false, error: authCheck.error };
+    try {
+      await requireSuperAdmin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
     }
 
     const supabase = await createClient();
@@ -348,9 +276,11 @@ export async function createCompanyAction(
       return { success: false, error: parsed.error.issues[0]?.message || 'بيانات غير صالحة' };
     }
 
-    const authCheck = await verifySuperAdminAction();
-    if (!authCheck.isAuthorized) {
-      return { success: false, error: authCheck.error };
+    try {
+      await requireSuperAdmin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
     }
 
     const supabase = await createClient();
@@ -498,9 +428,11 @@ export async function updateCompanyAction(
       return { success: false, error: parsed.error.issues[0]?.message || 'بيانات غير صالحة' };
     }
 
-    const authCheck = await verifySuperAdminAction();
-    if (!authCheck.isAuthorized) {
-      return { success: false, error: authCheck.error };
+    try {
+      await requireSuperAdmin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
     }
 
     const supabase = await createClient();
@@ -633,9 +565,11 @@ export async function toggleCompanyStatusAction(
   isActive: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const authCheck = await verifySuperAdminAction();
-    if (!authCheck.isAuthorized) {
-      return { success: false, error: authCheck.error };
+    try {
+      await requireSuperAdmin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
     }
 
     const supabase = await createClient();
@@ -953,12 +887,14 @@ export async function testCompanyEmailConnectionAction(
   error?: string;
 }> {
   try {
-    const authCheck = await verifySuperAdminAction();
-    if (!authCheck.isAuthorized) {
+    try {
+      await requireSuperAdmin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
       return {
         success: false,
         smtpVerified: false,
-        error: authCheck.error,
+        error: message,
       };
     }
 

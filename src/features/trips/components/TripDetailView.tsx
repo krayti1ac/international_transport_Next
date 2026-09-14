@@ -14,12 +14,14 @@ import type {
   Truck,
   Trailer,
   TransportRoute,
+  Invoice,
 } from '@/types/database';
 import {
   FileText,
   ShieldCheck,
   DollarSign,
   RefreshCw,
+  Receipt,
 } from 'lucide-react';
 
 import { TripHeader } from './TripHeader';
@@ -28,6 +30,7 @@ import { TripFleetCrew } from './TripFleetCrew';
 import { TripDocumentsTab } from './tabs/TripDocumentsTab';
 import { TripPodTab } from './tabs/TripPodTab';
 import { TripProfitabilityTab } from './tabs/TripProfitabilityTab';
+import { TripInvoicesTab } from './tabs/TripInvoicesTab';
 import { TripFormModal } from '@/components/trip-form-modal';
 
 interface TripDetailViewProps {
@@ -47,6 +50,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   const [truck, setTruck] = useState<Truck | null>(null);
   const [trailer, setTrailer] = useState<Trailer | null>(null);
   const [financials, setFinancials] = useState<TripFinancialSummary | null>(null);
+  const [tripInvoices, setTripInvoices] = useState<Invoice[]>([]);
 
   // Collections for TripFormModal
   const [allClients, setAllClients] = useState<Client[]>([]);
@@ -122,7 +126,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         setAllRoutes((routesListRes.data as TransportRoute[]) || []);
 
         // Financials calculations data
-        const [advancesRes, fuelRes, finesRes, ferriesRes] = await Promise.all([
+        const [advancesRes, fuelRes, finesRes, ferriesRes, invoicesRes] = await Promise.all([
           tData.driver_id
             ? supabase.from('advances').select('*').eq('driver_id', tData.driver_id)
             : Promise.resolve({ data: [] }),
@@ -131,6 +135,11 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             : Promise.resolve({ data: [] }),
           supabase.from('fine_penalties').select('*').eq('trip_order_id', tripId),
           supabase.from('ferry_expenses').select('*').eq('trip_order_id', tripId),
+          supabase
+            .from('invoices')
+            .select('*')
+            .eq('trip_order_id', tripId)
+            .order('issue_date', { ascending: false }),
         ]);
 
         const fuelRecords = ((fuelRes.data || []) as Array<{
@@ -159,6 +168,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         });
 
         setFinancials(calc);
+        setTripInvoices((invoicesRes.data as Invoice[]) || []);
       } catch (err: unknown) {
         const message =
           err instanceof Error
@@ -190,6 +200,11 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'delivery_signatures', filter: `trip_order_id=eq.${tripId}` },
+        () => fetchData(true)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices', filter: `trip_order_id=eq.${tripId}` },
         () => fetchData(true)
       )
       .subscribe();
@@ -264,39 +279,49 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         trailer={trailer}
       />
 
-      {/* 4. Specialized Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full sm:w-auto grid-cols-3 h-12 rounded-2xl mb-6 bg-muted/60 p-1">
-          <TabsTrigger value="documents" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
-            <FileText className="w-4 h-4" />
-            <span>{t('المستندات والعبور', 'Documents & Transit')}</span>
-          </TabsTrigger>
+        {/* 4. Specialized Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full sm:w-auto grid-cols-4 h-12 rounded-2xl mb-6 bg-muted/60 p-1">
+            <TabsTrigger value="documents" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
+              <FileText className="w-4 h-4" />
+              <span>{t('المستندات والعبور', 'Documents & Transit')}</span>
+            </TabsTrigger>
 
-          <TabsTrigger value="pod" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
-            <ShieldCheck className="w-4 h-4" />
-            <span>{t('إثبات التسليم (POD)', 'Preuve de Livraison (POD)')}</span>
-          </TabsTrigger>
+            <TabsTrigger value="pod" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
+              <ShieldCheck className="w-4 h-4" />
+              <span>{t('إثبات التسليم (POD)', 'Preuve de Livraison (POD)')}</span>
+            </TabsTrigger>
 
-          <TabsTrigger value="financials" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
-            <DollarSign className="w-4 h-4" />
-            <span>{t('كشف الربحية (P&L)', 'Rentabilité (P&L)')}</span>
-          </TabsTrigger>
-        </TabsList>
+            <TabsTrigger value="invoices" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
+              <Receipt className="w-4 h-4" />
+              <span>{t('الفواتير والتحصيل', 'Factures & Encaissements')}</span>
+            </TabsTrigger>
+
+            <TabsTrigger value="financials" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
+              <DollarSign className="w-4 h-4" />
+              <span>{t('كشف الربحية (P&L)', 'Rentabilité (P&L)')}</span>
+            </TabsTrigger>
+          </TabsList>
 
         {/* Tab 1: Documents & Maritime Transit */}
         <TabsContent value="documents" className="space-y-4">
           <TripDocumentsTab trip={trip} />
         </TabsContent>
 
-        {/* Tab 2: Proof of Delivery (e-POD) */}
-        <TabsContent value="pod" className="space-y-4">
-          <TripPodTab trip={trip} />
-        </TabsContent>
+          {/* Tab 2: Proof of Delivery (e-POD) */}
+          <TabsContent value="pod" className="space-y-4">
+            <TripPodTab trip={trip} />
+          </TabsContent>
 
-        {/* Tab 3: Financial Profitability (P&L) */}
-        <TabsContent value="financials" className="space-y-4">
-          <TripProfitabilityTab financials={financials} trip={trip} />
-        </TabsContent>
+          {/* Tab 3: Invoices linked to this trip */}
+          <TabsContent value="invoices" className="space-y-4">
+            <TripInvoicesTab invoices={tripInvoices} />
+          </TabsContent>
+
+          {/* Tab 4: Financial Profitability (P&L) */}
+          <TabsContent value="financials" className="space-y-4">
+            <TripProfitabilityTab financials={financials} trip={trip} />
+          </TabsContent>
       </Tabs>
 
       {/* Edit Trip Modal */}

@@ -15,6 +15,7 @@ import {
 } from '../schemas/user.schema';
 import type { User } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
+import { requirePermission } from '@/lib/rbac';
 import { sendDomainEmail } from '@/lib/email-smtp';
 
 function getAdminClient() {
@@ -180,6 +181,13 @@ async function checkUsernameOrEmailConflict(
 
 export async function getUsersAction(): Promise<{ success: boolean; data?: User[]; error?: string }> {
   try {
+    try {
+      await requirePermission('users:manage');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
+    }
+
     const supabase = await createClient();
     const adminClient = getAdminClient();
     const { currentCompanyId, isSuperAdmin } = await getCurrentUserContext(supabase, adminClient);
@@ -242,6 +250,13 @@ export async function createUserAction(rawInput: CreateUserInput): Promise<{
   emailRecipient?: string;
 }> {
   try {
+    try {
+      await requirePermission('users:manage');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'غير مصرح لك بالوصول';
+      return { success: false, error: message };
+    }
+
     const input = createUserSchema.parse(rawInput);
     const supabase = await createClient();
     const adminClient = getAdminClient();

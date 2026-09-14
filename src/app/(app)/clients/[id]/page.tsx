@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
-  return <ClientDetailView clientId={parseInt(resolvedParams.id, 10)} />;
   const clientId = parseInt(resolvedParams.id, 10);
 
   if (isNaN(clientId) || clientId <= 0) {

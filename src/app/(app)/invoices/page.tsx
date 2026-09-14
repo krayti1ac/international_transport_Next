@@ -253,7 +253,7 @@ function InvoicesPageContent() {
     return false;
   }, []);
 
-  const getStatusText = (statusOrInvoice: Invoice | string) => {
+  const getInvoiceStatus = (statusOrInvoice: Invoice | string) => {
     const isObj = typeof statusOrInvoice === 'object' && statusOrInvoice !== null;
     const status = isObj ? statusOrInvoice.status : statusOrInvoice;
     if (isObj && isInvoiceOverdue(statusOrInvoice) && status !== 'paid') {
@@ -272,6 +272,8 @@ function InvoicesPageContent() {
         return status || t('غير محدد', 'Non défini');
     }
   };
+
+  const getStatusText = getInvoiceStatus;
 
   const getStatusColor = (statusOrInvoice: Invoice | string) => {
     const isObj = typeof statusOrInvoice === 'object' && statusOrInvoice !== null;
@@ -337,7 +339,7 @@ function InvoicesPageContent() {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{t('الإدارة المالية والمحاسبة', 'Gestion Financière & Comptabilité')}</span>
+            <span>{t('إدارة الفواتير والتحصيل', 'Gestion des factures et encaissements', 'Invoices & Collections')}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold font-amiri tracking-tight text-foreground">
             {t('الفواتير وطلبات الدفع الدولية', 'Factures & Demandes de Paiement')}
@@ -396,7 +398,7 @@ function InvoicesPageContent() {
             className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-3.5 transition-all gap-1.5"
           >
             <Plus className="w-4 h-4" />
-            {t('إنشاء فاتورة جديدة', 'Nouvelle facture')}
+             {t('فاتورة جديدة', 'Nouvelle facture', 'New Invoice')}
           </Button>
         </div>
       </div>
@@ -515,7 +517,7 @@ function InvoicesPageContent() {
               <div className="relative flex-1">
                 <Search className={`absolute ${dir === 'rtl' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4`} />
                 <Input
-                   placeholder={t('بحث برقم الفاتورة أو الحالة أو العميل...', 'Rechercher par n° de facture, statut ou client...', 'Search by invoice number, status, or client...')}
+                    placeholder={t('بحث برقم الفاتورة أو العميل...', 'Rechercher par n° de facture ou client...', 'Search by invoice number or client...')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className={`${dir === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'} h-9 text-xs rounded-xl bg-card border-border/80`}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,7 +22,9 @@ import { ClientKpiBento } from './ClientKpiBento';
 import { ClientInvoicesTab } from './tabs/ClientInvoicesTab';
 import { ClientPaymentsTab } from './tabs/ClientPaymentsTab';
 import { ClientTripsTab } from './tabs/ClientTripsTab';
+import { ClientStatementTab } from './tabs/ClientStatementTab';
 import { FifoPaymentModal } from './FifoPaymentModal';
+import { createClient } from '@/lib/supabase/client';
 
 interface ClientDetailViewProps {
   clientId: number;
@@ -31,7 +33,9 @@ interface ClientDetailViewProps {
 export function ClientDetailView({ clientId }: ClientDetailViewProps) {
   const { t, dir } = useLanguage();
   const [isFifoModalOpen, setIsFifoModalOpen] = useState(false);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const { startDate, endDate } = useFiscalStore();
+  const supabase = useMemo(() => createClient(), []);
 
   const {
     data: statement,
@@ -40,6 +44,61 @@ export function ClientDetailView({ clientId }: ClientDetailViewProps) {
     error,
     refetch,
   } = useClientStatement(clientId, startDate, endDate);
+
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    channel = supabase
+      .channel(`client-detail-${clientId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices',
+          filter: `client_id=eq.${clientId}`,
+        },
+        () => {
+          refetch();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payment_invoice_allocations',
+        },
+        () => {
+          refetch();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trip_orders',
+          filter: `client_id=eq.${clientId}`,
+        },
+        () => {
+          refetch();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeConnected(true);
+        } else {
+          setIsRealtimeConnected(false);
+        }
+      });
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [clientId, refetch, supabase]);
 
   if (isLoading) {
     return (
@@ -88,6 +147,16 @@ export function ClientDetailView({ clientId }: ClientDetailViewProps) {
           {dir === 'rtl' ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
           <span>{t('العودة إلى قائمة العملاء', 'Retour à la liste des clients')}</span>
         </Link>
+
+        {isRealtimeConnected && (
+          <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            {t('مباشر', 'Temps réel')}
+          </span>
+        )}
       </div>
 
       {/* 1. Client Profile & Tax Header */}
@@ -108,11 +177,16 @@ export function ClientDetailView({ clientId }: ClientDetailViewProps) {
 
       {/* 4. Operational Tabs (Invoices, Payments, Trips) */}
       <Tabs defaultValue="invoices" className="w-full space-y-4">
-        <TabsList className="grid w-full sm:w-auto grid-cols-3 h-12 rounded-xl p-1 bg-muted/60 border border-border">
+        <TabsList className="grid w-full sm:w-auto grid-cols-4 h-12 rounded-xl p-1 bg-muted/60 border border-border">
           <TabsTrigger value="invoices" className="rounded-lg text-xs sm:text-sm gap-2">
             <FileText className="w-4 h-4" />
             <span>{t('سجل الفواتير', 'Factures')}</span>
             <span className="font-mono text-[11px] opacity-75">({invoices.length})</span>
+          </TabsTrigger>
+
+          <TabsTrigger value="statement" className="rounded-lg text-xs sm:text-sm gap-2">
+            <FileText className="w-4 h-4" />
+            <span>{t('كشف الحساب', 'Relevé')}</span>
           </TabsTrigger>
 
           <TabsTrigger value="payments" className="rounded-lg text-xs sm:text-sm gap-2">
@@ -131,6 +205,18 @@ export function ClientDetailView({ clientId }: ClientDetailViewProps) {
         {/* Invoices Tab */}
         <TabsContent value="invoices" className="focus-visible:outline-hidden">
           <ClientInvoicesTab invoices={invoices} client={client} />
+        </TabsContent>
+
+        {/* Statement Tab */}
+        <TabsContent value="statement" className="focus-visible:outline-hidden">
+          <ClientStatementTab
+            client={client}
+            invoices={invoices}
+            payments={payments}
+            trips={trips}
+            startDate={startDate}
+            endDate={endDate}
+          />
         </TabsContent>
 
         {/* Payments Tab */}

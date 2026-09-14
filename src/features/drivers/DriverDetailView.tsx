@@ -33,6 +33,7 @@ import {
     Banknote,
     Receipt,
     ExternalLink,
+    Siren,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import { useLanguage } from '@/components/language-provider';
@@ -270,6 +271,24 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
                     </Button>
                 </div>
             </div>
+
+            {visa && visa.daysLeft != null && visa.daysLeft <= 30 && (
+                <div className={`rounded-2xl border p-4 flex items-start gap-3 ${visa.daysLeft < 0 ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'}`}>
+                    <Siren className={`w-5 h-5 shrink-0 mt-0.5 ${visa.daysLeft < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+                    <div className="flex-1">
+                        <p className="text-sm font-bold">
+                            {visa.daysLeft < 0
+                                ? t('تنبيه حرج: التأشيرة منتهية الصلاحية', 'Alerte critique: Visa expiré')
+                                : t('تنبيه: تأشيرة شنغن على وشك الانتهاء', 'Alerte: Visa Schengen sur le point d\'expirer')}
+                        </p>
+                        <p className="text-xs mt-1 opacity-90">
+                            {visa.daysLeft < 0
+                                ? t('السائق ممنوع حالياً من السفر دولياً. يرجى تجديد التأشيرة فوراً.', 'Le chauffeur est actuellement interdit de voyage international. Veuillez renouveler le visa immédiatement.')
+                                : t(`متبقي ${visa.daysLeft} يوم على انتهاء صلاحية التأشيرة. يرجى اتخاذ الإجراءات اللازمة قبل تاريخ الانتهاء لضمان استمرارية الرحلات.`, `Il reste ${visa.daysLeft} jours avant l'expiration du visa. Veuillez prendre les mesures nécessaires avant la date d'expiration pour assurer la continuité des trajets.`)}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <PeriodFilterBar onFilterChange={fetchAll} />
 
