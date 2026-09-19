@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, DollarSign, RefreshCw, Landmark, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Calendar, DollarSign, RefreshCw, Landmark, ArrowRight, ShieldCheck, Upload } from 'lucide-react';
 import type { FleetDocument, CashBox } from '@/types/database';
 import { DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
 import { useLanguage } from '@/components/language-provider';
@@ -29,6 +29,7 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
   const [cashBoxId, setCashBoxId] = useState<number | ''>('');
   const [newExpiryDate, setNewExpiryDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [cashBoxes, setCashBoxes] = useState<CashBox[]>(DEFAULT_CASH_BOXES);
 
@@ -64,6 +65,7 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
       setNewExpiryDate(nextYear.toISOString().split('T')[0]);
       setCost(document.cost ? String(document.cost) : '');
       setCurrency(document.currency || 'MAD');
+      setFile(null);
     }
   }, [document]);
 
@@ -78,6 +80,7 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
   const handleClose = useCallback(() => {
     setCost('');
     setNotes('');
+    setFile(null);
     onClose();
   }, [onClose]);
 
@@ -96,12 +99,32 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
 
     setLoading(true);
     try {
+      let uploadedFileUrl = document.file_url;
+      const supabase = createClient();
+
+      if (file) {
+        const fileExt = file.name.split('.').pop() || 'png';
+        const fileName = `${document.entity_type}-${document.entity_id}-${document.document_type}-renew-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('fleet-documents').upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+        if (uploadError) {
+          console.warn('Storage upload error (continuing without new file):', uploadError);
+        } else {
+          const { data: pubData } = supabase.storage.from('fleet-documents').getPublicUrl(fileName);
+          uploadedFileUrl = pubData.publicUrl;
+        }
+      }
+
       const result = await renewFleetDocument({
         docId: document.id,
         newExpiryDate,
         cost: numCost,
         currency,
         cashBoxId: cashBoxId ? Number(cashBoxId) : undefined,
+        fileUrl: uploadedFileUrl,
         notes,
       });
 
@@ -127,6 +150,7 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
       setLoading(false);
     }
   };
+
 
   if (!document) return null;
 
@@ -229,6 +253,25 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
             </div>
           )}
 
+          {/* New Document Image/File */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Upload className="w-3.5 h-3.5 text-blue-500" />
+              {t('صورة أو ملف الوثيقة الجديدة (اختياري)', 'Fichier / image du document (optionnel)')}
+            </label>
+            <Input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="rounded-xl text-xs cursor-pointer"
+            />
+            {file && (
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                {t('تم اختيار الملف: ', 'Fichier sélectionné : ')}{file.name}
+              </p>
+            )}
+          </div>
+
           {/* Notes */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-muted-foreground">{t('ملاحظات التجديد (اختياري)', 'Notes de renouvellement (optionnel)')}</label>
@@ -241,6 +284,7 @@ export function QuickRenewDialog({ document, vehicleName, isOpen, onClose, onSuc
             />
           </div>
         </div>
+
 
         <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-border/50">
           <Button variant="ghost" onClick={handleClose} disabled={loading} className="rounded-xl">

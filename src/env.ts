@@ -8,6 +8,8 @@ export const env = baseCreateEnv({
     OCR_API_KEY: z.string().optional(),
     PDF_SIGNING_KEY: z.string().optional(),
     SENTRY_DSN: z.string().url().optional(),
+    GPS_WEBHOOK_SECRET: z.string().optional(),
+    CRON_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -22,9 +24,11 @@ export const env = baseCreateEnv({
     WHATSAPP_API_TOKEN: process.env.WHATSAPP_API_TOKEN,
     OCR_API_KEY: process.env.OCR_API_KEY,
     PDF_SIGNING_KEY: process.env.PDF_SIGNING_KEY,
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     SENTRY_DSN: process.env.SENTRY_DSN,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    GPS_WEBHOOK_SECRET: process.env.GPS_WEBHOOK_SECRET,
+    CRON_SECRET: process.env.CRON_SECRET,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

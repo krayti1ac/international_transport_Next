@@ -15,8 +15,9 @@ import {
 } from '../schemas/user.schema';
 import type { User } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
-import { requirePermission } from '@/lib/rbac';
+import { requirePermission } from '@/lib/rbac.server';
 import { sendDomainEmail } from '@/lib/email-smtp';
+import { signSession } from '@/lib/session';
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -1395,25 +1396,25 @@ export async function signupDriverAction(rawInput: SignupDriverInput): Promise<{
     revalidatePath('/super-admin/companies');
 
     // Automatically set active session cookie for the new driver
+    // Automatically set active signed session cookie for the new driver
     try {
       const cookieStore = await cookies();
-      cookieStore.set(
-        'app_user_session',
-        JSON.stringify({
-          id: authUserId,
-          email: cleanEmail,
-          name: input.name.trim(),
-          role: 'driver',
-          company_id: companyId,
-          is_active: true,
-        }),
-        {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 7,
-          sameSite: 'lax',
-          httpOnly: false,
-        }
-      );
+      const resolvedDeviceId = (input as any).deviceId || cookieStore.get('app_device_id')?.value || cookieStore.get('device_id')?.value || null;
+      const sessionToken = await signSession({
+        sub: authUserId,
+        email: cleanEmail,
+        name: input.name.trim(),
+        role: 'driver',
+        companyId: companyId,
+        deviceId: resolvedDeviceId,
+        isActive: true,
+      });
+      cookieStore.set('app_user_session', sessionToken, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        httpOnly: true,
+      });
     } catch {
       // ignore cookie error
     }
@@ -1437,6 +1438,7 @@ export async function loginUserAction(input: {
   email: string;
   password?: string;
   licenseNumber?: string;
+  deviceId?: string;
 }): Promise<{
   success: boolean;
   user?: User;
@@ -1503,25 +1505,32 @@ export async function loginUserAction(input: {
     }
 
     // 3. Set secure HTTP session cookie for middleware.ts
+    // 3. Set secure signed HTTP session cookie for middleware.ts
+    let sessionToken: string | undefined;
     try {
       const cookieStore = await cookies();
-      cookieStore.set(
-        'app_user_session',
-        JSON.stringify({
-          id: foundUser.id,
-          email: foundUser.email,
-          name: foundUser.name,
-          role: foundUser.role,
-          company_id: foundUser.company_id || 1,
-          is_active: true,
-        }),
-        {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 7,
-          sameSite: 'lax',
-          httpOnly: false,
-        }
-      );
+      const resolvedDeviceId =
+        input.deviceId ||
+        cookieStore.get('app_device_id')?.value ||
+        cookieStore.get('device_id')?.value ||
+        null;
+
+      sessionToken = await signSession({
+        sub: foundUser.id,
+        email: foundUser.email,
+        name: foundUser.name,
+        role: foundUser.role,
+        companyId: foundUser.company_id || 1,
+        deviceId: resolvedDeviceId,
+        isActive: true,
+      });
+
+      cookieStore.set('app_user_session', sessionToken, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        httpOnly: true,
+      });
     } catch {
       // ignore cookie error
     }
@@ -1539,6 +1548,7 @@ export async function logoutUserAction(): Promise<{ success: boolean }> {
   try {
     const cookieStore = await cookies();
     cookieStore.delete('app_user_session');
+    cookieStore.delete('auth_token');
     return { success: true };
   } catch {
     return { success: false };

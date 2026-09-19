@@ -33,3 +33,31 @@ export interface AccountingExportResult {
   error?: string;
 }
 
+export interface PreClosingAuditResult {
+  canClose: boolean;
+  fiscalYearId: number;
+  fiscalYearName: string;
+  startDate: string;
+  endDate: string;
+  unpaidInvoicesCount: number;
+  unpaidInvoicesTotalMAD: number;
+  activeTripsCount: number;
+  unreconciledTransactionsCount: number;
+  closingBalanceMAD: number;
+  closingBalanceEUR: number;
+}
+
+export interface FiscalYearClosingParams {
+  fiscalYearId: number;
+  nextYearName: string;
+  nextStartDate: string;
+  nextEndDate: string;
+}
+
+export interface FiscalYearClosingResult {
+  success: boolean;
+  nextFiscalYearId?: number;
+  error?: string;
+}
+
+

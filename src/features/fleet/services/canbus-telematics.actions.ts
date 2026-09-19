@@ -8,6 +8,8 @@ import type {
   TelematicsAlert,
   TruckTelematicsState,
 } from '../types/telematics.types';
+import { processFrigoTelematicsGuard } from './frigo-guard.actions';
+import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -176,6 +178,25 @@ export async function ingestFmsTelematicsPacket(
       };
       generatedAlerts.push(alert);
       recentAlerts.unshift(alert);
+
+      // Trigger automatic Frigo Guard notification & audit
+      await processFrigoTelematicsGuard({
+        truckPlate: cleanPlate,
+        truckId,
+        reeferTempC: packet.reefer_temp_c,
+        timestamp: nowIso,
+      });
+    }
+
+    // Evaluate Strategic Port & Border Geofences
+    if (truckId > 0 && packet.latitude && packet.longitude) {
+      await evaluatePortGeofences({
+        truckId,
+        truckPlate: cleanPlate,
+        latitude: packet.latitude,
+        longitude: packet.longitude,
+        timestamp: nowIso,
+      });
     }
 
     // Trim recent alerts list to last 100

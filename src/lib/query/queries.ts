@@ -2,6 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import type { Client, Driver, Truck, Trailer, TripOrder, Advance, Invoice, TreasuryTransaction, FleetDocument, FleetDocumentRenewal, CashBox } from '@/types/database';
 import { useFiscalStore } from '@/lib/stores/fiscal-store';
+import Decimal from 'decimal.js';
+import { recordAuditLog } from '@/lib/audit';
+
+Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 const supabase = () => createClient();
 
@@ -328,63 +332,160 @@ export function useCreateFleetDocumentRenewal() {
   });
 }
 
+export interface RenewFleetDocumentInput {
+  documentId: number;
+  newExpiryDate?: string | Date;
+  renewalCost?: number | string | InstanceType<typeof Decimal>;
+  documentType?: string;
+  fileUrl?: string;
+  cashBoxId?: number;
+  notes?: string;
+}
+
+
 export function useRenewFleetDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ documentId, renewalCost, documentType }: { documentId: number; renewalCost: number; documentType: string }) => {
+    mutationFn: async ({
+      documentId,
+      newExpiryDate,
+      renewalCost = 0,
+      documentType,
+      fileUrl,
+      cashBoxId,
+      notes,
+    }: RenewFleetDocumentInput) => {
       const { data: document, error: fetchError } = await supabase()
         .from('fleet_documents')
         .select('*')
         .eq('id', documentId)
         .single();
 
-      if (fetchError) throw fetchError;
+      if (fetchError || !document) throw (fetchError || new Error('الوثيقة غير موجودة'));
 
-      const newExpiryDate = new Date(document.expiry_date || Date.now());
-      newExpiryDate.setFullYear(newExpiryDate.getFullYear() + 1);
+      // حساب تاريخ الانتهاء الجديد (إذا لم يُمرر، يضاف 365 يوماً)
+      let formattedNewExpiry: string;
+      if (newExpiryDate) {
+        const d = typeof newExpiryDate === 'string' ? new Date(newExpiryDate) : newExpiryDate;
+        formattedNewExpiry = d.toISOString().split('T')[0];
+      } else {
+        const baseDate = document.expiry_date ? new Date(document.expiry_date) : new Date();
+        const now = new Date();
+        const targetDate = baseDate < now ? now : baseDate;
+        const nextYear = new Date(targetDate);
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+        formattedNewExpiry = nextYear.toISOString().split('T')[0];
+      }
+
+      // حساب التكلفة بدقة تامة باستخدام decimal.js
+      const costDec = new Decimal(renewalCost || 0);
+      const formattedCost = parseFloat(costDec.toFixed(2));
+      const previousExpiryDate = document.expiry_date;
+      const currency = document.currency || 'MAD';
+      const docTypeResolved = documentType || document.document_type || document.doc_type || 'وثيقة أسطول';
+
+      // 1. تحديث جدول fleet_documents
+      const docUpdatePayload: Record<string, unknown> = {
+        expiry_date: formattedNewExpiry,
+        previous_expiry_date: previousExpiryDate,
+        cost: formattedCost,
+        updated_at: new Date().toISOString(),
+      };
+      if (fileUrl) docUpdatePayload.file_url = fileUrl;
+      if (notes) docUpdatePayload.notes = notes;
 
       const { data: updatedDoc, error: updateError } = await supabase()
         .from('fleet_documents')
-        .update({
-          expiry_date: newExpiryDate.toISOString(),
-          previous_expiry_date: document.expiry_date,
-          renewal_cost: renewalCost,
-        })
+        .update(docUpdatePayload)
         .eq('id', documentId)
         .select()
         .single();
 
       if (updateError) throw updateError;
 
-      const { error: renewalError } = await supabase()
+      // 2. تسجيل العملية في جدول fleet_document_renewals للأرشيف التاريخي
+      const { data: renewalRecord, error: renewalError } = await supabase()
         .from('fleet_document_renewals')
         .insert({
           fleet_document_id: documentId,
-          previous_expiry_date: document.expiry_date,
-          new_expiry_date: newExpiryDate.toISOString(),
-          renewal_cost: renewalCost,
-          document_type: documentType,
-        });
+          document_id: documentId,
+          previous_expiry_date: previousExpiryDate,
+          new_expiry_date: formattedNewExpiry,
+          renewal_cost: formattedCost,
+          cost: formattedCost,
+          currency: currency,
+          document_type: docTypeResolved,
+          notes: notes || `تجديد سريع للوثيقة إلى ${formattedNewExpiry}`,
+        })
+        .select()
+        .single();
 
       if (renewalError) throw renewalError;
 
-      const { error: treasuryError } = await supabase()
-        .from('treasury_transactions')
-        .insert({
-          type: 'office_expense',
-          amount: renewalCost,
-          description: `Renewal: ${documentType} (ID: ${documentId})`,
-          reference: `RENEWAL-${documentId}-${Date.now()}`,
-        });
+      // 3. إذا كانت تكلفة التجديد renewal_cost > 0: توليد حركة سحب في treasury_transactions
+      let treasuryTxId: number | undefined;
+      if (costDec.greaterThan(0)) {
+        let resolvedCashBoxId = cashBoxId;
+        if (!resolvedCashBoxId) {
+          const { data: defaultCb } = await supabase().from('cash_boxes').select('id').limit(1).single();
+          if (defaultCb) resolvedCashBoxId = defaultCb.id;
+        }
 
-      if (treasuryError) throw treasuryError;
+        const timestamp = Date.now();
+        const reference = `RENEWAL-${documentId}-${timestamp}`;
+
+        const { data: txData, error: treasuryError } = await supabase()
+          .from('treasury_transactions')
+          .insert({
+            type: 'office_expense',
+            amount: formattedCost,
+            currency: currency,
+            cash_box_id: resolvedCashBoxId,
+            description: `تجديد وثيقة: ${docTypeResolved} (ID: ${documentId})`,
+            reference: reference,
+            reconciliation_status: 'pending',
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (treasuryError) {
+          console.error('Treasury transaction insert error:', treasuryError);
+        } else if (txData?.id && renewalRecord?.id) {
+          treasuryTxId = txData.id;
+          // ربط رقم حركة الخزينة في جدول fleet_document_renewals
+          await supabase()
+            .from('fleet_document_renewals')
+            .update({ treasury_transaction_id: txData.id })
+            .eq('id', renewalRecord.id);
+        }
+      }
+
+      // 4. تسجيل العملية في سجل التدقيق الأمني audit_logs
+      await recordAuditLog({
+        entityType: 'fleet_document',
+        entityId: documentId,
+        actionType: 'update',
+        reason: `تجديد وثيقة أسطول (${docTypeResolved}) إلى ${formattedNewExpiry} بتكلفة ${formattedCost} ${currency}`,
+        oldData: {
+          expiry_date: previousExpiryDate,
+          cost: document.cost,
+        },
+        newData: {
+          expiry_date: formattedNewExpiry,
+          cost: formattedCost,
+          file_url: fileUrl || document.file_url,
+          treasury_transaction_id: treasuryTxId,
+        },
+      });
 
       return updatedDoc;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleetDocuments'] });
       queryClient.invalidateQueries({ queryKey: ['treasuryTransactions'] });
+      queryClient.invalidateQueries({ queryKey: ['fleetDocumentRenewals'] });
     },
   });
 }
+

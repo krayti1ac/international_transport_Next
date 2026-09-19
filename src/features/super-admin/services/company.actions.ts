@@ -15,7 +15,7 @@ import {
 } from '../schemas/company.schema';
 import type { Company, CompanyDevice } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
-import { requireSuperAdmin } from '@/lib/rbac';
+import { requireSuperAdmin } from '@/lib/rbac.server';
 import nodemailer from 'nodemailer';
 import imaps from 'imap-simple';
 

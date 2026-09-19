@@ -27,13 +27,13 @@ import {
 } from 'lucide-react';
 import {
   calculateDynamicFreightPrice,
-  CORRIDOR_PRESETS,
 } from '../services/dynamic-pricing.actions';
-import type {
-  CargoType,
-  DynamicPricingParams,
-  DynamicPricingQuote,
-  PricingTier,
+import {
+  type CargoType,
+  type DynamicPricingParams,
+  type DynamicPricingQuote,
+  type PricingTier,
+  CORRIDOR_PRESETS,
 } from '../types';
 
 export function DynamicPricingCalculator() {
@@ -47,7 +47,7 @@ export function DynamicPricingCalculator() {
   const [reeferTemp, setReeferTemp] = useState(4);
   const [weightTons, setWeightTons] = useState(22);
   const [includeReturnCushion, setIncludeReturnCushion] = useState(true);
-  const [currency, setCurrency] = useState<'MAD' | 'EUR'>('MAD');
+  const [currency, setCurrency] = useState<'MAD' | 'EUR' | 'MRU' | 'XOF'>('MAD');
   const [copied, setCopied] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -107,19 +107,40 @@ export function DynamicPricingCalculator() {
     setDestCity(originCity);
   };
 
+  const formatPrice = (tier: PricingTier) => {
+    if (currency === 'MAD') return `${tier.priceMad} MAD`;
+    if (currency === 'EUR') return `${tier.priceEur} €`;
+    if (currency === 'MRU') return `${tier.priceMru || tier.priceMad} MRU`;
+    return `${tier.priceXof || tier.priceMad} XOF`;
+  };
+
+  const formatProfit = (tier: PricingTier) => {
+    if (currency === 'MAD') return `+${tier.profitAmountMad} MAD`;
+    if (currency === 'EUR') return `+${tier.profitAmountEur} €`;
+    if (currency === 'MRU') return `+${tier.profitAmountMru || tier.profitAmountMad} MRU`;
+    return `+${tier.profitAmountXof || tier.profitAmountMad} XOF`;
+  };
+
+  const formatAmount = (madVal: string, eurVal: string, mruVal?: string, xofVal?: string) => {
+    if (currency === 'MAD') return `${madVal} MAD`;
+    if (currency === 'EUR') return `${eurVal} €`;
+    if (currency === 'MRU') return `${mruVal || madVal} MRU`;
+    return `${xofVal || madVal} XOF`;
+  };
+
   const handleCopyQuote = () => {
     if (!quote) return;
-    const isMad = currency === 'MAD';
     const text = `
 === Trans Bodanon TMS — Cotation Fret International ===
 Trajet: ${quote.originCity} ⟵⟶ ${quote.destinationCity} (${quote.totalDistanceKm} km)
+Corridor: ${quote.corridorType === 'african_overland' ? 'Corridor Africain Terrestre (Guerguerat)' : 'Corridor Européen Maritime (Tanger Med)'}
 Marchandise: ${quote.cargoType}
 ------------------------------------------------------
-Tarif Plancher (Coût Direct): ${isMad ? quote.tiers.floor.priceMad + ' MAD' : quote.tiers.floor.priceEur + ' EUR'}
-Tarif Spot Recommandé: ${isMad ? quote.tiers.spot.priceMad + ' MAD' : quote.tiers.spot.priceEur + ' EUR'} (Marge: ${quote.tiers.spot.marginPercent}%)
-Tarif Express Premium: ${isMad ? quote.tiers.expressPremium.priceMad + ' MAD' : quote.tiers.expressPremium.priceEur + ' EUR'}
+Tarif Plancher (Coût Direct): ${formatPrice(quote.tiers.floor)}
+Tarif Spot Recommandé: ${formatPrice(quote.tiers.spot)} (Marge: ${quote.tiers.spot.marginPercent}%)
+Tarif Express Premium: ${formatPrice(quote.tiers.expressPremium)}
 ------------------------------------------------------
-Économie Bunkering Maroc: ${isMad ? quote.smartBunkeringSavingsMad + ' MAD' : quote.smartBunkeringSavingsEur + ' EUR'}
+Économie Bunkering: ${formatAmount(quote.smartBunkeringSavingsMad, quote.smartBunkeringSavingsEur, quote.smartBunkeringSavingsMru, quote.smartBunkeringSavingsXof)}
 ID Cotation: ${quote.id}
 `.trim();
 
@@ -130,14 +151,6 @@ ID Cotation: ${quote.id}
       description: t('تم نسخ تفاصيل التسعيرة للحافظة بنجاح', 'Les détails du devis ont été copiés dans le presse-papiers'),
     });
     setTimeout(() => setCopied(false), 2500);
-  };
-
-  const formatPrice = (tier: PricingTier) => {
-    return currency === 'MAD' ? `${tier.priceMad} MAD` : `${tier.priceEur} €`;
-  };
-
-  const formatProfit = (tier: PricingTier) => {
-    return currency === 'MAD' ? `+${tier.profitAmountMad} MAD` : `+${tier.profitAmountEur} €`;
   };
 
   return (
@@ -151,32 +164,57 @@ ID Cotation: ${quote.id}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {t(
-              'تسعير ذكي فوري للمسارات الدولية (TIR) بناءً على تكاليف الوقود الثنائية، العبّارات، ورسوم الطرق ومواسم التصدير',
-              'Cotations temps réel basées sur les coûts carburant binationaux, ferries, péages et saisonnalité maraîchère'
+              'تسعير ذكي فوري للمسارات الدولية (الممر الأوروبي البحري والممر الإفريقي البري عبر الكركارات)',
+              'Cotations temps réel basées sur les coûts carburant binationaux, ferries, péages et corridors africains'
             )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border border-border">
+        {/* Currency Switcher: MAD, EUR, MRU, XOF */}
+        <div className="flex items-center gap-1.5 bg-muted/60 p-1.5 rounded-xl border border-border flex-wrap">
           <button
             onClick={() => setCurrency('MAD')}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
               currency === 'MAD'
                 ? 'bg-background shadow-xs text-foreground font-mono font-bold'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
+            title={t('الدرهم المغربي', 'Dirham Marocain')}
           >
             🇲🇦 MAD
           </button>
           <button
             onClick={() => setCurrency('EUR')}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
               currency === 'EUR'
                 ? 'bg-background shadow-xs text-foreground font-mono font-bold'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
+            title={t('اليورو الأوروبي', 'Euro')}
           >
-            🇪🇺 EUR (€)
+            🇪🇺 EUR
+          </button>
+          <button
+            onClick={() => setCurrency('MRU')}
+            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+              currency === 'MRU'
+                ? 'bg-background shadow-xs text-foreground font-mono font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title={t('الأوقية الموريتانية', 'Ouguiya Mauritanienne')}
+          >
+            🇲🇷 MRU
+          </button>
+          <button
+            onClick={() => setCurrency('XOF')}
+            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+              currency === 'XOF'
+                ? 'bg-background shadow-xs text-foreground font-mono font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title={t('فرنك سيفا غرب إفريقيا', 'Franc CFA BCEAO')}
+          >
+            🌍 XOF
           </button>
         </div>
       </div>
@@ -442,7 +480,7 @@ ID Cotation: ${quote.id}
                   <div className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
                     <span>{t('وفر استراتيجي في التزود:', 'Optimisation Bunkering :')}</span>
                     <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                      {currency === 'MAD' ? `+${quote.smartBunkeringSavingsMad} MAD` : `+${quote.smartBunkeringSavingsEur} €`}
+                      +{formatAmount(quote.smartBunkeringSavingsMad, quote.smartBunkeringSavingsEur, quote.smartBunkeringSavingsMru, quote.smartBunkeringSavingsXof)}
                     </span>
                   </div>
                   <div className="text-emerald-800/80 dark:text-emerald-300/80 mt-0.5 leading-relaxed">
@@ -539,12 +577,23 @@ ID Cotation: ${quote.id}
             <Card className="shadow-xs border-border">
               <CardHeader className="pb-3 border-b border-border/60 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-primary" />
-                    {t('التفصيل المحاسبي والتشغيلي للتكاليف المباشرة', 'Décomposition Comptable des Coûts')}
-                  </CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-primary" />
+                      {t('التفصيل المحاسبي والتشغيلي للتكاليف المباشرة', 'Décomposition Comptable des Coûts')}
+                    </CardTitle>
+                    {quote.corridorType === 'african_overland' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        🌍 {t('الممر الإفريقي البري', 'Corridor Africain')}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-800 dark:text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                        🚢 {t('الممر الأوروبي البحري', 'Corridor Européen')}
+                      </span>
+                    )}
+                  </div>
                   <CardDescription className="text-xs mt-0.5">
-                    {t('المسافة الإجمالية:', 'Distance totale :')} {quote.totalDistanceKm} km ({quote.moroccoKm} km {t('المغرب', 'Maroc')} • {quote.europeKm} km {t('أوروبا', 'Europe')})
+                    {t('المسافة الإجمالية:', 'Distance totale :')} {quote.totalDistanceKm} km ({quote.moroccoKm} km {t('المغرب', 'Maroc')} • {quote.corridorType === 'african_overland' ? `${quote.africaKm || 0} km ${t('إفريقيا (موريتانيا/السنغال)', 'Afrique')}` : `${quote.europeKm} km ${t('أوروبا', 'Europe')}`})
                   </CardDescription>
                 </div>
                 <Button
@@ -565,19 +614,34 @@ ID Cotation: ${quote.id}
                       {t('إجمالي الوقود:', 'Carburant Total :')}
                     </span>
                     <div className="font-mono font-bold text-foreground">
-                      {currency === 'MAD' ? `${quote.breakdown.fuelTotalMad} MAD` : `${quote.breakdown.fuelTotalEur} €`}
+                      {formatAmount(quote.breakdown.fuelTotalMad, quote.breakdown.fuelTotalEur, quote.breakdown.fuelTotalMru, quote.breakdown.fuelTotalXof)}
                     </div>
                   </div>
 
-                  <div className="p-2.5 bg-muted/40 rounded-xl space-y-1">
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Ship className="w-3 h-3 text-blue-500" />
-                      {t('عبّارة المضيق:', 'Ferry Maritime :')}
-                    </span>
-                    <div className="font-mono font-bold text-foreground">
-                      {currency === 'MAD' ? `${quote.breakdown.ferryCrossingCostMad} MAD` : `${quote.breakdown.ferryCrossingCostEur} €`}
+                  {quote.corridorType === 'african_overland' ? (
+                    <div className="p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-1">
+                      <span className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 font-medium">
+                        <MapPin className="w-3 h-3 text-amber-600" />
+                        {t('معبر الكركارات والترانزيت:', 'Guerguerat & Transit :')}
+                      </span>
+                      <div className="font-mono font-bold text-foreground">
+                        {formatAmount(
+                          quote.breakdown.africanBorderFeesMad || '4800.00',
+                          quote.breakdown.africanBorderFeesMad ? (parseFloat(quote.breakdown.africanBorderFeesMad) / quote.exchangeRate).toFixed(2) : '440.00'
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-2.5 bg-muted/40 rounded-xl space-y-1">
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Ship className="w-3 h-3 text-blue-500" />
+                        {t('عبّارة المضيق:', 'Ferry Maritime :')}
+                      </span>
+                      <div className="font-mono font-bold text-foreground">
+                        {formatAmount(quote.breakdown.ferryCrossingCostMad, quote.breakdown.ferryCrossingCostEur)}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="p-2.5 bg-muted/40 rounded-xl space-y-1">
                     <span className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -585,7 +649,7 @@ ID Cotation: ${quote.id}
                       {t('رسوم الطرق (Péage):', 'Péages :')}
                     </span>
                     <div className="font-mono font-bold text-foreground">
-                      {currency === 'MAD' ? `${quote.breakdown.tollsTotalMad} MAD` : `${quote.breakdown.tollsTotalEur} €`}
+                      {formatAmount(quote.breakdown.tollsTotalMad, quote.breakdown.tollsTotalEur)}
                     </div>
                   </div>
 
@@ -595,13 +659,13 @@ ID Cotation: ${quote.id}
                       {t('تعويضات السائق:', 'Indemnités :')}
                     </span>
                     <div className="font-mono font-bold text-foreground">
-                      {currency === 'MAD' ? `${quote.breakdown.driverAllowancesMad} MAD` : `${quote.breakdown.driverAllowancesEur} €`}
+                      {formatAmount(quote.breakdown.driverAllowancesMad, quote.breakdown.driverAllowancesEur)}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-border/40 flex flex-wrap items-center justify-between text-xs text-muted-foreground">
-                  <div className="flex items-center gap-3">
+                <div className="mt-3 pt-3 border-t border-border/40 flex flex-wrap items-center justify-between text-xs text-muted-foreground gap-2">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {Number(quote.breakdown.reeferRunningCostMad) > 0 && (
                       <span>
                         {t('ديزل التبريد:', 'Gasoil Frigo :')}{' '}
@@ -609,7 +673,7 @@ ID Cotation: ${quote.id}
                       </span>
                     )}
                     <span>
-                      {t('الجمارك والميناء:', 'Douane & Port :')}{' '}
+                      {quote.corridorType === 'african_overland' ? t('الجمارك والمطابقة:', 'Douane :') : t('الجمارك والميناء:', 'Douane & Port :')}{' '}
                       <strong className="text-foreground font-mono">{quote.breakdown.customsPortFeesMad} MAD</strong>
                     </span>
                     <span>
@@ -620,7 +684,7 @@ ID Cotation: ${quote.id}
                   <div className="font-bold text-foreground">
                     {t('إجمالي التكلفة المباشرة:', 'Total Coût Direct :')}{' '}
                     <span className="font-mono text-primary font-bold">
-                      {currency === 'MAD' ? `${quote.breakdown.totalDirectCostMad} MAD` : `${quote.breakdown.totalDirectCostEur} €`}
+                      {formatAmount(quote.breakdown.totalDirectCostMad, quote.breakdown.totalDirectCostEur, quote.breakdown.totalDirectCostMru, quote.breakdown.totalDirectCostXof)}
                     </span>
                   </div>
                 </div>

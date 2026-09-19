@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient as createSupabaseClient } from '@/lib/supabase/server';
+import { getAuthenticatedCompanyId } from '@/lib/rbac.server';
 import { revalidatePath } from 'next/cache';
 import type { Client } from '@/types/database';
 import { FifoPaymentSchema, type FifoPaymentInput } from '../schemas/client-fifo.schema';
@@ -11,10 +12,15 @@ Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export async function createClient(data: Partial<Client>) {
   try {
+    const companyId = await getAuthenticatedCompanyId(data.company_id);
     const supabase = await createSupabaseClient();
+    const payload = {
+      ...data,
+      company_id: companyId,
+    };
     const { data: result, error } = await supabase
       .from('clients')
-      .insert(data)
+      .insert(payload)
       .select()
       .single();
 
@@ -83,6 +89,7 @@ export async function processClientFifoPaymentAction(
       cashBoxId: input.destinationType === 'cashbox' ? input.destinationId : undefined,
       reference: input.reference || undefined,
       notes: input.notes || `دفعة بنظام FIFO للعميل: ${client.name}`,
+      settlementRate: input.settlementRate || undefined,
     });
 
     if (!result.success) {

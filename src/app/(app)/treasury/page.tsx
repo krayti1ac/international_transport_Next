@@ -21,8 +21,10 @@ import {
   Wallet,
   ArrowRightLeft,
   Layers,
+  Lock,
   X
 } from 'lucide-react';
+import { YearEndClosingWizard } from '@/features/accounting/components/YearEndClosingWizard';
 import { formatCurrency, groupBalancesByCurrency } from '@/lib/forex';
 import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_BANK_ACCOUNTS, DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
@@ -52,6 +54,7 @@ export default function TreasuryPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [isClosingWizardOpen, setIsClosingWizardOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -225,13 +228,24 @@ export default function TreasuryPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => setShowModal(true)}
-          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
-        >
-          <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
-           {t('تسجيل حركة مالية جديدة', 'Nouvelle transaction', 'New Transaction')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsClosingWizardOpen(true)}
+            className="border-indigo-500/40 bg-card hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
+          >
+            <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            {t('إقفال السنة المالية', 'Clôture de l\'exercice', 'Cierre de Ejercicio')}
+          </Button>
+
+          <Button
+            onClick={() => setShowModal(true)}
+            className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
+          >
+            <Plus className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+            {t('تسجيل حركة مالية جديدة', 'Nouvelle transaction', 'New Transaction')}
+          </Button>
+        </div>
       </div>
 
       {/* Bento Grid Treasury KPIs */}
@@ -607,6 +621,15 @@ export default function TreasuryPage() {
           </Card>
         </div>
       )}
+
+      {/* Year-End Closing Wizard Dialog */}
+      <YearEndClosingWizard
+        isOpen={isClosingWizardOpen}
+        onClose={() => setIsClosingWizardOpen(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['treasuryData'] });
+        }}
+      />
     </div>
   );
 }

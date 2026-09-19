@@ -1,20 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { PodReportView } from '../PodReportView';
 import { useLanguage } from '@/components/language-provider';
 import type { TripOrder } from '@/types/database';
-import {
-  ShieldCheck,
-  FileCheck2,
-  MapPin,
-  Clock,
-  User,
-  CheckCircle2,
-} from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 interface TripPodTabProps {
   trip: TripOrder;
@@ -36,7 +28,11 @@ export function TripPodTab({ trip }: TripPodTabProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground">
-                  {t('إثبات التسليم الرقمي المعتمد (e-POD)', 'Preuve de Livraison Numérique (e-POD)')}
+                  {t(
+                    'إثبات التسليم الرقمي المعتمد (e-POD)',
+                    'Preuve de Livraison Numérique (e-POD)',
+                    'Prueba de Entrega Digital (e-POD)'
+                  )}
                 </h3>
                 <Badge
                   variant={isDelivered ? 'default' : 'secondary'}
@@ -47,14 +43,15 @@ export function TripPodTab({ trip }: TripPodTabProps) {
                   }`}
                 >
                   {isDelivered
-                    ? t('تم تأكيد واستلام الشحنة', 'Livraison Confirmée')
-                    : t('قيد النقل والتسليم', 'En cours de livraison')}
+                    ? t('تم تأكيد واستلام الشحنة', 'Livraison Confirmée', 'Entrega Confirmada')
+                    : t('قيد النقل والتسليم', 'En cours de livraison', 'En curso de entrega')}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t(
                   'يتضمن توقيع المستلم الحي، الموقع الجغرافي بالـ GPS لحظة الاستلام، وصورة وصل الـ CMR المختوم.',
-                  'Signature numérique, géolocalisation GPS et photo du document CMR tamponné.'
+                  'Signature numérique, géolocalisation GPS et photo du document CMR tamponné.',
+                  'Firma digital, geolocalización GPS y fotografía del documento CMR sellado.'
                 )}
               </p>
             </div>
@@ -67,4 +64,3 @@ export function TripPodTab({ trip }: TripPodTabProps) {
     </div>
   );
 }
-

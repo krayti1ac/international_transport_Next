@@ -9,6 +9,7 @@ import type { TripOrder, Client } from '@/types/database';
 import {
   ArrowRight,
   Printer,
+  FileText,
   Edit3,
   MapPin,
   MessageSquare,
@@ -18,21 +19,21 @@ interface TripHeaderProps {
   trip: TripOrder;
   clientExport: Client | null;
   onEditTrip?: () => void;
+  onPrintCmr?: () => void;
 }
 
-export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) {
+export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripHeaderProps) {
   const router = useRouter();
-  const { t, dir } = useLanguage();
+  const { t, dir, locale } = useLanguage();
 
   const handleDownloadDossier = () => {
-    const dossierUrl = `/api/trips/${trip.id}/dossier-pdf`;
+    const dossierUrl = `/api/trips/${trip.id}/dossier-pdf?lang=${locale}`;
     window.open(dossierUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleShareWhatsApp = () => {
     const clientPhone = clientExport?.phone?.replace(/[^\d+]/g, '') || '';
-    const originCity = trip.origin_branch_id ? 'المغرب' : 'المغرب / طنجة المتوسط';
-    const destinationCity = trip.route_export || trip.route || 'أوروبا';
+    const destinationCity = trip.route_export || trip.route || (locale === 'ar' ? 'أوروبا' : locale === 'es' ? 'Europa' : 'Europe');
     const cmrRef = trip.cmr_export_number || trip.cmr_number || `#${trip.id}`;
 
     const appBaseUrl =
@@ -43,7 +44,8 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
 
     const textAr = `مرحباً بك،\nيسعدنا مشاركة رابط التتبع الحي لشحنتكم رقم #${trip.id} (CMR: ${cmrRef})\nالمسار: ${destinationCity}\nرابط التتبع المباشر:\n${trackingUrl}`;
     const textFr = `Bonjour,\nVoici le lien de suivi en direct de votre expédition #${trip.id} (CMR: ${cmrRef})\nItinéraire: ${destinationCity}\nLien de suivi:\n${trackingUrl}`;
-    const message = dir === 'rtl' ? textAr : textFr;
+    const textEs = `Hola,\nAquí tiene el enlace de seguimiento en directo de su expedición #${trip.id} (CMR: ${cmrRef})\nItinerario: ${destinationCity}\nEnlace de seguimiento:\n${trackingUrl}`;
+    const message = locale === 'ar' ? textAr : locale === 'es' ? textEs : textFr;
 
     const waUrl = clientPhone
       ? `https://wa.me/${clientPhone.replace(/^00/, '').replace(/^0/, '212')}?text=${encodeURIComponent(message)}`
@@ -56,43 +58,43 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
     switch (status) {
       case 'pending':
         return {
-          label: t('قيد الانتظار', 'En attente', 'Pending'),
+          label: t('قيد الانتظار', 'En attente', 'Pendiente'),
           className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
           dot: 'bg-amber-500',
         };
       case 'in_transit':
         return {
-          label: t('في الطريق (ذهاب)', 'En transit (Aller)', 'In Transit (Outbound)'),
+          label: t('في الطريق (ذهاب)', 'En transit (Aller)', 'En tránsito (Ida)'),
           className: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30',
           dot: 'bg-blue-500 animate-ping',
         };
       case 'customs_export':
         return {
-          label: t('التخليص الجمركي', 'Dédouanement Export', 'Customs Clearance'),
+          label: t('التخليص الجمركي', 'Dédouanement Export', 'Despacho de aduanas'),
           className: 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30',
           dot: 'bg-purple-500',
         };
       case 'at_destination_export':
         return {
-          label: t('في وجهة التفريغ بأوروبا', 'À destination (Europe)', 'At Destination'),
+          label: t('في وجهة التفريغ بأوروبا', 'À destination (Europe)', 'En destino (Europa)'),
           className: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30',
           dot: 'bg-indigo-500',
         };
       case 'en_route_inbound':
         return {
-          label: t('في طريق العودة (استيراد)', 'En route retour (Import)', 'On Return Route'),
+          label: t('في طريق العودة (استيراد)', 'En route retour (Import)', 'En ruta de retorno (Importación)'),
           className: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30',
           dot: 'bg-teal-500 animate-pulse',
         };
       case 'completed':
         return {
-          label: t('تم التسليم بنجاح', 'Livraison effectuée', 'Delivered'),
+          label: t('تم التسليم بنجاح', 'Livraison effectuée', 'Entregado con éxito'),
           className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
           dot: 'bg-emerald-500',
         };
       case 'settled':
         return {
-          label: t('تمت التسوية المالية', 'Règlement effectué', 'Settled'),
+          label: t('تمت التسوية المالية', 'Règlement effectué', 'Liquidado'),
           className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30',
           dot: 'bg-slate-400',
         };
@@ -117,7 +119,7 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
             size="icon"
             onClick={() => router.back()}
             className="rounded-full hover:bg-muted"
-            title={t('رجوع', 'Retour', 'Back')}
+            title={t('رجوع', 'Retour', 'Volver')}
           >
             <ArrowRight className={`w-5 h-5 ${dir === 'ltr' ? 'rotate-180' : ''}`} />
           </Button>
@@ -128,7 +130,7 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
                 <MapPin className="w-5 h-5" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black font-amiri text-foreground tracking-tight">
-                {t('ملف الرحلة الدولية', 'Dossier de Mission TIR', 'International Trip Dossier')} #{trip.id}
+                {t('ملف الرحلة الدولية', 'Dossier de Mission TIR', 'Expediente de Misión TIR')} #{trip.id}
               </h1>
               <Badge
                 className={`text-xs px-3 py-0.5 rounded-full font-semibold border flex items-center gap-1.5 ${statusBadge.className}`}
@@ -146,7 +148,7 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
               )}
               <span>•</span>
               <span>
-                {t('تاريخ الإنشاء:', 'Créé le :')}{' '}
+                {t('تاريخ الإنشاء:', 'Créé le :', 'Fecha de creación:')}{' '}
                 <span className="font-mono">{trip.created_at?.split('T')[0]}</span>
               </span>
             </div>
@@ -161,11 +163,25 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
             size="sm"
             onClick={handleShareWhatsApp}
             className="rounded-xl text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-            title={t('مشاركة رابط التتبع عبر واتساب للعميل', 'Partager le lien WhatsApp', 'Share on WhatsApp')}
+            title={t('مشاركة رابط التتبع عبر واتساب للعميل', 'Partager le lien WhatsApp', 'Compartir enlace por WhatsApp')}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>{t('تتبع WhatsApp', 'Partager WhatsApp', 'Share Tracking')}</span>
+            <span>{t('تتبع WhatsApp', 'Partager WhatsApp', 'Seguimiento WhatsApp')}</span>
           </Button>
+
+          {/* Smart e-CMR Print */}
+          {onPrintCmr && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onPrintCmr}
+              className="rounded-xl text-xs gap-1.5 border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 font-medium"
+              title={t('طباعة بيان الشحنة الدولي (CMR)', 'Imprimer lettre de voiture CMR', 'Imprimir carta de porte CMR')}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{t('طباعة CMR', 'Imprimer CMR', 'Imprimir CMR')}</span>
+            </Button>
+          )}
 
           {/* Consolidated Dossier PDF */}
           <Button
@@ -173,10 +189,10 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
             size="sm"
             onClick={handleDownloadDossier}
             className="rounded-xl text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-medium"
-            title={t('تحميل الملف اللوجستي الموحد (PDF)', 'Télécharger le dossier PDF', 'Download Dossier PDF')}
+            title={t('تحميل الملف اللوجستي الموحد (PDF)', 'Télécharger le dossier PDF', 'Descargar expediente logístico PDF')}
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>{t('تحميل الأرشيف الموحد (PDF)', 'Dossier PDF', 'Dossier PDF')}</span>
+            <span>{t('تحميل الأرشيف الموحد (PDF)', 'Dossier PDF', 'Expediente PDF')}</span>
           </Button>
 
           {/* Edit Trip Details */}
@@ -188,7 +204,7 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
               className="rounded-xl text-xs gap-1.5 shadow-xs"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>{t('تعديل الرحلة', 'Modifier', 'Edit Trip')}</span>
+              <span>{t('تعديل الرحلة', 'Modifier', 'Modificar viaje')}</span>
             </Button>
           )}
         </div>
@@ -196,4 +212,3 @@ export function TripHeader({ trip, clientExport, onEditTrip }: TripHeaderProps) 
     </div>
   );
 }
-

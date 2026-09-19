@@ -21,12 +21,21 @@ export function generateDeliverySignatureHash(
   signingKey?: string
 ): string {
   const secret = signingKey || process.env.PDF_SIGNING_KEY || 'trans-bodanon-secure-key-default';
+  const latStr =
+    payload.latitude !== undefined && payload.latitude !== null && !isNaN(Number(payload.latitude))
+      ? Number(payload.latitude).toFixed(6)
+      : 'N/A';
+  const lngStr =
+    payload.longitude !== undefined && payload.longitude !== null && !isNaN(Number(payload.longitude))
+      ? Number(payload.longitude).toFixed(6)
+      : 'N/A';
+
   const canonicalString = [
     `TRIP:${payload.tripOrderId}`,
-    `RECIPIENT:${payload.recipientName.trim().toUpperCase()}`,
+    `RECIPIENT:${payload.recipientName?.trim().toUpperCase() || 'UNKNOWN'}`,
     `DATE:${payload.signedAt}`,
-    `GPS:${payload.latitude?.toFixed(6) ?? 'N/A'},${payload.longitude?.toFixed(6) ?? 'N/A'}`,
-    `SIG:${payload.signatureUrl}`,
+    `GPS:${latStr},${lngStr}`,
+    `SIG:${payload.signatureUrl || ''}`,
   ].join('|');
 
   return crypto.createHmac('sha256', secret).update(canonicalString).digest('hex');
@@ -37,6 +46,16 @@ export function verifyDeliverySignatureIntegrity(
   providedHash: string,
   signingKey?: string
 ): boolean {
-  const expectedHash = generateDeliverySignatureHash(payload, signingKey);
-  return crypto.timingSafeEqual(Buffer.from(expectedHash), Buffer.from(providedHash));
+  if (!providedHash || typeof providedHash !== 'string') return false;
+  try {
+    const expectedHash = generateDeliverySignatureHash(payload, signingKey);
+    const bufExpected = Buffer.from(expectedHash, 'hex');
+    const bufProvided = Buffer.from(providedHash, 'hex');
+    if (bufExpected.length === 0 || bufExpected.length !== bufProvided.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(bufExpected, bufProvided);
+  } catch {
+    return false;
+  }
 }

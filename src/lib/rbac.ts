@@ -1,6 +1,4 @@
 import type { UserRole } from '@/types/database';
-import { createClient } from '@/lib/supabase/server';
-import { getSessionFromCookie } from './session';
 
 export type Permission =
   | 'companies:manage'
@@ -188,6 +186,8 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/clients',
     '/invoices',
     '/maintenance',
+    '/fleet-utilization',
+    '/incidents',
     '/drivers',
     '/driver-settlements',
     '/geofence-zones',
@@ -223,6 +223,7 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/advanced-reports',
     '/trip-profitability',
     '/pricing',
+    '/fleet-utilization',
     '/predictive-analytics',
     '/clients',
     '/chat',
@@ -235,9 +236,11 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/fuel-analytics',
     '/fuel-receipt',
     '/ferry-expenses',
+    '/incidents',
     '/truck-tracking',
     '/transport-routes',
     '/pricing',
+    '/fleet-utilization',
     '/predictive-analytics',
     '/documents',
     '/notifications/expiration',
@@ -290,162 +293,10 @@ export interface AuthResult {
   isActive: boolean;
 }
 
-export async function getCurrentUser(): Promise<AuthResult | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    const session = await getSessionFromCookie();
-    if (!session) return null;
-
-    return {
-      userId: session.sub,
-      role: (session.role as UserRole) || 'driver',
-      companyId: (session.companyId as number) ?? null,
-      isActive: session.isActive !== false,
-    };
-  }
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('role, company_id, is_active')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (!profile) {
-    const session = await getSessionFromCookie();
-    if (!session) return null;
-
-    return {
-      userId: session.sub,
-      role: (session.role as UserRole) || 'driver',
-      companyId: (session.companyId as number) ?? null,
-      isActive: session.isActive !== false,
-    };
-  }
-
-  return {
-    userId: user.id,
-    role: (profile.role as UserRole) || 'driver',
-    companyId: (profile.company_id as number) ?? null,
-    isActive: profile.is_active !== false,
-  };
-}
-
 export function hasPermission(role: UserRole, permission: Permission): boolean {
   if (role === 'super_admin' || role === 'admin') return true;
   const permissions = ROLE_PERMISSIONS[role] || [];
   return permissions.includes(permission);
 }
 
-export async function requirePermission(
-  permission: Permission,
-  options?: { companyId?: number | null }
-): Promise<AuthResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  let role: UserRole = 'driver';
-  let companyId: number | null = null;
-  let isActive = true;
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role, company_id, is_active')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profile) {
-      role = (profile.role as UserRole) || 'driver';
-      companyId = (profile.company_id as number) ?? null;
-      if (profile.is_active === false) isActive = false;
-    }
-  }
-
-  if (!user) {
-    const session = await getSessionFromCookie();
-    if (session) {
-      role = (session.role as UserRole) || 'driver';
-      companyId = (session.companyId as number) ?? null;
-      if (session.isActive === false) isActive = false;
-    }
-  }
-
-  if (!user && role === 'driver') {
-    throw new Error('AUTH_REQUIRED');
-  }
-
-  if (!isActive) {
-    throw new Error('ACCOUNT_DISABLED');
-  }
-
-  if (role !== 'super_admin' && role !== 'admin' && !hasPermission(role, permission)) {
-    throw new Error(`FORBIDDEN:${permission}`);
-  }
-
-  if (options?.companyId && role !== 'super_admin' && companyId !== options.companyId) {
-    throw new Error('TENANT_MISMATCH');
-  }
-
-  return {
-    userId: user?.id || '',
-    role,
-    companyId,
-    isActive: true,
-  };
-}
-
-export async function requireSuperAdmin(): Promise<AuthResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let role: UserRole = 'driver';
-  let isActive = true;
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role, is_active')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profile) {
-      role = (profile.role as UserRole) || 'driver';
-      if (profile.is_active === false) isActive = false;
-    }
-  }
-
-  if (!user) {
-    const session = await getSessionFromCookie();
-    if (session) {
-      role = (session.role as UserRole) || 'driver';
-      if (session.isActive === false) isActive = false;
-    }
-  }
-
-  if (!user && role === 'driver') {
-    throw new Error('AUTH_REQUIRED');
-  }
-
-  if (!isActive) {
-    throw new Error('ACCOUNT_DISABLED');
-  }
-
-  if (role !== 'super_admin') {
-    throw new Error('FORBIDDEN:super_admin_only');
-  }
-
-  return {
-    userId: user?.id || '',
-    role,
-    companyId: null,
-    isActive: true,
-  };
-}

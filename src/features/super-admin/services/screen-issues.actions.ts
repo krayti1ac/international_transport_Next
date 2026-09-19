@@ -6,6 +6,7 @@ import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { generateAiDiagnosticPrompt, sanitizePayload } from './ai-issue-prompt';
 import { runGeminiDiagnostic } from './gemini-diagnostics';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
+import { verifySession } from '@/lib/session';
 import type {
   SystemScreenIssue,
   ScreenIssueType,
@@ -61,19 +62,16 @@ async function verifySuperAdminAction(): Promise<{ isAuthorized: boolean; error?
   }
 
   // فحص الكوكيز الاحتياطية للجلسة
+  // فحص الجلسة الموقعة مشفراً
   if (!role) {
     try {
       const cookieStore = await cookies();
       const sessionCookie = cookieStore.get('app_user_session')?.value;
       if (sessionCookie) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-          role = parsed.role || null;
-          if (parsed.is_active === false) isActive = false;
-        } catch {
-          const parsed = JSON.parse(sessionCookie);
-          role = parsed.role || null;
-          if (parsed.is_active === false) isActive = false;
+        const verified = await verifySession(decodeURIComponent(sessionCookie));
+        if (verified) {
+          role = verified.role || null;
+          if (verified.isActive === false) isActive = false;
         }
       }
     } catch {}

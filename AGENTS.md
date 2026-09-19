@@ -54,5 +54,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20260930_add_accountant_and_fleet_manager_roles.sql` — Expand User Roles with Accountant and Fleet Manager & configure RLS policies (`treasury_transactions`, `truck_maintenance`).
 - `supabase/migrations/20261005_multi_branch_architecture.sql` — Phase 4: Multi-Branch Architecture & Operations Hubs (`company_branches` table, RLS policies, operational entity links, indexes).
 - `supabase/migrations/20261006_add_user_phone_and_personal_email.sql` — Add user personal phone and email columns for credential notifications (`phone`, `personal_email`, indexes).
+- `supabase/migrations/20261008_phase1_security_device_authorizations.sql` — Phase 1: Security Hardening, Device Binding Authorizations View, Multi-Tenant JWT Claims Isolation, and Enhanced RLS Enforcement (`device_authorizations` view, `current_company_id`, RLS policies).
+- `supabase/migrations/20261009_african_trade_corridor_expansion.sql` — African Overland Trade Corridor Expansion (Mauritania, Senegal, Guerguerat Geofence, Driver African Visas, and Multi-Corridor Architecture).
 
 

@@ -45,12 +45,33 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    const activeDeviceId = getOrCreateDeviceId();
+    try {
+      document.cookie = `app_device_id=${encodeURIComponent(activeDeviceId)}; path=/; max-age=31536000; SameSite=Lax`;
+    } catch {}
+
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('deactivated') === 'true') {
+      const errorParam = params.get('error');
+
+      if (errorParam === 'unauthorized_device') {
         toast({
-          title: t('حساب معطل', 'Compte désactivé'),
-          description: 'تم تعطيل هذا الحساب من قِبل الإدارة، يرجى مراجعة المسؤول',
+          title: t('جهاز غير مصرح به', 'Appareil non autorisé', 'Dispositivo no autorizado'),
+          description: t(
+            'هذا الحساب مرتبط بجهاز آخر مرخص، لا يمكنك تسجيل الدخول من هذا الجهاز',
+            'Ce compte est lié à un autre appareil autorisé. Vous ne pouvez pas vous connecter depuis cet appareil',
+            'Esta cuenta está vinculada a otro dispositivo autorizado. No puede iniciar sesión desde este dispositivo'
+          ),
+          variant: 'destructive',
+        });
+      } else if (errorParam === 'account_disabled' || params.get('deactivated') === 'true') {
+        toast({
+          title: t('حساب معطل', 'Compte désactivé', 'Cuenta desactivada'),
+          description: t(
+            'تم تعطيل هذا الحساب من قِبل الإدارة، يرجى مراجعة المسؤول',
+            'Ce compte a été désactivé par l administration, veuillez contacter le responsable',
+            'Esta cuenta ha sido desactivada por la administración, por favor contacte al responsable'
+          ),
           variant: 'destructive',
         });
       }
@@ -69,8 +90,7 @@ export default function LoginPage() {
         setLicenseNumber(savedLicense);
       }
     } else {
-      const deviceId = getOrCreateDeviceId();
-      const generatedLicense = generateLicenseNumber(1, deviceId);
+      const generatedLicense = generateLicenseNumber(1, activeDeviceId);
       setLicenseNumber(generatedLicense);
     }
   }, [getUserPreferredLanguage, locale, setLocale, t, toast]);

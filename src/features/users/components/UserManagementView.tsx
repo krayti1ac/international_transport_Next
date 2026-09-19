@@ -70,8 +70,14 @@ export function UserManagementView() {
     try {
       const cookie = document.cookie.split('; ').find((r) => r.startsWith('app_user_session='));
       if (cookie) {
-        const val = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
-        setCookieRole((val.role || '').toLowerCase().trim());
+        const raw = decodeURIComponent(cookie.split('=')[1]);
+        if (raw.includes('.')) {
+          const payload = JSON.parse(atob(raw.split('.')[1]));
+          setCookieRole((payload.role || '').toLowerCase().trim());
+        } else {
+          const val = JSON.parse(raw);
+          setCookieRole((val.role || '').toLowerCase().trim());
+        }
       }
     } catch {}
   }, []);

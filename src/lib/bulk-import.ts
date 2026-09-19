@@ -1,6 +1,14 @@
 import * as XLSX from 'xlsx';
+import {
+  validateICE,
+  validateMoroccanPlate,
+  type ValidationResult,
+} from '@/lib/validators/morocco-business';
 
 export type BulkImportEntityType = 'truck' | 'trailer' | 'client';
+export { validateICE, validateMoroccanPlate };
+export const validatePlateNumber = validateMoroccanPlate;
+export type { ValidationResult };
 
 export interface BulkImportRow {
   rowIndex: number;
@@ -133,34 +141,6 @@ function parseCSVLine(line: string): string[] {
   }
   result.push(current);
   return result;
-}
-
-export function validatePlateNumber(plate: string): { valid: boolean; message?: string } {
-  if (!plate || plate.trim() === '') {
-    return { valid: false, message: 'رقم اللوحة مطلوب' };
-  }
-  const trimmed = plate.trim();
-  const moroccanPatterns = [
-    /^\d{1,6}[- ]?[A-Za-z]{1,3}[- ]?\d{1,4}$/,
-    /^[A-Za-z]{1,3}[- ]?\d{1,6}[- ]?[A-Za-z]{1,3}$/,
-  ];
-  const isValid = moroccanPatterns.some(pattern => pattern.test(trimmed)) || trimmed.length >= 4;
-  if (!isValid) {
-    return { valid: false, message: 'صيغة اللوحة غير صحيحة (مثال: 12345-A-123)' };
-  }
-  return { valid: true };
-}
-
-export function validateICE(ice: string): { valid: boolean; message?: string } {
-  if (!ice || ice.trim() === '') {
-    return { valid: false, message: 'رقم ICE مطلوب' };
-  }
-  const cleaned = ice.trim().replace(/\s/g, '');
-  // المعرف الموحد للمقاولة بالمغرب (ICE) يتكون من 15 رقماً بالضبط بدون حروف أو مسافات
-  if (!/^\d{15}$/.test(cleaned)) {
-    return { valid: false, message: 'رقم ICE يجب أن يتكون من 15 رقماً بالضبط (مثال: 001928374000082)' };
-  }
-  return { valid: true };
 }
 
 export function validateBulkRows(

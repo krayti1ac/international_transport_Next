@@ -7,9 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Wallet, Landmark, Coins, ArrowRightLeft, X } from 'lucide-react';
+import { Plus, Wallet, Landmark, Coins, ArrowRightLeft, Lock, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import FifoPaymentDialog from './FifoPaymentDialog';
+import { YearEndClosingWizard } from '@/features/accounting/components/YearEndClosingWizard';
 import { CASH_BOXES } from '../hooks/use-finance-queries';
 import { createClient } from '@/lib/supabase/client';
 import { useLanguage } from '@/components/language-provider';
@@ -23,6 +24,7 @@ export default function TreasuryDashboard() {
   const { data: balances, isLoading } = useAllTreasuryBalances();
   const [showNewTransaction, setShowNewTransaction] = useState(false);
   const [showFifoDialog, setShowFifoDialog] = useState(false);
+  const [showClosingWizard, setShowClosingWizard] = useState(false);
   const queryClient = useQueryClient();
   const { startDate, endDate } = useFiscalStore();
 
@@ -30,7 +32,11 @@ export default function TreasuryDashboard() {
     <div className="space-y-6" dir={dir}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold font-amiri text-foreground">{t('الخزينة وإدارة السيولة النقدية', 'Trésorerie et gestion des liquidités')}</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setShowClosingWizard(true)} variant="outline" className="border-indigo-500/40 text-indigo-700 dark:text-indigo-400">
+            <Lock className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+            {t('إقفال السنة المالية', 'Clôture de l\'exercice', 'Cierre de Ejercicio')}
+          </Button>
           <Button onClick={() => setShowFifoDialog(true)} variant="default">
             <ArrowRightLeft className={`w-4 h-4 ${dir === 'rtl' ? 'ml-2' : 'mr-2'}`} />
             {t('تحصيل دفعة عميل', 'Encaissement client')}
@@ -107,6 +113,18 @@ export default function TreasuryDashboard() {
       )}
 
       {showFifoDialog && <FifoPaymentDialog isOpen={showFifoDialog} onClose={() => setShowFifoDialog(false)} />}
+
+      {showClosingWizard && (
+        <YearEndClosingWizard
+          isOpen={showClosingWizard}
+          onClose={() => setShowClosingWizard(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['treasuryBalances'] });
+            queryClient.invalidateQueries({ queryKey: ['treasuryBalance'] });
+            queryClient.invalidateQueries({ queryKey: ['treasuryOpeningBalance'] });
+          }}
+        />
+      )}
     </div>
   );
 }

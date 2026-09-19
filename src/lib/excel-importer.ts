@@ -1,4 +1,11 @@
 import * as XLSX from 'xlsx';
+import {
+  validateICEField,
+  validateMoroccanPlateField,
+  validateEmailField,
+  validatePhoneField,
+  type ValidationResult,
+} from '@/lib/validators/morocco-business';
 
 export type ImportRow = Record<string, unknown>;
 
@@ -10,9 +17,12 @@ export interface BulkImportResult {
   headers: string[];
 }
 
+export type FieldValidatorResult = string | null | ValidationResult;
+export type FieldValidator = (value: unknown) => FieldValidatorResult;
+
 export interface ValidationOptions {
   requiredFields: string[];
-  fieldValidators?: Record<string, (value: unknown) => string | null>;
+  fieldValidators?: Record<string, FieldValidator>;
   headerAliases?: Record<string, string[]>;
 }
 
@@ -115,7 +125,11 @@ export const validateRows = (
       const value = normalizedRow[field];
       if (value && String(value).trim() !== '') {
         const issue = validator(value);
-        if (issue) errors.push(issue);
+        if (typeof issue === 'string') {
+          errors.push(issue);
+        } else if (issue && typeof issue === 'object' && !issue.valid) {
+          errors.push(issue.message || `قيمة الحقل "${field}" غير صالحة`);
+        }
       }
     }
 
@@ -135,39 +149,7 @@ export const validateRows = (
   };
 };
 
-export const validateMoroccanPlate = (value: unknown): string | null => {
-  const plate = String(value).trim();
-  if (!plate) return null;
-  if (!/^\d{1,6}-\d{1,4}-[A-Za-z]{1,3}$/.test(plate)) {
-    return 'صيغة لوحة التسجيل غير صحيحة. استخدم الصيغة: 12345-67-89';
-  }
-  return null;
-};
-
-export const validateICE = (value: unknown): string | null => {
-  const ice = String(value).trim();
-  if (!ice) return null;
-  const digits = ice.replace(/\s/g, '');
-  if (!/^\d{15}$/.test(digits)) {
-    return 'رقم ICE يجب أن يتكون من 15 رقماً بالضبط';
-  }
-  return null;
-};
-
-export const validateEmail = (value: unknown): string | null => {
-  const email = String(value).trim();
-  if (!email) return null;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return 'عنوان البريد الإلكتروني غير صحيح';
-  }
-  return null;
-};
-
-export const validatePhone = (value: unknown): string | null => {
-  const phone = String(value).trim();
-  if (!phone) return null;
-  if (!/^\+?[0-9\s-]{7,20}$/.test(phone)) {
-    return 'رقم الهاتف غير صحيح';
-  }
-  return null;
-};
+export const validateMoroccanPlate = validateMoroccanPlateField;
+export const validateICE = validateICEField;
+export const validateEmail = validateEmailField;
+export const validatePhone = validatePhoneField;

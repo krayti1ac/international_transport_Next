@@ -1,7 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { isRouteAllowed, ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
-import { verifySession } from '@/lib/session';
+import {
+  verifySession,
+  getDeviceIdFromRequest,
+  validateDeviceBinding,
+} from '@/lib/session';
 import type { UserRole } from '@/types/database';
 
 export async function middleware(request: NextRequest) {
@@ -62,9 +66,18 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // فحص الجلسة المحلية/الاحتياطية الموقّعة إن وجدت (للتوافق مع وضع الأوفلاين)
+  // فحص الجلسة الموقّعة مشفراً حصراً (Strict Signed JWT Verification)
   const userSessionCookie = request.cookies.get('app_user_session')?.value;
-  let customSession: { sub: string; email?: string; name?: string; role: string; companyId?: number | null; isActive?: boolean } | null = null;
+  let customSession: {
+    sub: string;
+    email?: string;
+    name?: string;
+    role: string;
+    companyId?: number | null;
+    deviceId?: string | null;
+    isActive?: boolean;
+  } | null = null;
+
   if (userSessionCookie) {
     try {
       const verified = await verifySession(decodeURIComponent(userSessionCookie));
@@ -75,11 +88,28 @@ export async function middleware(request: NextRequest) {
           name: verified.name,
           role: verified.role,
           companyId: verified.companyId,
+          deviceId: verified.deviceId,
           isActive: verified.isActive,
         };
+      } else {
+        // فشل التحقق المشفر أو تم التلاعب بمحتوى الكوكي — إلغاء الجلسة فوراً وإعادة التوجيه
+        const loginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
+        const redirectUrl = new URL(loginPath, request.url);
+        redirectUrl.searchParams.set('error', 'invalid_session');
+        const redirectResponse = NextResponse.redirect(redirectUrl);
+        redirectResponse.cookies.delete('app_user_session');
+        redirectResponse.cookies.delete('auth_token');
+        return redirectResponse;
       }
     } catch {
       customSession = null;
+      const loginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
+      const redirectUrl = new URL(loginPath, request.url);
+      redirectUrl.searchParams.set('error', 'invalid_session');
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+      redirectResponse.cookies.delete('app_user_session');
+      redirectResponse.cookies.delete('auth_token');
+      return redirectResponse;
     }
   }
 
@@ -88,7 +118,10 @@ export async function middleware(request: NextRequest) {
     const loginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
     const loginUrl = new URL(loginPath, request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    redirectResponse.cookies.delete('app_user_session');
+    redirectResponse.cookies.delete('auth_token');
+    return redirectResponse;
   }
 
   // 4. استعلام دور المستخدم والتحقق من مصفوفة الصلاحيات (RBAC)
@@ -125,10 +158,101 @@ export async function middleware(request: NextRequest) {
       await supabase.auth.signOut();
     }
     const disabledLoginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
-    return NextResponse.redirect(new URL(`${disabledLoginPath}?error=account_disabled`, request.url));
+    const redirectResponse = NextResponse.redirect(new URL(`${disabledLoginPath}?error=account_disabled`, request.url));
+    redirectResponse.cookies.delete('app_user_session');
+    redirectResponse.cookies.delete('auth_token');
+    return redirectResponse;
   }
 
-  // 5. حماية المسارات غير المصرح بها وتوجيه المستخدم لمساره الافتراضي
+  // 5. التحقق الصارم من بصمة الأجهزة المعتمدة (Strict Device Binding Guard)
+  const requestDeviceId = getDeviceIdFromRequest(request);
+  const tokenDeviceId = customSession?.deviceId?.trim() || null;
+  const isDeviceValid = validateDeviceBinding(tokenDeviceId, requestDeviceId, role);
+
+  if (!isDeviceValid) {
+    if (user) {
+      await supabase.auth.signOut();
+    }
+
+    // تسجيل محاولة وصول غير مصرح بها في سجل الأمان ومشاكل النظام
+    try {
+      await supabase.from('system_screen_issues').insert({
+        screen_route: pathname,
+        screen_name: 'Security Middleware (Device Binding)',
+        error_message: `محاولة وصول غير مصرح بها: معرف جهاز الطلب (${requestDeviceId || 'غير متوفر'}) لا يتطابق مع معرف جهاز الجلسة الموقعة (${tokenDeviceId || 'غير متوفر'})`,
+        device_id: requestDeviceId || tokenDeviceId || 'unknown',
+        issue_type: 'device_unauthorized',
+        severity: 'critical',
+        status: 'open',
+        user_name: customSession?.name || user?.email || 'Unknown',
+        user_email: customSession?.email || user?.email || 'Unknown',
+        user_role: role,
+        company_id: customSession?.companyId || null,
+        input_payload: {
+          tokenDeviceId,
+          requestDeviceId,
+          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+          userAgent: request.headers.get('user-agent') || 'unknown',
+        },
+      });
+    } catch {
+      // تجاوز أخطاء تسجيل السجل في بيئة الـ Edge
+    }
+
+    const unauthorizedLoginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
+    const redirectUrl = new URL(unauthorizedLoginPath, request.url);
+    redirectUrl.searchParams.set('error', 'unauthorized_device');
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    redirectResponse.cookies.delete('app_user_session');
+    redirectResponse.cookies.delete('auth_token');
+    return redirectResponse;
+  }
+
+  // فحص إضافي: إذا كان الجهاز مسجلاً في قاعدة البيانات كمعطل (is_active = false)
+  const targetDeviceId = tokenDeviceId || requestDeviceId;
+  if (targetDeviceId) {
+    try {
+      const { data: deviceRecord } = await supabase
+        .from('company_devices')
+        .select('id, is_active')
+        .eq('device_id', targetDeviceId)
+        .maybeSingle();
+
+      if (deviceRecord && deviceRecord.is_active === false) {
+        if (user) {
+          await supabase.auth.signOut();
+        }
+
+        try {
+          await supabase.from('system_screen_issues').insert({
+            screen_route: pathname,
+            screen_name: 'Security Middleware (Deactivated Device)',
+            error_message: `محاولة استخدام جهاز معطل من الإدارة: (${targetDeviceId}) للمستخدم (${customSession?.email || user?.email || 'Unknown'})`,
+            device_id: targetDeviceId,
+            issue_type: 'device_unauthorized',
+            severity: 'high',
+            status: 'open',
+            user_name: customSession?.name || user?.email || 'Unknown',
+            user_email: customSession?.email || user?.email || 'Unknown',
+            user_role: role,
+            company_id: customSession?.companyId || null,
+          });
+        } catch {}
+
+        const unauthorizedLoginPath = isPrefixed ? `/${currentLocale}/login` : '/login';
+        const redirectUrl = new URL(unauthorizedLoginPath, request.url);
+        redirectUrl.searchParams.set('error', 'unauthorized_device');
+        const redirectResponse = NextResponse.redirect(redirectUrl);
+        redirectResponse.cookies.delete('app_user_session');
+        redirectResponse.cookies.delete('auth_token');
+        return redirectResponse;
+      }
+    } catch {
+      // تجاوز خطأ الاستعلام في بيئة Edge أو عند انقطاع الاتصال
+    }
+  }
+
+  // 6. حماية المسارات غير المصرح بها وتوجيه المستخدم لمساره الافتراضي
   if (!isRouteAllowed(role, normalizedPath) && !isRouteAllowed(role, pathname)) {
     const redirectTarget = ROLE_DEFAULT_REDIRECT[role] || '/dashboard';
     const localizedTarget = isPrefixed ? `/${currentLocale}${redirectTarget}` : redirectTarget;
@@ -146,4 +270,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
-

@@ -13,10 +13,6 @@ import {
   Ship,
   ExternalLink,
   Download,
-  CheckCircle2,
-  AlertCircle,
-  Copy,
-  Receipt,
   FileCheck2,
   Anchor,
 } from 'lucide-react';
@@ -25,43 +21,44 @@ Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 interface TripDocumentsTabProps {
   trip: TripOrder;
+  onPrintCmr?: (type?: 'export' | 'import') => void;
 }
 
-export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
-  const { t, dir } = useLanguage();
+export function TripDocumentsTab({ trip, onPrintCmr }: TripDocumentsTabProps) {
+  const { t, locale } = useLanguage();
 
   const docList = [
     {
       key: 'cmr_export_url',
-      title: t('وثيقة الـ CMR للتصدير (ذهاب)', 'CMR Export (Aller)'),
+      title: t('وثيقة الـ CMR للتصدير (ذهاب)', 'CMR Export (Aller)', 'CMR Exportación (Ida)'),
       code: trip.cmr_export_number || trip.cmr_number || 'N/A',
       url: trip.cmr_export_url,
       type: 'cmr',
     },
     {
       key: 'cmr_import_url',
-      title: t('وثيقة الـ CMR للاستيراد (عودة)', 'CMR Import (Retour)'),
+      title: t('وثيقة الـ CMR للاستيراد (عودة)', 'CMR Import (Retour)', 'CMR Importación (Retorno)'),
       code: trip.cmr_import_number || 'N/A',
       url: trip.cmr_import_url,
       type: 'cmr',
     },
     {
       key: 'mrn_export_url',
-      title: t('بيان التصدير الجمركي (MRN / DUA)', 'Déclaration Export (MRN/DUA)'),
+      title: t('بيان التصدير الجمركي (MRN / DUA)', 'Déclaration Export (MRN/DUA)', 'Declaración Exportación (MRN/DUA)'),
       code: 'Customs Doc',
       url: trip.mrn_export_url,
       type: 'customs',
     },
     {
       key: 'phyto_url',
-      title: t('الشهادة الصحية النباتية (Phyto)', 'Certificat Phyto-sanitaire'),
+      title: t('الشهادة الصحية النباتية (Phyto)', 'Certificat Phyto-sanitaire', 'Certificado Fitosanitario'),
       code: 'ONSSA / Health',
       url: trip.phyto_url,
       type: 'health',
     },
     {
       key: 'facture_url',
-      title: t('الفاتورة التجارية للبضاعة (Facture)', 'Facture Commerciale Marchandises'),
+      title: t('الفاتورة التجارية للبضاعة (Facture)', 'Facture Commerciale Marchandises', 'Factura Comercial de Mercancías'),
       code: 'Invoice Ref',
       url: trip.facture_url,
       type: 'invoice',
@@ -81,6 +78,69 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Quick Actions Banner: Smart e-CMR & Consolidated Dossier */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-primary/10 to-indigo-500/10 border border-primary/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
+            <FileCheck2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-foreground">
+              {t('إدارة وثائق الشحنة والـ CMR الرقمي', 'Gestion des documents & e-CMR', 'Gestión documental y e-CMR')}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t(
+                'طباعة بيانات الشحنة الدولية، والوصول المباشر إلى الأرشيف اللوجستي الموحد (PDF)',
+                'Générez vos lettres de voiture e-CMR et téléchargez le dossier complet consolidé (PDF).',
+                'Genere sus cartas de porte e-CMR y descargue el expediente consolidado completo (PDF).'
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-end">
+          {onPrintCmr && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPrintCmr('export')}
+                className="rounded-xl text-xs gap-1.5 border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 font-medium"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{t('CMR تصدير (ذهاب)', 'CMR Export (Aller)', 'CMR Exportación (Ida)')}</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPrintCmr('import')}
+                className="rounded-xl text-xs gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{t('CMR استيراد (عودة)', 'CMR Import (Retour)', 'CMR Importación (Retorno)')}</span>
+              </Button>
+            </>
+          )}
+
+          <Button
+            variant="default"
+            size="sm"
+            asChild
+            className="rounded-xl text-xs gap-1.5 font-medium shadow-xs"
+          >
+            <a
+              href={`/api/trips/${trip.id}/dossier-pdf?lang=${locale}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{t('تحميل الأرشيف الموحد', 'Dossier Consolidé', 'Expediente Consolidado')}</span>
+            </a>
+          </Button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 1. Shipping & Customs Documents */}
         <Card className="rounded-2xl border-border bg-card shadow-xs">
@@ -88,10 +148,10 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
             <CardTitle className="text-base font-bold flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                {t('وثائق الشحن والتخليص الجمركي', 'Documents d\'Expédition & Douane')}
+                {t('وثائق الشحن والتخليص الجمركي', 'Documents d\'Expédition & Douane', 'Documentos de Envío y Aduana')}
               </span>
               <Badge variant="outline" className="text-xs font-mono">
-                {docList.filter((d) => d.url).length} / {docList.length} {t('مرفوعة', 'fichiers')}
+                {docList.filter((d) => d.url).length} / {docList.length} {t('مرفوعة', 'fichiers', 'subidos')}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -140,13 +200,13 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
                       >
                         <a href={doc.url} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="w-3 h-3" />
-                          <span>{t('معاينة', 'Ouvrir', 'Preview')}</span>
+                          <span>{t('معاينة', 'Ouvrir', 'Ver')}</span>
                         </a>
                       </Button>
                     </div>
                   ) : (
                     <Badge variant="secondary" className="text-[10px] shrink-0">
-                      {t('غير مرفوع', 'Non téléversé', 'Missing')}
+                      {t('غير مرفوع', 'Non téléversé', 'No subido')}
                     </Badge>
                   )}
                 </div>
@@ -162,7 +222,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
               <CardTitle className="text-base font-bold flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Ship className="w-5 h-5 text-blue-600" />
-                  {t('بيانات العبور البحري والموانئ (Ferry)', 'Transit Maritime & Frais Portuaires')}
+                  {t('بيانات العبور البحري والموانئ (Ferry)', 'Transit Maritime & Frais Portuaires', 'Tránsito Marítimo y Tasas Portuarias')}
                 </span>
                 <Badge variant="outline" className="text-xs font-mono border-blue-500/30 text-blue-600">
                   Tanger Med Corridor
@@ -175,16 +235,16 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
                   <span className="text-[11px] text-muted-foreground font-medium block">
-                    {t('شركة الملاحة البحرية:', 'Compagnie Maritime :')}
+                    {t('شركة الملاحة البحرية:', 'Compagnie Maritime :', 'Compañía Marítima:')}
                   </span>
                   <span className="text-sm font-bold text-foreground mt-0.5 block">
-                    {trip.ferry_company || t('Balearia / FRS / Armas', 'Non spécifiée')}
+                    {trip.ferry_company || t('Balearia / FRS / Armas', 'Non spécifiée', 'No especificada')}
                   </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
                   <span className="text-[11px] text-muted-foreground font-medium block">
-                    {t('رمز الحجز (Localizador):', 'Réf. Réservation (Localizador) :')}
+                    {t('رمز الحجز (Localizador):', 'Réf. Réservation (Localizador) :', 'Ref. Reserva (Localizador):')}
                   </span>
                   <span className="text-sm font-mono font-black text-blue-600 dark:text-blue-400 mt-0.5 block">
                     {trip.ferry_localizador || 'LOC-TIR-9824'}
@@ -197,7 +257,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
                 <div className="flex items-center justify-between pb-2 border-b border-border/50">
                   <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                     <Anchor className="w-3.5 h-3.5 text-blue-500" />
-                    {t('تفصيل رسوم الموانئ والعبور الميدانية:', 'Frais de Transit Détaillés :')}
+                    {t('تفصيل رسوم الموانئ والعبور الميدانية:', 'Frais de Transit Détaillés :', 'Desglose de Tasas Portuarias y Tránsito:')}
                   </span>
                   <span className="text-sm font-mono font-black text-blue-600 dark:text-blue-400">
                     {formatCurrency(totalPortFeesDec.toNumber(), 'MAD')}
@@ -207,7 +267,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-lg bg-background border border-border/50">
                     <span className="text-muted-foreground text-[11px] block">
-                      {t('تذكرة العبّارة / الباخرة', 'Billet Bateau Ferry')}
+                      {t('تذكرة العبّارة / الباخرة', 'Billet Bateau Ferry', 'Billete de Barco Ferry')}
                     </span>
                     <span className="font-mono font-bold text-foreground mt-0.5 block">
                       {formatCurrency(ferryCostDec.toNumber(), 'MAD')}
@@ -216,7 +276,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
 
                   <div className="p-2.5 rounded-lg bg-background border border-border/50">
                     <span className="text-muted-foreground text-[11px] block">
-                      {t('دفتر المرور الجمركي (Triptyque)', 'Triptyque (CPD)')}
+                      {t('دفتر المرور الجمركي (Triptyque)', 'Triptyque (CPD)', 'Tríptico Aduanero (CPD)')}
                     </span>
                     <span className="font-mono font-bold text-foreground mt-0.5 block">
                       {formatCurrency(triptikCostDec.toNumber(), 'MAD')}
@@ -225,7 +285,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
 
                   <div className="p-2.5 rounded-lg bg-background border border-border/50">
                     <span className="text-muted-foreground text-[11px] block">
-                      {t('ترانزيت ألميريا / الجزيرة', 'Transit Port Espagne')}
+                      {t('ترانزيت ألميريا / الجزيرة', 'Transit Port Espagne', 'Tránsito Puerto Algeciras/Almería')}
                     </span>
                     <span className="font-mono font-bold text-foreground mt-0.5 block">
                       {formatCurrency(transitAlmeriaCostDec.toNumber(), 'MAD')}
@@ -234,7 +294,7 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
 
                   <div className="p-2.5 rounded-lg bg-background border border-border/50">
                     <span className="text-muted-foreground text-[11px] block">
-                      {t('رسوم مرسى المغرب (Tanger Med)', 'Marsa Maroc')}
+                      {t('رسوم مرسى المغرب (Tanger Med)', 'Marsa Maroc', 'Tasas Marsa Maroc')}
                     </span>
                     <span className="font-mono font-bold text-foreground mt-0.5 block">
                       {formatCurrency(marsaMarocCostDec.toNumber(), 'MAD')}
@@ -249,4 +309,3 @@ export function TripDocumentsTab({ trip }: TripDocumentsTabProps) {
     </div>
   );
 }
-

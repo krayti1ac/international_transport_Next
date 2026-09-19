@@ -30,11 +30,16 @@ import {
   CheckCircle2,
   MinusCircle,
   TrendingUp,
+  Award,
 } from 'lucide-react';
 
 import { formatCurrency } from '@/lib/forex';
 import { DriverFineModal } from '@/features/drivers/components/DriverFineModal';
 import { processDriverSettlementPayout } from '@/features/drivers/services/driver-fines.actions';
+import {
+  calculateDriverSafetyScore,
+  type DriverSafetyBreakdown,
+} from '@/features/drivers/services/driver-safety-score.actions';
 
 export default function DriverSettlementsPage() {
   const { toast } = useToast();
@@ -48,6 +53,7 @@ export default function DriverSettlementsPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [safetyBreakdown, setSafetyBreakdown] = useState<DriverSafetyBreakdown | null>(null);
   const [isFineModalOpen, setIsFineModalOpen] = useState(false);
 
   const [isPayoutDialogOpen, setIsPayoutDialogOpen] = useState(false);
@@ -127,9 +133,33 @@ export default function DriverSettlementsPage() {
     return trips.filter((t) => t.driver_id === selectedDriver.id && ['completed', 'delivered', 'settled'].includes(t.status));
   }, [trips, selectedDriver]);
 
+  useEffect(() => {
+    if (!selectedDriver) {
+      setSafetyBreakdown(null);
+      return;
+    }
+    let cancelled = false;
+    calculateDriverSafetyScore(selectedDriver.id, 30).then((res) => {
+      if (!cancelled) setSafetyBreakdown(res);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDriver]);
+
   const financialBreakdown = useMemo(() => {
     if (!selectedDriver) {
-      return { base: 0, autoBonus: 0, advancesTotal: 0, finesTotal: 0, net: 0, safetyScore: 100 };
+      return {
+        base: 0,
+        autoBonus: 0,
+        safetyBonus: 0,
+        totalBonuses: 0,
+        advancesTotal: 0,
+        finesTotal: 0,
+        net: 0,
+        safetyScore: 100,
+        isBonusEligible: false,
+      };
     }
 
     Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
@@ -143,6 +173,13 @@ export default function DriverSettlementsPage() {
     );
     const autoBonus = totalTripRevenue.times(bonusPercentage);
 
+    // مؤشر السلامة الحقيقي ومكافأة القيادة الآمنة (500 درهم عند مؤشر >= 90)
+    const score = safetyBreakdown?.totalScore ?? Math.max(10, Math.min(100, 100 - driverFines.length * 12));
+    const isBonusEligible = score >= 90;
+    const safetyBonus = isBonusEligible ? new Decimal(500) : new Decimal(0);
+
+    const totalBonuses = autoBonus.plus(safetyBonus);
+
     const advancesTotal = driverAdvances.reduce(
       (sum, a) => sum.plus(new Decimal(a.amount || 0)),
       new Decimal(0)
@@ -153,20 +190,20 @@ export default function DriverSettlementsPage() {
       new Decimal(0)
     );
 
-    const net = base.plus(autoBonus).minus(advancesTotal).minus(finesTotal);
-
-    let score = 100 - driverFines.length * 12;
-    score = Math.max(10, Math.min(100, score));
+    const net = base.plus(totalBonuses).minus(advancesTotal).minus(finesTotal);
 
     return {
       base: base.toNumber(),
       autoBonus: autoBonus.toNumber(),
+      safetyBonus: safetyBonus.toNumber(),
+      totalBonuses: totalBonuses.toNumber(),
       advancesTotal: advancesTotal.toNumber(),
       finesTotal: finesTotal.toNumber(),
       net: net.toNumber(),
       safetyScore: score,
+      isBonusEligible,
     };
-  }, [selectedDriver, completedTrips, driverAdvances, pendingFines, driverFines]);
+  }, [selectedDriver, completedTrips, driverAdvances, pendingFines, driverFines, safetyBreakdown]);
 
   const handleConfirmPayout = async () => {
     if (!selectedDriver) return;
@@ -178,12 +215,15 @@ export default function DriverSettlementsPage() {
       const res = await processDriverSettlementPayout({
         driverId: selectedDriver.id,
         baseSalary: financialBreakdown.base,
-        bonusAmount: financialBreakdown.autoBonus,
+        bonusAmount: financialBreakdown.totalBonuses,
         advancesToDeduct: financialBreakdown.advancesTotal,
         fineIdsToDeduct: pendingFines.map((f) => f.id),
         finesAmountToDeduct: financialBreakdown.finesTotal,
         periodStart: startDate,
         periodEnd: endDate,
+        notes: financialBreakdown.isBonusEligible
+          ? `صرف راتب وتسوية مستحقات السائق #${selectedDriver.id} مع مكافأة السلامة والقيادة الآمنة (+500 MAD)`
+          : undefined,
       });
 
       if (res.success) {
@@ -266,9 +306,13 @@ export default function DriverSettlementsPage() {
                 </CardTitle>
                 <span
                   className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                    financialBreakdown.safetyScore >= 80
+                    financialBreakdown.safetyScore >= 90
                       ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                      : financialBreakdown.safetyScore >= 75
+                      ? 'bg-blue-500/15 text-blue-600 border-blue-500/30'
+                      : financialBreakdown.safetyScore >= 60
+                      ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-600 border-rose-500/30'
                   }`}
                 >
                   مؤشر السلامة: {financialBreakdown.safetyScore}%
@@ -294,6 +338,18 @@ export default function DriverSettlementsPage() {
                       +{formatCurrency(financialBreakdown.autoBonus, 'MAD')}
                     </span>
                   </div>
+
+                  {financialBreakdown.isBonusEligible && (
+                    <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/25 text-emerald-700 dark:text-emerald-300">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        مكافأة القيادة الآمنة (مؤشر 90+):
+                      </span>
+                      <span className="font-mono font-black text-emerald-700 dark:text-emerald-300">
+                        +{formatCurrency(financialBreakdown.safetyBonus, 'MAD')}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex justify-between items-center text-rose-600 pt-2 border-t border-border/50">
                     <span className="flex items-center gap-1">

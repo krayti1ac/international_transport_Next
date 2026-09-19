@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { validateRows, type ImportRow, type ValidationOptions } from '@/lib/excel-importer';
-import { validateICE, validateMoroccanPlate, validateEmail, validatePhone } from '@/lib/excel-importer';
+import { validateICE, validateMoroccanPlate, validateEmail, validatePhone } from '@/lib/validators/morocco-business';
 
 export interface BulkImportResponse {
   success: boolean;

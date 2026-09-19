@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { ROLE_DEFAULT_REDIRECT } from '@/lib/rbac';
+import { verifySession } from '@/lib/session';
 import type { UserRole } from '@/types/database';
 
 export const metadata = {
@@ -38,22 +39,20 @@ export default async function SuperAdminLayout({
   }
 
   // Fallback to app_user_session cookie if needed (e.g. offline dev mode)
+  // Verify signed session if Supabase user is not found
   if (!role) {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('app_user_session')?.value;
     if (sessionCookie) {
       try {
-        const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-        role = (parsed.role as UserRole) || null;
-        if (parsed.is_active === false) {
-          isActive = false;
+        const verified = await verifySession(decodeURIComponent(sessionCookie));
+        if (verified) {
+          role = (verified.role as UserRole) || null;
+          if (verified.isActive === false) {
+            isActive = false;
+          }
         }
-      } catch {
-        try {
-          const parsed = JSON.parse(sessionCookie);
-          role = (parsed.role as UserRole) || null;
-        } catch {}
-      }
+      } catch {}
     }
   }
 

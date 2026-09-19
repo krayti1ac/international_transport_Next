@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTripDossierData, buildTripDossierHtml } from '@/lib/trip-dossier-pdf';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,7 +13,12 @@ export async function GET(
       return new NextResponse('معرّف رحلة غير صالح', { status: 400 });
     }
 
-    const dossierResult = await getTripDossierData(tripId);
+    const { searchParams } = new URL(request.url);
+    const langParam = searchParams.get('lang') || 'ar';
+    const locale: 'ar' | 'fr' | 'es' =
+      langParam === 'fr' || langParam === 'es' ? langParam : 'ar';
+
+    const dossierResult = await getTripDossierData(tripId, locale);
 
     if (!dossierResult.success || !dossierResult.data) {
       return new NextResponse(dossierResult.error || 'تعذر استخراج ملف الأرشيف', {

@@ -62,7 +62,12 @@
       "phone": "الهاتف",
       "status": "الحالة",
       "baseSalary": "الراتب الأساسي",
-      "bonusPercentage": "نسبة المكافأة"
+      "bonusPercentage": "نسبة المكافأة",
+      "safetyScore": "مؤشر السلامة",
+      "safetyBonus": "مكافأة القيادة الآمنة",
+      "overspeeding": "تجاوز السرعة",
+      "harshDriving": "كبح وتسارع حاد",
+      "excessiveIdling": "توقف بالمحرك"
     },
     "auth": {
       "login": "تسجيل الدخول",
@@ -1556,6 +1561,21 @@
       "savedSuccess": "تم حفظ إعدادات خادم البريد بنجاح",
       "connectionSuccess": "تم الاتصال واختبار مصافحة خادم البريد بنجاح تام",
       "connectionFailed": "فشل الاتصال بخادم البريد"
+    },
+    "africanTradeCorridor": {
+      "title": "الممر التجاري الإفريقي البري",
+      "subtitle": "الربط البري بين المغرب وموريتانيا والسنغال وغرب إفريقيا عبر معبر الكركارات",
+      "guergueratBorder": "معبر الكركارات الحدودي",
+      "guergueratDesc": "البوابة البرية الدولية الاستراتيجية الرابطة بين المغرب وموريتانيا",
+      "corridorAfrican": "الممر الإفريقي البري",
+      "corridorEuropean": "الممر الأوروبي البحري",
+      "overlandContinuous": "عبور بري متواصل (100% بدون عبّارة)",
+      "mauritaniaTransit": "ترانزيت موريتانيا ودول غرب إفريقيا",
+      "ecowasInsurance": "تأمين بطاقة إيكواس البنية (Carte Brune)",
+      "currencyMRU": "الأوقية الموريتانية (MRU)",
+      "currencyXOF": "فرنك سيفا غرب إفريقيا (XOF)",
+      "africanVisa": "تأشيرة موريتانيا وغرب إفريقيا",
+      "africanBunkeringAdvice": "تزود بالكامل بمحطات الداخلة أو معبر الكركارات قبل العبور لموريتانيا لتأمين الوقود عبر المقاطع الصحراوية"
     }
   }
 }

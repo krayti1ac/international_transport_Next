@@ -22,6 +22,7 @@ import { useLanguage } from '@/components/language-provider';
 import { PublicTripShareBar } from '@/features/tracking/components/PublicTripShareBar';
 import { PublicTripTimeline } from '@/features/tracking/components/PublicTripTimeline';
 import { PublicTripPodCard } from '@/features/tracking/components/PublicTripPodCard';
+import { calculateLiveTripEta, type EtaResult } from '@/features/tracking/services/eta-calculator.actions';
 
 const TrackingMap = dynamic(
   () => import('@/features/tracking/components/TrackingMap').then((mod) => ({ default: mod.TrackingMap })),
@@ -46,6 +47,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
   const [client, setClient] = useState<Client | null>(null);
   const [deliverySignature, setDeliverySignature] = useState<DeliverySignature | null>(null);
   const [locations, setLocations] = useState<Map<number, TruckLocation[]>>(new Map());
+  const [etaInfo, setEtaInfo] = useState<EtaResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingPod, setLoadingPod] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -117,6 +119,13 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           locMap.set(tripData.truck_id, normalized);
           setLocations(locMap);
         }
+
+        // 3. Compute live ETA in background
+        calculateLiveTripEta(tripId)
+          .then((res) => {
+            if (res) setEtaInfo(res);
+          })
+          .catch((err) => console.warn('Live ETA calculation error:', err));
       } catch (e) {
         console.error('Failed to load public tracking data', e);
         setNotFound(true);
@@ -202,6 +211,13 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
               next.set(trip.truck_id!, [normalized, ...list.slice(0, 24)]);
               return next;
             });
+
+            // Update live ETA on new location ping
+            calculateLiveTripEta(tripId)
+              .then((res) => {
+                if (res) setEtaInfo(res);
+              })
+              .catch((err) => console.warn('Realtime ETA calculation error:', err));
           }
         )
         .subscribe();
@@ -375,11 +391,24 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
             <Clock className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
             <div className="overflow-hidden">
               <span className="text-[11px] text-muted-foreground block truncate">
-                {t('الوصول المتوقع', 'Arrivée estimée', 'Llegada estimada')}
+                {t('الوصول المتوقع (ETA)', 'Arrivée estimée (ETA)', 'Llegada estimada (ETA)')}
               </span>
-              <span className="text-xs font-bold text-foreground block mt-0.5 font-mono">
-                {trip.unloading_date_export || t('جارٍ التحديث', 'En cours', 'En curso')}
-              </span>
+              {etaInfo ? (
+                <div>
+                  <span className="text-xs font-bold text-foreground block mt-0.5 font-mono">
+                    ~{etaInfo.estimatedHoursRemaining} {t('ساعة', 'h', 'h')} ({etaInfo.remainingDistanceKm} km)
+                  </span>
+                  {etaInfo.estimatedArrivalDate && (
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono block">
+                      {new Date(etaInfo.estimatedArrivalDate).toLocaleDateString()} {new Date(etaInfo.estimatedArrivalDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs font-bold text-foreground block mt-0.5 font-mono">
+                  {trip.unloading_date_export || t('جارٍ التحديث', 'En cours', 'En curso')}
+                </span>
+              )}
             </div>
           </div>
 
@@ -414,6 +443,30 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
         {/* 4. Interactive 4-Stage Transport Corridor Timeline */}
         <PublicTripTimeline trip={trip} />
 
+        {/* Route Deviation Warning Alert */}
+        {etaInfo?.isOffRoute && (
+          <div className="rounded-2xl border border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 p-4 text-rose-900 dark:text-rose-200 shadow-sm animate-pulse">
+            <div className="flex items-center gap-3">
+              <span className="flex h-3.5 w-3.5 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-600" />
+              </span>
+              <div>
+                <h4 className="font-bold text-sm font-amiri">
+                  {t('تنبيه: تم رصد انحراف عن الرواق الدولي المعتمد', 'Alerte: Déviation d\'itinéraire détectée', 'Alerta: Desviación de ruta detectada')}
+                </h4>
+                <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
+                  {t(
+                    `موقع الشاحنة يبتعد بمقدار ${etaInfo.crossTrackDistanceKm || '>35'} كم عن خط السير المخطط. فريق العمليات يتابع الحالة مباشرة.`,
+                    `Le véhicule dévie de ${etaInfo.crossTrackDistanceKm || '>35'} km par rapport au couloir prévu. L'équipe d'exploitation suit l'incident.`,
+                    `El vehículo se desvía ${etaInfo.crossTrackDistanceKm || '>35'} km del corredor planificado. El equipo de operaciones supervisa el incidente.`
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 5. Live GPS Interactive Tracking Map */}
         <Card className="border-border overflow-hidden shadow-md">
           <CardHeader className="pb-3 border-b border-border bg-card">
@@ -424,7 +477,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
               </CardTitle>
 
               {latestLoc ? (
-                <div className="flex items-center gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                     {t('إشارة GPS نشطة', 'Signal GPS Actif', 'Señal GPS Activa')}
@@ -432,6 +485,11 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
                   {typeof latestLoc.speed === 'number' && (
                     <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border">
                       {Math.round(latestLoc.speed)} km/h
+                    </span>
+                  )}
+                  {etaInfo && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/20">
+                      ⏱ ETA: ~{etaInfo.estimatedHoursRemaining}h ({etaInfo.remainingDistanceKm} km)
                     </span>
                   )}
                 </div>

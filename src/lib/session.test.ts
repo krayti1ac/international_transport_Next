@@ -1,8 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 process.env.SESSION_SECRET = 'test-session-secret-for-vitest-only-do-not-use-in-production';
 
-import { signSession, verifySession, getSessionFromCookie } from './session';
+import {
+  signSession,
+  verifySession,
+  getSessionFromCookie,
+  validateDriverDevice,
+  isDriverDeviceValid,
+  getDeviceIdFromCookie,
+  getDeviceIdFromRequest,
+  validateDeviceBinding,
+} from './session';
 
 describe('Session', () => {
   describe('signSession and verifySession', () => {
@@ -120,4 +129,153 @@ describe('Session', () => {
       expect(verified?.role).toBe('super_admin');
     });
   });
+
+  describe('validateDriverDevice and isDriverDeviceValid', () => {
+    it('should validate driver session when deviceId matches between token and cookie', () => {
+      const session = { role: 'driver', deviceId: 'dev-001' };
+      expect(validateDriverDevice(session, 'dev-001')).toBe(true);
+      expect(isDriverDeviceValid(session, 'dev-001')).toBe(true);
+    });
+
+    it('should validate driver session when deviceId is present only in token', () => {
+      const session = { role: 'driver', deviceId: 'dev-001' };
+      expect(validateDriverDevice(session, null)).toBe(true);
+      expect(validateDriverDevice(session, undefined)).toBe(true);
+    });
+
+    it('should validate driver session when deviceId is present only in cookie', () => {
+      const session = { role: 'driver', deviceId: null };
+      expect(validateDriverDevice(session, 'dev-001')).toBe(true);
+    });
+
+    it('should reject driver session when deviceId is missing from both token and cookie', () => {
+      const session = { role: 'driver', deviceId: null };
+      expect(validateDriverDevice(session, null)).toBe(false);
+      expect(validateDriverDevice(session, '')).toBe(false);
+      expect(validateDriverDevice(session, '   ')).toBe(false);
+      expect(validateDriverDevice({ role: 'driver' }, undefined)).toBe(false);
+    });
+
+    it('should reject driver session when token deviceId does not match cookie deviceId', () => {
+      const session = { role: 'driver', deviceId: 'dev-001' };
+      expect(validateDriverDevice(session, 'dev-002')).toBe(false);
+      expect(validateDriverDevice(session, 'dev-other')).toBe(false);
+    });
+
+    it('should allow non-driver roles even without any deviceId', () => {
+      expect(validateDriverDevice({ role: 'admin' }, null)).toBe(true);
+      expect(validateDriverDevice({ role: 'super_admin' }, null)).toBe(true);
+      expect(validateDriverDevice({ role: 'secretary' }, null)).toBe(true);
+      expect(validateDriverDevice({ role: 'accountant' }, null)).toBe(true);
+      expect(validateDriverDevice({ role: 'fleet_manager' }, null)).toBe(true);
+      expect(validateDriverDevice(null, null)).toBe(true);
+    });
+
+    it('should support role string signature with token and cookie device IDs', () => {
+      expect(validateDriverDevice('driver', 'dev-001', 'dev-001')).toBe(true);
+      expect(validateDriverDevice('driver', 'dev-001', null)).toBe(true);
+      expect(validateDriverDevice('driver', null, 'dev-001')).toBe(true);
+      expect(validateDriverDevice('driver', null, null)).toBe(false);
+      expect(validateDriverDevice('driver', 'dev-001', 'dev-002')).toBe(false);
+      expect(validateDriverDevice('admin', null, null)).toBe(true);
+      expect(validateDriverDevice('secretary', null, null)).toBe(true);
+    });
+  });
+
+  describe('getDeviceIdFromCookie', () => {
+    it('should extract device ID from mock cookie store object', () => {
+      const mockStore = {
+        get: (name: string) => {
+          if (name === 'app_device_id') return { value: 'dev-cookie-123' };
+          return undefined;
+        },
+      };
+      expect(getDeviceIdFromCookie(mockStore)).toBe('dev-cookie-123');
+    });
+
+    it('should extract device ID from alternate cookie names like device_id', () => {
+      const mockStore = {
+        get: (name: string) => {
+          if (name === 'device_id') return { value: 'dev-alt-456' };
+          return undefined;
+        },
+      };
+      expect(getDeviceIdFromCookie(mockStore)).toBe('dev-alt-456');
+    });
+
+    it('should extract device ID from raw cookie string', () => {
+      const cookieStr = 'theme=dark; device_id=dev-999; other=value';
+      expect(getDeviceIdFromCookie(cookieStr)).toBe('dev-999');
+    });
+
+    it('should extract URL encoded device ID from raw cookie string', () => {
+      const cookieStr = 'app_device_id=dev%20123; other=value';
+      expect(getDeviceIdFromCookie(cookieStr)).toBe('dev 123');
+    });
+
+    it('should return null when no device cookie exists', () => {
+      const cookieStr = 'theme=dark; other=value';
+      expect(getDeviceIdFromCookie(cookieStr)).toBeNull();
+      expect(getDeviceIdFromCookie('')).toBeNull();
+    });
+  });
+
+  describe('getDeviceIdFromRequest', () => {
+    it('should extract device ID from x-device-id header with highest priority', () => {
+      const mockReq = {
+        headers: {
+          get: (header: string) => (header === 'x-device-id' ? 'dev-hdr-999' : null),
+        },
+        cookies: {
+          get: (_name: string) => ({ value: 'dev-cookie-111' }),
+        },
+      };
+      expect(getDeviceIdFromRequest(mockReq)).toBe('dev-hdr-999');
+    });
+
+    it('should fall back to cookies if header is absent', () => {
+      const mockReq = {
+        headers: {
+          get: () => null,
+        },
+        cookies: {
+          get: (name: string) => (name === 'app_device_id' ? { value: 'dev-cookie-222' } : undefined),
+        },
+      };
+      expect(getDeviceIdFromRequest(mockReq)).toBe('dev-cookie-222');
+    });
+
+    it('should return null if request is null or empty', () => {
+      expect(getDeviceIdFromRequest(null)).toBeNull();
+      expect(getDeviceIdFromRequest({})).toBeNull();
+    });
+  });
+
+  describe('validateDeviceBinding', () => {
+    it('should accept when session deviceId strictly matches request deviceId', () => {
+      expect(validateDeviceBinding('dev-001', 'dev-001', 'driver')).toBe(true);
+      expect(validateDeviceBinding('dev-001', 'dev-001', 'admin')).toBe(true);
+    });
+
+    it('should reject when session deviceId does not match request deviceId', () => {
+      expect(validateDeviceBinding('dev-001', 'dev-002', 'driver')).toBe(false);
+      expect(validateDeviceBinding('dev-001', 'dev-002', 'admin')).toBe(false);
+    });
+
+    it('should reject when session has deviceId but request provides no deviceId', () => {
+      expect(validateDeviceBinding('dev-001', null, 'driver')).toBe(false);
+      expect(validateDeviceBinding('dev-001', undefined, 'admin')).toBe(false);
+    });
+
+    it('should reject driver role if neither session nor request has deviceId', () => {
+      expect(validateDeviceBinding(null, null, 'driver')).toBe(false);
+    });
+
+    it('should allow non-driver role when session has no device binding and request has none', () => {
+      expect(validateDeviceBinding(null, null, 'admin')).toBe(true);
+      expect(validateDeviceBinding(null, null, 'super_admin')).toBe(true);
+    });
+  });
 });
+
+

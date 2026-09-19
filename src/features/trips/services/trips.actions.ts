@@ -1,15 +1,21 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getAuthenticatedCompanyId } from '@/lib/rbac.server';
 import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
 import type { TripOrder } from '@/types/database';
 
 export async function createTripOrder(data: Partial<TripOrder>) {
   try {
+    const companyId = await getAuthenticatedCompanyId(data.company_id);
     const supabase = await createClient();
+    const payload = {
+      ...data,
+      company_id: companyId,
+    };
     const { data: result, error } = await supabase
       .from('trip_orders')
-      .insert(data)
+      .insert(payload)
       .select()
       .single();
 

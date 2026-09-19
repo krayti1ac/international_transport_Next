@@ -62,7 +62,12 @@
       "phone": "Téléphone",
       "status": "Statut",
       "baseSalary": "Salaire de base",
-      "bonusPercentage": "Pourcentage de bonus"
+      "bonusPercentage": "Pourcentage de bonus",
+      "safetyScore": "Score de sécurité",
+      "safetyBonus": "Prime de sécurité",
+      "overspeeding": "Excès de vitesse",
+      "harshDriving": "Conduite brusque",
+      "excessiveIdling": "Ralenti excessif"
     },
     "auth": {
       "login": "Se connecter",
@@ -1556,6 +1561,21 @@
       "savedSuccess": "Paramètres de messagerie enregistrés avec succès",
       "connectionSuccess": "Connexion et vérification réussies avec succès",
       "connectionFailed": "Échec de la connexion au serveur de messagerie"
+    },
+    "africanTradeCorridor": {
+      "title": "Couloir Commercial Africain Terrestre",
+      "subtitle": "Liaison terrestre entre le Maroc, la Mauritanie, le Sénégal et l'Afrique de l'Ouest via le poste d'El Guerguerat",
+      "guergueratBorder": "Poste frontière d'El Guerguerat",
+      "guergueratDesc": "Porte terrestre internationale stratégique reliant le Maroc et la Mauritanie",
+      "corridorAfrican": "Couloir Africain Terrestre",
+      "corridorEuropean": "Couloir Européen Maritime",
+      "overlandContinuous": "Transit terrestre continu (100% sans ferry)",
+      "mauritaniaTransit": "Transit Mauritanie & Afrique de l'Ouest",
+      "ecowasInsurance": "Assurance Carte Brune CEDEAO",
+      "currencyMRU": "Ouguiya Mauritanienne (MRU)",
+      "currencyXOF": "Franc CFA Afrique de l'Ouest (XOF)",
+      "africanVisa": "Visa Mauritanie & Afrique de l'Ouest",
+      "africanBunkeringAdvice": "Ravitaillement complet à Dakhla ou Guerguerat avant la frontière mauritanienne pour sécuriser le carburant dans le désert"
     }
   }
 }

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { getOfflineQueue, processOfflineQueue } from '@/lib/offline-sync';
+import { getTotalOfflineQueueCount, processAllOfflineQueues } from '@/lib/offline-sync';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/components/language-provider';
 
@@ -14,25 +14,76 @@ export function OfflineSyncBadge() {
   const [isSyncing, setIsSyncing] = useState(false);
   const { toast } = useToast();
 
-  const updateStatus = () => {
-    setIsOnline(navigator.onLine);
-    setPendingCount(getOfflineQueue().length);
-  };
+  const updateStatus = useCallback(async () => {
+    if (typeof navigator !== 'undefined') {
+      setIsOnline(navigator.onLine);
+    }
+    try {
+      const count = await getTotalOfflineQueueCount();
+      setPendingCount(count);
+    } catch {
+      setPendingCount(0);
+    }
+  }, []);
+
+  const triggerSync = useCallback(async () => {
+    if ((typeof navigator !== 'undefined' && !navigator.onLine) || isSyncing) return;
+    const count = await getTotalOfflineQueueCount();
+    if (count === 0) return;
+
+    setIsSyncing(true);
+    try {
+      const { receipts, pods, tasks } = await processAllOfflineQueues();
+      const successTotal = receipts.successCount + pods.successCount + tasks.successCount;
+      const failTotal = receipts.failCount + pods.failCount + tasks.failCount;
+
+      if (successTotal > 0) {
+        toast({
+          title: t('✅ اكتملت المزامنة بنجاح', '✅ Synchronisation réussie', '✅ Sincronización exitosa'),
+          description: t(
+            `تم رفع وتحديث ${successTotal} من العناصر المعلقة (إيصالات، إثباتات تسليم POD، ومهام).`,
+            `${successTotal} élément(s) synchronisé(s) (reçus, preuves POD et missions).`,
+            `${successTotal} elemento(s) sincronizado(s) (recibos, pruebas POD y misiones).`
+          ),
+        });
+      }
+      if (failTotal > 0) {
+        toast({
+          title: t('فشلت بعض المزامنات', 'Échec partiel de synchronisation', 'Fallo parcial de sincronización'),
+          description: t(
+            `تعذر رفع ${failTotal} من العناصر المعلقة - سيتم المحاولة مجدداً تلقائياً.`,
+            `${failTotal} élément(s) n'ont pas pu être synchronisés - nouvelle tentative automatique.`,
+            `${failTotal} elemento(s) no se pudieron sincronizar - reintento automático.`
+          ),
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsSyncing(false);
+      updateStatus();
+    }
+  }, [isSyncing, t, toast, updateStatus]);
 
   useEffect(() => {
     updateStatus();
 
     const handleOnline = () => {
       updateStatus();
-      toast({ title: t('🌐 تم استعادة الاتصال بالإنترنت', '🌐 Connexion Internet rétablie') });
+      toast({
+        title: t('🌐 تم استعادة الاتصال بالإنترنت', '🌐 Connexion Internet rétablie', '🌐 Conexión a Internet restablecida'),
+      });
       triggerSync();
     };
 
     const handleOffline = () => {
       updateStatus();
       toast({
-        title: t('⚠️ انقطاع الاتصال', '⚠️ Connexion perdue'),
-        description: t('الوضع غير المتصل نشط - سيتم حفظ الإيصالات محلياً في هاتفك.', 'Mode hors ligne actif - les reçus seront stockés localement.'),
+        title: t('⚠️ انقطاع الاتصال', '⚠️ Connexion perdue', '⚠️ Conexión perdida'),
+        description: t(
+          'الوضع غير المتصل نشط - سيتم حفظ الإيصالات وإثباتات التسليم محلياً في هاتفك.',
+          'Mode hors ligne actif - les reçus et POD seront stockés localement.',
+          'Modo sin conexión activo - los recibos y POD se guardarán localmente.'
+        ),
         variant: 'destructive',
       });
     };
@@ -47,34 +98,7 @@ export function OfflineSyncBadge() {
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
     };
-  }, [toast, t]);
-
-  const triggerSync = async () => {
-    if (!navigator.onLine || isSyncing) return;
-    const queue = getOfflineQueue();
-    if (queue.length === 0) return;
-
-    setIsSyncing(true);
-    try {
-      const { successCount, failCount } = await processOfflineQueue();
-      if (successCount > 0) {
-        toast({
-          title: t('✅ اكتملت المزامنة', '✅ Synchronisation terminée'),
-          description: t(`تم رفع ${successCount} إيصالات معلقة بنجاح.`, `${successCount} reçu(s) synchronisé(s) avec succès.`),
-        });
-      }
-      if (failCount > 0) {
-        toast({
-          title: t('فشلت بعض المزامنات', 'Échec partiel de synchronisation'),
-          description: t(`تعذر رفع ${failCount} عناصر - حاول مجدداً.`, `${failCount} élément(s) n'ont pas pu être synchronisés.`),
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      setIsSyncing(false);
-      updateStatus();
-    }
-  };
+  }, [toast, t, triggerSync, updateStatus]);
 
   if (isOnline && pendingCount === 0) {
     return null;
@@ -88,12 +112,12 @@ export function OfflineSyncBadge() {
       {!isOnline ? (
         <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/15 text-rose-600 border border-rose-500/30">
           <WifiOff className="w-3.5 h-3.5 animate-pulse" />
-          <span>{t('غير متصل (Offline)', 'Hors ligne (Offline)')}</span>
+          <span>{t('غير متصل (Offline)', 'Hors ligne (Offline)', 'Sin conexión (Offline)')}</span>
         </span>
       ) : (
         <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
           <Wifi className="w-3.5 h-3.5" />
-          <span>{t('متصل', 'En ligne')}</span>
+          <span>{t('متصل', 'En ligne', 'En línea')}</span>
         </span>
       )}
 
@@ -106,7 +130,13 @@ export function OfflineSyncBadge() {
           className="h-8 rounded-xl text-xs flex items-center gap-1.5 bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary font-bold"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>{t(`مزامنة المعلقات (${pendingCount})`, `Synchroniser (${pendingCount})`)}</span>
+          <span>
+            {t(
+              `مزامنة المعلقات (${pendingCount})`,
+              `Synchroniser (${pendingCount})`,
+              `Sincronizar (${pendingCount})`
+            )}
+          </span>
         </Button>
       )}
     </div>

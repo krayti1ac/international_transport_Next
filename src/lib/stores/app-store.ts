@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type AppTheme = 'light' | 'dark' | 'system';
 export type AppLanguage = 'ar' | 'fr' | 'es';
@@ -16,16 +16,12 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       theme: 'system',
       language: 'ar',
-      setTheme: (theme) => {
-        set({ theme });
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('app_theme_mode', theme);
-        }
-      },
+      setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
     }),
     {
-      name: 'app-storage',
+      name: 'trans-bodanon-app-storage',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );

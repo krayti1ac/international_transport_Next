@@ -21,6 +21,13 @@ export async function moveTripStage(tripId: number, newStage: string) {
     return { success: false, error: error.message };
   }
 
+  // Auto-dispatch tracking link via WhatsApp when transit begins
+  if (dbStatus === 'in_transit') {
+    import('@/features/trips/services/trip-dispatch-trigger')
+      .then(({ onTripStarted }) => onTripStarted(tripId))
+      .catch((err) => console.warn('Non-blocking trip dispatch error:', err));
+  }
+
   revalidatePath('/trips');
   revalidatePath('/dashboard');
 

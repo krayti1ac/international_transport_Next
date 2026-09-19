@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
-import { Printer, X, PlaneTakeoff, PlaneLanding, ExternalLink } from 'lucide-react';
+import { Printer, X, PlaneTakeoff, PlaneLanding, ExternalLink, FileText } from 'lucide-react';
 import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
 import { generateCMRQrCodeBase64, buildCMRVerificationUrl } from '@/lib/cmr-qr';
 import { useLanguage } from '@/components/language-provider';
@@ -18,15 +18,32 @@ interface CMRModalProps {
   driver?: Driver;
   truck?: Truck;
   trailer?: Trailer;
+  defaultType?: 'export' | 'import';
 }
 
-export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, driver, truck, trailer }: CMRModalProps) {
-  const [cmrType, setCmrType] = useState<'export' | 'import'>('export');
+export function CMRPrintModal({
+  isOpen,
+  onClose,
+  trip,
+  client,
+  clientImport,
+  driver,
+  truck,
+  trailer,
+  defaultType = 'export',
+}: CMRModalProps) {
+  const [cmrType, setCmrType] = useState<'export' | 'import'>(defaultType);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [qrCodeBase64, setQrCodeBase64] = useState<string>('');
-  const { t, dir } = useLanguage();
+  const { t, dir, locale } = useLanguage();
 
   const trackingUrl = buildCMRVerificationUrl(trip.id);
+
+  useEffect(() => {
+    if (defaultType) {
+      setCmrType(defaultType);
+    }
+  }, [defaultType]);
 
   useEffect(() => {
     if (isOpen && trip?.id) {
@@ -66,7 +83,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
       >
         {/* Header Controls */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 print:hidden" data-print-hidden>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="bg-slate-100 p-1 rounded-lg flex gap-1">
               <button
                 onClick={() => setCmrType('export')}
@@ -75,7 +92,7 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
                 }`}
               >
                 <PlaneTakeoff className="w-3.5 h-3.5" />
-                {t('CMR الذهاب (Export Aller)', 'CMR Export (Aller)')}
+                {t('CMR الذهاب (Export)', 'CMR Export (Aller)', 'CMR Exportación (Ida)')}
               </button>
               <button
                 onClick={() => setCmrType('import')}
@@ -84,13 +101,13 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
                 }`}
               >
                 <PlaneLanding className="w-3.5 h-3.5" />
-                {t('CMR العودة (Import Retour)', 'CMR Import (Retour)')}
+                {t('CMR العودة (Import)', 'CMR Import (Retour)', 'CMR Importación (Vuelta)')}
               </button>
             </div>
 
             <Button onClick={handlePrint} className={`flex items-center gap-2 ${dir === 'rtl' ? 'mr-2' : 'ml-2'}`}>
               <Printer className="w-4 h-4" />
-              {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF')}
+              {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF', 'Imprimir / Exportar PDF')}
             </Button>
             <Button
               variant="outline"
@@ -99,7 +116,17 @@ export function CMRPrintModal({ isOpen, onClose, trip, client, clientImport, dri
               className="flex items-center gap-1.5 text-xs text-blue-600"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              {t('معاينة رابط التتبع الحي', 'Aperçu du lien de suivi')}
+              {t('رابط التتبع الحي', 'Lien de suivi direct', 'Enlace de seguimiento')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/trips/${trip.id}/dossier-pdf?lang=${locale}`, '_blank')}
+              className="flex items-center gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/10"
+              title={t('عرض الأرشيف اللوجستي والمالي الموحد للرحلة', 'Dossier de mission TIR complet', 'Dossier de misión TIR completo')}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {t('الأرشيف الموحد (PDF)', 'Dossier TIR (PDF)', 'Dossier TIR (PDF)')}
             </Button>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>

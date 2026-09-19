@@ -34,6 +34,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
+import { calculateRemainingDays, checkDocumentExpiry } from '@/lib/utils/document-radar';
+
+export type FleetDocStatusFilter = 'all' | 'expired' | 'critical' | 'warning' | 'safe' | 'archived';
 
 interface FleetDocumentsListProps {
   documents: FleetDocument[];
@@ -53,11 +56,41 @@ export function FleetDocumentsList({
   const { locale, dir, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState<'all' | 'truck' | 'trailer'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'warning' | 'expired' | 'archived'>('all');
+  const [statusFilter, setStatusFilter] = useState<FleetDocStatusFilter>('all');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [cardLayout, setCardLayout] = useCardViewMode('fleet_documents', 'grid');
 
+
   const { toast } = useToast();
+
+  const filterCounts = useMemo(() => {
+    let active = 0;
+    let expired = 0;
+    let critical = 0;
+    let warning = 0;
+    let safe = 0;
+    let archived = 0;
+
+    documents.forEach((d) => {
+      if (d.is_archived) {
+        archived++;
+        return;
+      }
+      active++;
+      const days = calculateRemainingDays(d.expiry_date);
+      if (days < 0) expired++;
+      else if (days <= 15) {
+        critical++;
+        warning++;
+      } else if (days <= 30) {
+        warning++;
+      } else {
+        safe++;
+      }
+    });
+
+    return { active, expired, critical, warning, safe, archived };
+  }, [documents]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter((doc) => {
@@ -71,9 +104,11 @@ export function FleetDocumentsList({
         if (!doc.is_archived) return false;
       } else {
         if (doc.is_archived) return false;
-        if (statusFilter === 'safe' && doc.status_computed !== 'safe') return false;
-        if (statusFilter === 'warning' && doc.status_computed !== 'warning') return false;
-        if (statusFilter === 'expired' && doc.status_computed !== 'expired') return false;
+        const days = calculateRemainingDays(doc.expiry_date);
+        if (statusFilter === 'expired' && days >= 0) return false;
+        if (statusFilter === 'critical' && (days < 0 || days > 15)) return false;
+        if (statusFilter === 'warning' && (days < 0 || days > 30)) return false;
+        if (statusFilter === 'safe' && days <= 30) return false;
       }
 
       // 3. Search Query
@@ -148,7 +183,7 @@ export function FleetDocumentsList({
           <CardViewToggle viewMode={cardLayout} onChange={setCardLayout} />
 
           {/* Status Filters */}
-          <div className="inline-flex rounded-xl bg-muted/40 p-1 border border-border/60 text-xs">
+          <div className="inline-flex flex-wrap rounded-xl bg-muted/40 p-1 border border-border/60 text-xs">
             <button
               onClick={() => setStatusFilter('all')}
               className={`px-2.5 py-1 font-semibold rounded-lg transition-all ${
@@ -157,27 +192,51 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t('النشطة', 'Actifs')} ({documents.filter((d) => !d.is_archived).length})
+              {t('النشطة', 'Actifs')} ({filterCounts.active})
             </button>
             <button
               onClick={() => setStatusFilter('expired')}
-              className={`px-2.5 py-1 font-semibold rounded-lg transition-all ${
+              className={`px-2.5 py-1 font-semibold rounded-lg transition-all flex items-center gap-1 ${
                 statusFilter === 'expired'
-                  ? 'bg-destructive/10 text-destructive shadow-xs'
+                  ? 'bg-destructive/15 text-destructive shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t('المنتهية', 'Expirés')} ({documents.filter((d) => !d.is_archived && d.status_computed === 'expired').length})
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              {t('المنتهية', 'Expirés')} ({filterCounts.expired})
+            </button>
+            <button
+              onClick={() => setStatusFilter('critical')}
+              className={`px-2.5 py-1 font-semibold rounded-lg transition-all flex items-center gap-1 ${
+                statusFilter === 'critical'
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+              {t('خلال 15 يوماً', 'Dans 15j')} ({filterCounts.critical})
             </button>
             <button
               onClick={() => setStatusFilter('warning')}
-              className={`px-2.5 py-1 font-semibold rounded-lg transition-all ${
+              className={`px-2.5 py-1 font-semibold rounded-lg transition-all flex items-center gap-1 ${
                 statusFilter === 'warning'
-                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 shadow-xs'
+                  ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t('تنتهي قريباً', 'Expire bientôt')} ({documents.filter((d) => !d.is_archived && d.status_computed === 'warning').length})
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+              {t('خلال 30 يوماً', 'Dans 30j')} ({filterCounts.warning})
+            </button>
+            <button
+              onClick={() => setStatusFilter('safe')}
+              className={`px-2.5 py-1 font-semibold rounded-lg transition-all flex items-center gap-1 ${
+                statusFilter === 'safe'
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {t('سارية', 'Valides')} ({filterCounts.safe})
             </button>
             <button
               onClick={() => setStatusFilter('archived')}
@@ -187,11 +246,12 @@ export function FleetDocumentsList({
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t('الأرشيف', 'Archives')} ({documents.filter((d) => d.is_archived).length})
+              {t('الأرشيف', 'Archives')} ({filterCounts.archived})
             </button>
           </div>
         </div>
       </div>
+
 
       {/* Document Cards Grid / List */}
       {loading ? (
@@ -272,10 +332,15 @@ export function FleetDocumentsList({
                         <XCircle className="w-3 h-3" />
                         {t('منتهية', 'Expiré')}
                       </Badge>
+                    ) : doc.status_computed === 'critical' ? (
+                      <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-orange-500" />
+                        {t('حرجة (15 يوم)', 'Critique (15j)')}
+                      </span>
                     ) : doc.status_computed === 'warning' ? (
-                      <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        {t('تنتهي قريباً', 'Expire bientôt')}
+                      <span className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                        {t('تحذير (30 يوم)', 'Attention (30j)')}
                       </span>
                     ) : (
                       <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 gap-1">
@@ -283,6 +348,7 @@ export function FleetDocumentsList({
                         {t('سارية', 'Valide')}
                       </Badge>
                     )}
+
                   </div>
 
                   {/* Document Title */}
@@ -515,10 +581,15 @@ export function FleetDocumentsList({
                         <XCircle className="w-3 h-3" />
                         {t('منتهية', 'Expiré')}
                       </Badge>
+                    ) : doc.status_computed === 'critical' ? (
+                      <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-orange-500" />
+                        {t('حرجة (15 يوم)', 'Critique (15j)')}
+                      </span>
                     ) : doc.status_computed === 'warning' ? (
-                      <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        {t('تنتهي قريباً', 'Expire bientôt')}
+                      <span className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                        {t('تحذير (30 يوم)', 'Attention (30j)')}
                       </span>
                     ) : (
                       <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40 gap-1">
@@ -526,6 +597,7 @@ export function FleetDocumentsList({
                         {t('سارية', 'Valide')}
                       </Badge>
                     )}
+
 
                     <div className="flex items-center gap-1">
                       <Button

@@ -176,3 +176,28 @@ export function buildInvoicePdfHtml(data: InvoicePdfData): string {
   const staticHtml = renderToStaticMarkup(React.createElement(InvoicePdfTemplate, { data }));
   return `<!DOCTYPE html>${staticHtml}`;
 }
+
+export async function generatePdfHtml<P extends Record<string, unknown>>(
+  Component: React.ComponentType<P>,
+  props: P
+): Promise<string> {
+  const element = React.createElement(Component, props as React.PropsWithChildren<P>);
+  const htmlContent = renderToStaticMarkup(element as React.ReactElement);
+
+  return `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body { font-family: 'Cairo', 'Tajawal', sans-serif; margin: 0; padding: 20px; color: #1e293b; }
+      .print-container { max-width: 800px; margin: 0 auto; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <div class="print-container">
+      ${htmlContent}
+    </div>
+  </body>
+</html>`;
+}

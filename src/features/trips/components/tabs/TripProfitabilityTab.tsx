@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/components/language-provider';
 import { formatCurrency } from '@/lib/forex';
 import type { TripFinancialSummary } from '@/lib/profitability';
@@ -18,8 +17,6 @@ import {
   AlertTriangle,
   Receipt,
   Percent,
-  CheckCircle2,
-  Gauge,
 } from 'lucide-react';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
@@ -37,7 +34,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
       <Card className="rounded-2xl border-border bg-card p-12 text-center text-muted-foreground">
         <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
         <p className="text-sm font-semibold">
-          {t('جاري احتساب التحليل المالي للرحلة...', 'Calcul de rentabilité en cours...')}
+          {t('جاري احتساب التحليل المالي للرحلة...', 'Calcul de rentabilité en cours...', 'Calculando rentabilidad del viaje...')}
         </p>
       </Card>
     );
@@ -54,7 +51,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
         <Card className="rounded-2xl border-border bg-card p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {t('إجمالي إيراد الرحلة (ذهاب + عودة)', 'Revenu Total Fret')}
+              {t('إجمالي إيراد الرحلة (ذهاب + عودة)', 'Revenu Total Fret', 'Ingresos Totales Flete')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
@@ -64,8 +61,8 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
             {formatCurrency(financials.revenue, trip.price_type || 'MAD')}
           </p>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
-            <span>{t('تصدير:', 'Export :')} {formatCurrency(financials.priceExport || 0, 'MAD')}</span>
-            <span>{t('استيراد:', 'Import :')} {formatCurrency(financials.priceImport || 0, 'MAD')}</span>
+            <span>{t('تصدير:', 'Export :', 'Exportación:')} {formatCurrency(financials.priceExport || 0, 'MAD')}</span>
+            <span>{t('استيراد:', 'Import :', 'Importación:')} {formatCurrency(financials.priceImport || 0, 'MAD')}</span>
           </div>
         </Card>
 
@@ -73,7 +70,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
         <Card className="rounded-2xl border-border bg-card p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {t('إجمالي المصروفات الميدانية', 'Total Dépenses Trajet')}
+              {t('إجمالي المصروفات الميدانية', 'Total Dépenses Trajet', 'Gastos Totales de Ruta')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center">
               <Receipt className="w-4 h-4" />
@@ -83,7 +80,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
             -{formatCurrency(financials.totalExpenses, 'MAD')}
           </p>
           <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
-            {t('وقود، سلف، عبارة، وغرامات', 'Carburant, avances, ferry')}
+            {t('وقود، سلف، عبارة، وغرامات', 'Carburant, avances, ferry', 'Combustible, anticipos, ferry y multas')}
           </p>
         </Card>
 
@@ -97,7 +94,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {t('صافي الربح الفعلي الميداني', 'Marge Nette Réelle')}
+              {t('صافي الربح الفعلي الميداني', 'Marge Nette Réelle', 'Margen Neto Real')}
             </span>
             <div
               className={`w-8 h-8 rounded-xl flex items-center justify-center ${
@@ -122,7 +119,9 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
           </p>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold mt-2 pt-2 border-t border-border/50">
             <span className={isProfitable ? 'text-emerald-600' : 'text-rose-600'}>
-              {isProfitable ? t('مأمورية رابحة', 'Mission Rentable') : t('عجز مالي', 'Déficit')}
+              {isProfitable
+                ? t('مأمورية رابحة', 'Mission Rentable', 'Misión Rentable')
+                : t('عجز مالي', 'Déficit', 'Déficit Financiero')}
             </span>
           </div>
         </Card>
@@ -131,7 +130,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
         <Card className="rounded-2xl border-border bg-card p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {t('نسبة هامش الربح', 'Taux de Marge')}
+              {t('نسبة هامش الربح', 'Taux de Marge', 'Margen de Beneficio')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center">
               <Percent className="w-4 h-4" />
@@ -160,7 +159,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
         <CardHeader className="pb-3 border-b border-border/60">
           <CardTitle className="text-base font-bold flex items-center gap-2">
             <Receipt className="w-5 h-5 text-primary" />
-            <span>{t('تفكيك النفقات والمصاريف المقتطعة من إيراد الرحلة', 'Ventilation des Dépenses Réelles')}</span>
+            <span>{t('تفكيك النفقات والمصاريف المقتطعة من إيراد الرحلة', 'Ventilation des Dépenses Réelles', 'Desglose de Gastos Reales Deducidos')}</span>
           </CardTitle>
         </CardHeader>
 
@@ -173,12 +172,12 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
               </div>
               <div>
                 <p className="text-xs font-bold text-foreground">
-                  {t('مصاريف الوقود والمحطات (Carburant)', 'Dépenses Carburant')}
+                  {t('مصاريف الوقود والمحطات (Carburant)', 'Dépenses Carburant', 'Gastos de Combustible')}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {financials.litersPer100Km
-                    ? `${t('معدل الاستهلاك:', 'Conso :')} ${financials.litersPer100Km} L/100km`
-                    : t('مطابق لفواتير المحطات المسجلة للشاحنة', 'Factures carburant enregistrées')}
+                    ? `${t('معدل الاستهلاك:', 'Conso :', 'Consumo:')} ${financials.litersPer100Km} L/100km`
+                    : t('مطابق لفواتير المحطات المسجلة للشاحنة', 'Factures carburant enregistrées', 'Según facturas de repostaje registradas')}
                 </p>
               </div>
             </div>
@@ -195,10 +194,10 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
               </div>
               <div>
                 <p className="text-xs font-bold text-foreground">
-                  {t('سلف ومصروفات السائق على الطريق (Avances)', 'Avances Chauffeur')}
+                  {t('سلف ومصروفات السائق على الطريق (Avances)', 'Avances Chauffeur', 'Anticipos y Dietas del Conductor')}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  {t('مصاريف الطريق، الإعاشة، ومصروفات المأمورية', 'Frais de route & indemnités chauffeur')}
+                  {t('مصاريف الطريق، الإعاشة، ومصروفات المأمورية', 'Frais de route & indemnités chauffeur', 'Gastos de ruta, dietas y viáticos')}
                 </p>
               </div>
             </div>
@@ -216,10 +215,10 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
                 </div>
                 <div>
                   <p className="text-xs font-bold text-foreground">
-                    {t('تذاكر العبّارة ورسوم الموانئ والترانزيت (Ferry & Port)', 'Billets Ferry & Transit')}
+                    {t('تذاكر العبّارة ورسوم الموانئ والترانزيت (Ferry & Port)', 'Billets Ferry & Transit', 'Billetes de Ferry y Tasas Portuarias')}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {t('التريبتك، مرسى المغرب، والعبور البحري', 'Triptyque, Marsa Maroc et ferry')}
+                    {t('التريبتك، مرسى المغرب، والعبور البحري', 'Triptyque, Marsa Maroc et ferry', 'Tríptico, Marsa Maroc y travesía marítima')}
                   </p>
                 </div>
               </div>
@@ -238,10 +237,10 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
                 </div>
                 <div>
                   <p className="text-xs font-bold text-foreground">
-                    {t('الغرامات والمخالفات الميدانية (Amendes)', 'Amendes & Pénalités')}
+                    {t('الغرامات والمخالفات الميدانية (Amendes)', 'Amendes & Pénalités', 'Multas y Sanciones de Tráfico')}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {t('مخالفات مسجلة على مسار الرحلة', 'Infractions enregistrées sur le trajet')}
+                    {t('مخالفات مسجلة على مسار الرحلة', 'Infractions enregistrées sur le trajet', 'Infracciones registradas en la ruta')}
                   </p>
                 </div>
               </div>
@@ -254,7 +253,7 @@ export function TripProfitabilityTab({ financials, trip }: TripProfitabilityTabP
           {/* Net Result Bar */}
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between mt-2">
             <span className="font-bold text-foreground text-sm">
-              {t('الربح الصافي النهائي المحقق:', 'Résultat Net Définitif :')}
+              {t('الربح الصافي النهائي المحقق:', 'Résultat Net Définitif :', 'Resultado Neto Definitivo:')}
             </span>
             <span className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
               {formatCurrency(financials.netProfit, 'MAD')}

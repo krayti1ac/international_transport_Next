@@ -83,7 +83,10 @@ export function CmrQrCode({ tripId, size = 120, className = '' }: CmrQrCodeProps
         width={size}
         height={size}
       />
-      <span className="text-[9px] text-slate-500 font-mono tracking-wider font-semibold">SCAN TO TRACK</span>
+      <span className="text-[8px] text-slate-600 dark:text-slate-400 font-mono tracking-wider font-bold uppercase text-center leading-tight">
+        e-CMR Verification<br/>
+        <span className="text-[7px] text-emerald-700 dark:text-emerald-400 font-sans">تتبع رسمي مباشر</span>
+      </span>
     </div>
   );
 }

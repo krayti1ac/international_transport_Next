@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { findMatchingZone, calculateDistance } from '@/lib/geofence';
+import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
 
 interface GPSPayload {
   plate_number?: string;
@@ -10,6 +11,10 @@ interface GPSPayload {
   speed?: number;
   timestamp?: string;
   address?: string;
+  device_id?: number;
+  traccar_unique_id?: string;
+  heading?: number;
+  accuracy?: number;
 }
 
 interface AlertPayload {
@@ -22,6 +27,21 @@ interface AlertPayload {
   notified: boolean;
 }
 
+interface TraccarPositionPayload {
+  id: number;
+  deviceId: number;
+  latitude: number;
+  longitude: number;
+  speed?: number;
+  course?: number;
+  accuracy?: number;
+  altitude?: number;
+  batteryLevel?: number;
+  timestamp: number;
+  address?: string;
+  attributes?: Record<string, unknown>;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('x-gps-secret');
@@ -32,7 +52,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const data: GPSPayload | GPSPayload[] = Array.isArray(body) ? body : [body];
+    const rawData = Array.isArray(body) ? body : [body];
+    const data = rawData as (GPSPayload | TraccarPositionPayload)[];
 
     if (!data.length) {
       return NextResponse.json({ error: 'البيانات المرسلة فارغة' }, { status: 400 });
@@ -47,45 +68,110 @@ export async function POST(req: NextRequest) {
         })
       : await createClient();
 
-    for (const item of data) {
+    const results: { success: boolean; truckId?: number; error?: string }[] = [];
+
+    for (const rawItem of data) {
+      const item = rawItem as GPSPayload & Partial<TraccarPositionPayload>;
       let truckId = item.truck_id;
 
-      if (!truckId && item.plate_number) {
-        const { data: truck } = await supabase
-          .from('trucks')
-          .select('id')
-          .ilike('plate_number', `%${item.plate_number.trim()}%`)
-          .single();
+      if (!truckId) {
+        if ('traccar_unique_id' in item && item.traccar_unique_id) {
+          const { data: mapping } = await supabase
+            .from('traccar_device_mappings')
+            .select('truck_id')
+            .eq('traccar_unique_id', item.traccar_unique_id)
+            .eq('is_active', true)
+            .single();
 
-        if (truck) {
-          truckId = truck.id;
+          if (mapping) {
+            truckId = mapping.truck_id;
+          }
+        } else if ('deviceId' in item && item.deviceId) {
+          const { data: mapping } = await supabase
+            .from('traccar_device_mappings')
+            .select('truck_id')
+            .eq('traccar_device_id', item.deviceId)
+            .eq('is_active', true)
+            .single();
+
+          if (mapping) {
+            truckId = mapping.truck_id;
+          }
+        } else if ('plate_number' in item && item.plate_number) {
+          const { data: truck } = await supabase
+            .from('trucks')
+            .select('id')
+            .ilike('plate_number', `%${item.plate_number.trim()}%`)
+            .single();
+
+          if (truck) {
+            truckId = truck.id;
+          }
         }
       }
 
-      if (!truckId) continue;
+      if (!truckId) {
+        results.push({ success: false, error: 'No truck found' });
+        continue;
+      }
 
-      const recordTime = item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString();
+      const timestampMs = 'timestamp' in item && item.timestamp ? (typeof item.timestamp === 'number' ? item.timestamp : new Date(item.timestamp).getTime()) : Date.now();
+      const recordTime = new Date(timestampMs).toISOString();
+      const latitude = 'latitude' in item ? item.latitude : 0;
+      const longitude = 'longitude' in item ? item.longitude : 0;
 
-      await supabase.from('truck_locations').insert({
+      const insertPayload: Record<string, unknown> = {
         truck_id: truckId,
-        latitude: item.latitude,
-        longitude: item.longitude,
+        latitude,
+        longitude,
         recorded_at: recordTime,
-        ...(item.speed !== undefined ? { speed: item.speed } : {}),
-      });
+        timestamp: recordTime,
+      };
 
-      if (item.address || (item.latitude && item.longitude)) {
-        const locationDesc = item.address || `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`;
+      if ('speed' in item && item.speed !== undefined) {
+        insertPayload.speed = item.speed;
+      }
+      if ('course' in item && item.course !== undefined) {
+        insertPayload.heading = item.course;
+      }
+      if ('heading' in item && item.heading !== undefined) {
+        insertPayload.heading = item.heading;
+      }
+      if ('accuracy' in item && item.accuracy !== undefined) {
+        insertPayload.accuracy = item.accuracy;
+      }
+      if ('deviceId' in item && item.deviceId) {
+        insertPayload.device_id = item.deviceId;
+      }
+
+      const { error: insertError } = await supabase.from('truck_locations').insert(insertPayload);
+
+      if (insertError) {
+        results.push({ success: false, truckId, error: insertError.message });
+        continue;
+      }
+
+      const address = 'address' in item ? item.address : undefined;
+      if (address || (latitude && longitude)) {
+        const locationDesc = address || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
         await supabase
           .from('trucks')
           .update({ current_location: locationDesc })
           .eq('id', truckId);
       }
 
-      await processGeofenceAlerts(supabase, truckId, item.latitude, item.longitude, recordTime);
+      await processGeofenceAlerts(supabase, truckId, latitude, longitude, recordTime);
+      await evaluatePortGeofences({
+        truckId,
+        latitude,
+        longitude,
+        timestamp: recordTime,
+      });
+      results.push({ success: true, truckId });
     }
 
-    return NextResponse.json({ success: true, count: data.length });
+    const successCount = results.filter(r => r.success).length;
+    return NextResponse.json({ success: true, count: successCount, results });
   } catch (error: unknown) {
     console.error('GPS Webhook Error:', error);
     const message = error instanceof Error ? error.message : 'خطأ داخلي في الخادم';

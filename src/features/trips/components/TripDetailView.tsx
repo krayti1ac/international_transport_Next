@@ -32,6 +32,7 @@ import { TripPodTab } from './tabs/TripPodTab';
 import { TripProfitabilityTab } from './tabs/TripProfitabilityTab';
 import { TripInvoicesTab } from './tabs/TripInvoicesTab';
 import { TripFormModal } from '@/components/trip-form-modal';
+import { CMRPrintModal } from '@/components/cmr-print-modal';
 
 interface TripDetailViewProps {
   tripId: number;
@@ -63,6 +64,13 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('documents');
+  const [isCmrModalOpen, setIsCmrModalOpen] = useState(false);
+  const [cmrModalType, setCmrModalType] = useState<'export' | 'import'>('export');
+
+  const handleOpenCmrModal = (type: 'export' | 'import' = 'export') => {
+    setCmrModalType(type);
+    setIsCmrModalOpen(true);
+  };
 
   const fetchData = useCallback(
     async (isSilent = false) => {
@@ -263,6 +271,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         trip={trip}
         clientExport={clientExport}
         onEditTrip={() => setIsEditModalOpen(true)}
+        onPrintCmr={() => handleOpenCmrModal('export')}
       />
 
       {/* 2. Point-to-Point Flow (Export Aller vs Import Retour) */}
@@ -284,28 +293,31 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
           <TabsList className="grid w-full sm:w-auto grid-cols-4 h-12 rounded-2xl mb-6 bg-muted/60 p-1">
             <TabsTrigger value="documents" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
               <FileText className="w-4 h-4" />
-              <span>{t('المستندات والعبور', 'Documents & Transit')}</span>
+              <span>{t('المستندات والعبور', 'Documents & Transit', 'Documentos y Tránsito')}</span>
             </TabsTrigger>
 
             <TabsTrigger value="pod" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
               <ShieldCheck className="w-4 h-4" />
-              <span>{t('إثبات التسليم (POD)', 'Preuve de Livraison (POD)')}</span>
+              <span>{t('إثبات التسليم (POD)', 'Preuve de Livraison (POD)', 'Prueba de Entrega (POD)')}</span>
             </TabsTrigger>
 
             <TabsTrigger value="invoices" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
               <Receipt className="w-4 h-4" />
-              <span>{t('الفواتير والتحصيل', 'Factures & Encaissements')}</span>
+              <span>{t('الفواتير والتحصيل', 'Factures & Encaissements', 'Facturas y Cobros')}</span>
             </TabsTrigger>
 
             <TabsTrigger value="financials" className="rounded-xl text-xs sm:text-sm flex items-center gap-2 font-bold">
               <DollarSign className="w-4 h-4" />
-              <span>{t('كشف الربحية (P&L)', 'Rentabilité (P&L)')}</span>
+              <span>{t('كشف الربحية (P&L)', 'Rentabilité (P&L)', 'Rentabilidad (P&L)')}</span>
             </TabsTrigger>
           </TabsList>
 
         {/* Tab 1: Documents & Maritime Transit */}
         <TabsContent value="documents" className="space-y-4">
-          <TripDocumentsTab trip={trip} />
+          <TripDocumentsTab
+            trip={trip}
+            onPrintCmr={(type) => handleOpenCmrModal(type || 'export')}
+          />
         </TabsContent>
 
           {/* Tab 2: Proof of Delivery (e-POD) */}
@@ -336,6 +348,21 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         transportRoutes={allRoutes}
         initialData={trip}
       />
+
+      {/* Smart e-CMR Print & QR Modal */}
+      {isCmrModalOpen && trip && (
+        <CMRPrintModal
+          isOpen={isCmrModalOpen}
+          onClose={() => setIsCmrModalOpen(false)}
+          trip={trip}
+          client={clientExport || undefined}
+          clientImport={clientImport || undefined}
+          driver={driver || undefined}
+          truck={truck || undefined}
+          trailer={trailer || undefined}
+          defaultType={cmrModalType}
+        />
+      )}
     </div>
   );
 }

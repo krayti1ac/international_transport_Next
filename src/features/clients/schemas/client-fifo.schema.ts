@@ -9,6 +9,7 @@ export const FifoPaymentSchema = z.object({
   destinationId: z.number().int().positive({ message: 'يرجى اختيار حساب أو صندوق الإيداع' }),
   reference: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
+  settlementRate: z.number().positive().optional().nullable(),
 });
 
 export type FifoPaymentInput = z.infer<typeof FifoPaymentSchema>;

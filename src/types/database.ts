@@ -140,6 +140,9 @@ export interface Driver {
   visa_number?: string;
   visa_expiry_date?: string;
   has_valid_visa: boolean;
+  visa_type?: 'schengen' | 'african_transit' | 'both' | string;
+  african_visa_number?: string;
+  african_visa_expiry_date?: string;
   photo_url?: string | null;
   created_at?: string;
 }
@@ -198,9 +201,13 @@ export interface TransportRoute {
   marsa_maroc_cost?: number;
   road_distance_km?: number;
   ferry_distance_km?: number;
+  corridor_type?: 'european_maritime' | 'african_overland' | 'domestic';
   is_active: boolean;
   created_at: string;
 }
+
+export type InternationalCorridor = 'european_maritime' | 'african_overland' | 'domestic';
+export type SupportedCurrency = 'MAD' | 'EUR' | 'USD' | 'MRU' | 'XOF';
 
 export interface TripOrder {
   id: number;
@@ -251,6 +258,7 @@ export interface TripOrder {
   unloading_gps_url?: string | null;
   origin_branch_id?: number | null;
   destination_branch_id?: number | null;
+  corridor_type?: 'european_maritime' | 'african_overland' | 'domestic';
 }
 
 export interface Trip {
@@ -428,8 +436,9 @@ export interface FleetDocument {
   trailer?: { plate_number: string; model?: string; status?: string };
   driver?: { name: string; phone?: string; status?: string };
   days_until_expiry?: number;
-  status_computed?: 'safe' | 'warning' | 'expired' | 'missing';
+  status_computed?: 'safe' | 'warning' | 'critical' | 'expired' | 'missing';
 }
+
 
 export interface FleetDocumentRenewal {
   id: number;
@@ -862,3 +871,54 @@ export interface SystemScreenIssue {
   created_at: string;
   updated_at: string;
 }
+
+export interface TraccarConfig {
+  id: number;
+  company_id: number;
+  traccar_server_url: string;
+  traccar_api_key?: string | null;
+  traccar_username?: string | null;
+  traccar_password?: string | null;
+  is_active: boolean;
+  sync_interval_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TraccarDeviceMapping {
+  id: number;
+  company_id: number;
+  traccar_device_id: number;
+  traccar_unique_id: string;
+  truck_id: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TraccarDevice {
+  id: number;
+  name: string;
+  uniqueId: string;
+  status: string;
+  lastUpdate?: number;
+  positionId?: number;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface FiscalYear {
+  id: number;
+  company_id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_current: boolean;
+  is_closed: boolean;
+  opening_balance_mad: number;
+  opening_balance_eur: number;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  created_at: string;
+}
+

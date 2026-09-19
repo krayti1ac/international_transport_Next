@@ -10,7 +10,8 @@ export type AuditAction =
   | 'auth_login' 
   | 'role_change' 
   | 'security_alert' 
-  | 'fifo_payment';
+  | 'fifo_payment'
+  | 'customs_push';
 
 export interface LogActionParams {
   entityType: string;

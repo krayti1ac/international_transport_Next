@@ -149,13 +149,25 @@ export default function TransportRoutesPage() {
 
       {cardLayout === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {routes.map((route) => (
+          {routes.map((route) => {
+            const isAfrica = route.corridor_type === 'african_overland' ||
+              ['نواكشوط', 'داكار', 'نواديبو', 'الكركارات'].some(c => (route.destination + route.origin).includes(c));
+            return (
             <Card key={route.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedRoute(route)}>
-              <CardHeader>
-                <CardTitle className="font-amiri flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-blue-500" />
-                  {route.name}
-                </CardTitle>
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="font-amiri flex items-center gap-2 text-base">
+                    <MapPin className={`w-5 h-5 ${isAfrica ? 'text-amber-500' : 'text-blue-500'}`} />
+                    {route.name}
+                  </CardTitle>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 border ${
+                    isAfrica
+                      ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30'
+                      : 'bg-blue-500/15 text-blue-800 dark:text-blue-300 border-blue-500/30'
+                  }`}>
+                    {isAfrica ? `🌍 ${t('إفريقيا برياً', 'Africain')}` : `🚢 ${t('أوروبا بحرياً', 'Européen')}`}
+                  </span>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm">
@@ -211,7 +223,8 @@ export default function TransportRoutesPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -682,14 +695,22 @@ function RouteFormModal({ route, onClose, onSaved }: RouteFormModalProps) {
     setCost(breakdown.totalFreightCost.toFixed(2));
     setIsManualCost(false);
 
+    let desc = t(`مسار بري مباشر: ${breakdown.roadDistanceKm} كم.`, `Itinéraire routier direct : ${breakdown.roadDistanceKm} km.`);
+    if (breakdown.isAfricanOverland) {
+      desc = t(
+        `الممر الإفريقي البري عبر معبر الكركارات: ${breakdown.roadDistanceKm} كم بري متواصل (بدون عبّارة). تم احتساب استهلاك الديزل الكامل، رسوم الكركارات (${breakdown.guergueratBorderCost} MAD) والترانزيت الموريتاني (${breakdown.mauritaniaTransitCost} MAD) وتأمين ECOWAS (${breakdown.ecowasInsuranceCost} MAD).`,
+        `Corridor Africain Terrestre via El Guerguerat : ${breakdown.roadDistanceKm} km route continue (sans ferry). Frais de frontière et transit inclus.`
+      );
+    } else if (breakdown.isCrossStrait) {
+      desc = t(
+        `مسار بحري وبري: ${breakdown.roadDistanceKm} كم بالبر + ${breakdown.ferryDistanceKm} كم بالعبارة. تم احتساب الباخرة (${breakdown.ferryCost} MAD) والتريبتك (${breakdown.triptikCost} MAD) والترانزيت (${breakdown.transitAlmeriaCost} MAD) ومرسى المغرب (${breakdown.marsaMarocCost} MAD).`,
+        `Route combinée : ${breakdown.roadDistanceKm} km route + ${breakdown.ferryDistanceKm} km mer.`
+      );
+    }
+
     toast({
       title: t('تم احتساب المسار والتكاليف آلياً', 'Itinéraire et frais calculés avec succès'),
-      description: breakdown.isCrossStrait
-        ? t(
-            `مسار بحري وبري: ${breakdown.roadDistanceKm} كم بالبر + ${breakdown.ferryDistanceKm} كم بالعبارة. تم احتساب الباخرة (${breakdown.ferryCost} MAD) والتريبتك (${breakdown.triptikCost} MAD) والترانزيت (${breakdown.transitAlmeriaCost} MAD) ومرسى المغرب (${breakdown.marsaMarocCost} MAD).`,
-            `Route combinée : ${breakdown.roadDistanceKm} km route + ${breakdown.ferryDistanceKm} km mer.`
-          )
-        : t(`مسار بري مباشر: ${breakdown.roadDistanceKm} كم.`, `Itinéraire routier direct : ${breakdown.roadDistanceKm} km.`),
+      description: desc,
     });
   };
 

@@ -5,6 +5,9 @@ import Decimal from 'decimal.js';
 import { revalidatePath } from 'next/cache';
 import type { FleetDocument, FleetDocumentRenewal, TreasuryTransaction, DocumentCategory } from '@/types/database';
 
+import { recordAuditLog } from '@/lib/audit.server';
+import { checkDocumentExpiry } from '@/lib/utils/document-radar';
+
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 import {
@@ -16,28 +19,17 @@ import {
 
 export type { FleetMatrixRow };
 
-function computeDocStatus(expiryDate?: string | null): {
-  status_computed: 'safe' | 'warning' | 'expired' | 'missing';
+function computeDocStatus(expiryDate?: string | null, entityType?: string): {
+  status_computed: 'safe' | 'warning' | 'critical' | 'expired' | 'missing';
   days_until_expiry: number;
 } {
-  if (!expiryDate) {
-    return { status_computed: 'missing', days_until_expiry: 9999 };
-  }
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const expiry = new Date(expiryDate);
-  expiry.setHours(0, 0, 0, 0);
-  const diffTime = expiry.getTime() - today.getTime();
-  const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  if (days < 0) {
-    return { status_computed: 'expired', days_until_expiry: days };
-  }
-  if (days <= 30) {
-    return { status_computed: 'warning', days_until_expiry: days };
-  }
-  return { status_computed: 'safe', days_until_expiry: days };
+  const radar = checkDocumentExpiry(expiryDate, entityType);
+  return {
+    status_computed: radar.status,
+    days_until_expiry: radar.daysRemaining,
+  };
 }
+
 
 /**
  * 1. Fetch Fleet Documents (Trucks / Trailers / Drivers)
@@ -77,7 +69,7 @@ export async function getFleetDocuments(params?: {
     const driverMap = new Map((driversRes.data || []).map((d) => [d.id, d]));
 
     const enrichedDocs: FleetDocument[] = (rawDocs || []).map((doc) => {
-      const { status_computed, days_until_expiry } = computeDocStatus(doc.expiry_date);
+      const { status_computed, days_until_expiry } = computeDocStatus(doc.expiry_date, doc.entity_type);
       return {
         ...doc,
         status_computed,
@@ -106,7 +98,10 @@ export async function getExpiringFleetDocs(
     if (!res.success) throw new Error(res.error);
 
     const expiring = res.data.filter(
-      (doc) => doc.status_computed === 'expired' || (doc.status_computed === 'warning' && (doc.days_until_expiry ?? 999) <= daysThreshold)
+      (doc) =>
+        doc.status_computed === 'expired' ||
+        doc.status_computed === 'critical' ||
+        (doc.status_computed === 'warning' && (doc.days_until_expiry ?? 999) <= daysThreshold)
     );
 
     return { success: true, data: expiring, count: expiring.length };
@@ -127,11 +122,12 @@ export async function renewFleetDocument(input: {
   cashBoxCode?: string;
   cashBoxId?: number;
   bankAccountId?: number;
+  fileUrl?: string;
   notes?: string;
 }): Promise<{ success: boolean; renewalId?: number; error?: string }> {
   try {
     const supabase = await createClient();
-    const { docId, newExpiryDate, cost = 0, currency = 'MAD', cashBoxCode, cashBoxId, bankAccountId, notes } = input;
+    const { docId, newExpiryDate, cost = 0, currency = 'MAD', cashBoxCode, cashBoxId, bankAccountId, fileUrl, notes } = input;
 
     // Fetch existing document
     const { data: document, error: fetchError } = await supabase
@@ -148,16 +144,19 @@ export async function renewFleetDocument(input: {
     const renewalCost = new Decimal(cost || 0);
 
     // 1. Update fleet_documents
+    const docUpdatePayload: Record<string, unknown> = {
+      previous_expiry_date: previousExpiryDate,
+      expiry_date: newExpiryDate,
+      cost: parseFloat(renewalCost.toFixed(2)),
+      currency: currency,
+      notes: notes || document.notes,
+      updated_at: new Date().toISOString(),
+    };
+    if (fileUrl) docUpdatePayload.file_url = fileUrl;
+
     const { error: updateError } = await supabase
       .from('fleet_documents')
-      .update({
-        previous_expiry_date: previousExpiryDate,
-        expiry_date: newExpiryDate,
-        cost: parseFloat(renewalCost.toFixed(2)),
-        currency: currency,
-        notes: notes || document.notes,
-        updated_at: new Date().toISOString(),
-      })
+      .update(docUpdatePayload)
       .eq('id', docId);
 
     if (updateError) throw updateError;
@@ -182,6 +181,7 @@ export async function renewFleetDocument(input: {
     if (renewalError) throw renewalError;
 
     // 3. If cost > 0, record treasury transaction
+    let treasuryTxId: number | undefined;
     if (renewalCost.greaterThan(0)) {
       let vehiclePlate = `مركبة #${document.entity_id}`;
       if (document.entity_type === 'truck') {
@@ -207,6 +207,7 @@ export async function renewFleetDocument(input: {
         if (defaultCb) resolvedCashBoxId = defaultCb.id;
       }
 
+      const reference = `RENEWAL-${docId}-${Date.now()}`;
       const treasuryPayload: Partial<TreasuryTransaction> = {
         type: 'office_expense',
         amount: parseFloat(renewalCost.toFixed(2)),
@@ -214,21 +215,51 @@ export async function renewFleetDocument(input: {
         cash_box_id: resolvedCashBoxId,
         bank_account_id: bankAccountId,
         description: `تجديد وثيقة: ${docLabel} - ${vehiclePlate}`,
-        reference: `DOC-RENEW-${docId}-${Date.now()}`,
+        reference: reference,
         reconciliation_status: 'pending',
       };
 
-      const { error: txError } = await supabase.from('treasury_transactions').insert(treasuryPayload);
+      const { data: txRecord, error: txError } = await supabase
+        .from('treasury_transactions')
+        .insert(treasuryPayload)
+        .select('id')
+        .maybeSingle();
+
       if (txError) {
         console.error('Treasury transaction insert error:', txError);
+      } else if (txRecord?.id && renewalRecord?.id) {
+        treasuryTxId = txRecord.id;
+        await supabase
+          .from('fleet_document_renewals')
+          .update({ treasury_transaction_id: txRecord.id })
+          .eq('id', renewalRecord.id);
       }
     }
+
+    // 4. Record action in audit_logs
+    await recordAuditLog({
+      entityType: 'fleet_document',
+      entityId: docId,
+      actionType: 'update',
+      reason: `تجديد وثيقة أسطول (${document.document_type}) إلى ${newExpiryDate} بتكلفة ${renewalCost.toFixed(2)} ${currency}`,
+      oldData: {
+        expiry_date: previousExpiryDate,
+        cost: document.cost,
+      },
+      newData: {
+        expiry_date: newExpiryDate,
+        cost: parseFloat(renewalCost.toFixed(2)),
+        file_url: fileUrl || document.file_url,
+        treasury_transaction_id: treasuryTxId,
+      },
+    });
 
     revalidatePath('/fleet');
     revalidatePath('/fleet/documents');
     revalidatePath('/documents');
     revalidatePath('/dashboard');
     revalidatePath('/executive-dashboard');
+    revalidatePath('/notifications/expiration');
 
     return { success: true, renewalId: renewalRecord?.id };
   } catch (err) {
@@ -236,6 +267,7 @@ export async function renewFleetDocument(input: {
     return { success: false, error: msg };
   }
 }
+
 
 /**
  * 4. Toggle Document Archive State (Active vs Archived)
@@ -467,7 +499,7 @@ export async function getFleetMatrixData(): Promise<{
     const docsByEntityKey = new Map<string, Record<string, FleetDocument>>();
 
     (docsRes.data || []).forEach((rawDoc) => {
-      const { status_computed, days_until_expiry } = computeDocStatus(rawDoc.expiry_date);
+      const { status_computed, days_until_expiry } = computeDocStatus(rawDoc.expiry_date, rawDoc.entity_type);
       const enriched: FleetDocument = {
         ...rawDoc,
         status_computed,
@@ -502,7 +534,7 @@ export async function getFleetMatrixData(): Promise<{
         } else if (doc.status_computed === 'expired') {
           hasExpired = true;
           urgentCount += 1;
-        } else if (doc.status_computed === 'warning') {
+        } else if (doc.status_computed === 'warning' || doc.status_computed === 'critical') {
           hasWarning = true;
           urgentCount += 1;
         }
@@ -549,11 +581,12 @@ export async function getFleetMatrixData(): Promise<{
         } else if (doc.status_computed === 'expired') {
           hasExpired = true;
           urgentCount += 1;
-        } else if (doc.status_computed === 'warning') {
+        } else if (doc.status_computed === 'warning' || doc.status_computed === 'critical') {
           hasWarning = true;
           urgentCount += 1;
         }
       });
+
 
       const overall_status: FleetMatrixRow['overall_status'] = hasExpired
         ? 'expired'

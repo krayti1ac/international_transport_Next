@@ -24,6 +24,7 @@ import {
   FolderCog,
   TrendingUp,
   Sparkles,
+  Activity,
 } from 'lucide-react';
 
 export const navigationGroups: SidebarGroup[] = [
@@ -142,6 +143,14 @@ export const navigationGroups: SidebarGroup[] = [
         roles: ['admin', 'secretary', 'fleet_manager'],
       },
       {
+        title: 'تحليل استخدام الأسطول',
+        titleFr: 'Analyse d\'utilisation',
+        titleEs: 'Análisis de uso',
+        href: '/fleet-utilization',
+        icon: <Activity className="w-4 h-4" />,
+        roles: ['admin', 'secretary', 'fleet_manager'],
+      },
+      {
         title: 'محركات الوقود',
         titleFr: 'Carburant',
         titleEs: 'Combustible y consumo',
@@ -163,6 +172,14 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Gastos de transbordador',
         href: '/ferry-expenses',
         icon: <Globe className="w-4 h-4" />,
+        roles: ['admin', 'secretary', 'fleet_manager'],
+      },
+      {
+        title: 'الحوادث والمطالبات',
+        titleFr: 'Incidents & Réclamations',
+        titleEs: 'Incidentes y Reclamaciones',
+        href: '/incidents',
+        icon: <AlertTriangle className="w-4 h-4" />,
         roles: ['admin', 'secretary', 'fleet_manager'],
       },
     ],

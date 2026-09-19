@@ -17,6 +17,7 @@ import {
   archiveFleetDocument,
   deleteFleetDocument,
 } from '../services/fleet-documents.actions';
+import { calculateFleetCpk, type TruckCpkMetric } from '../services/cpk-calculator.actions';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/components/language-provider';
 import {
@@ -90,6 +91,7 @@ export function VehicleDetailsModal({
   const [documents, setDocuments] = useState<FleetDocument[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [trips, setTrips] = useState<TripOrder[]>([]);
+  const [cpkData, setCpkData] = useState<TruckCpkMetric | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modals for upload and renew
@@ -257,6 +259,15 @@ export function VehicleDetailsModal({
       }
       setTrips(loadedTrips);
 
+      // Fetch Cost Per Kilometer (CPK) metrics for trucks
+      if (isTruck && vehicle?.id) {
+        calculateFleetCpk()
+          .then((res) => {
+            const metric = res.trucks?.find((t) => t.truckId === vehicle.id);
+            if (metric) setCpkData(metric);
+          })
+          .catch((err) => console.warn('VehicleDetailsModal: CPK fetch error', err));
+      }
     } catch (err) {
       console.warn('VehicleDetailsModal: error fetching details', err);
     } finally {
@@ -523,6 +534,45 @@ export function VehicleDetailsModal({
               )}
             </div>
           </div>
+
+          {/* Cost Per Kilometer (CPK) Financial Performance Card */}
+          {isTruck && (
+            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-border/60 dark:bg-[#171d25] mb-3 shadow-2xs">
+              <div>
+                <span className="text-xs text-slate-500 dark:text-muted-foreground block">
+                  {t('تكلفة الكيلومتر الصافية (CPK)', 'Coût au kilomètre net (CPK)')}
+                </span>
+                <p className="text-lg font-bold text-slate-900 dark:text-foreground font-mono mt-0.5">
+                  {cpkData ? `${cpkData.cpkMad} MAD/km` : '---'}
+                </p>
+                <span className="text-[11px] text-slate-400 dark:text-muted-foreground/80 font-mono block">
+                  (~{cpkData?.cpkEur || 0} EUR/km)
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 dark:text-muted-foreground block">
+                  {t('كفاءة التشغيل المالي', 'Efficacité opérationnelle')}
+                </span>
+                <div className="mt-1.5">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      cpkData?.efficiencyRating === 'excellent'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : cpkData?.efficiencyRating === 'high_cost'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                    }`}
+                  >
+                    {cpkData?.efficiencyRating === 'excellent'
+                      ? t('كفاءة ممتازة', 'Excellente efficacité')
+                      : cpkData?.efficiencyRating === 'high_cost'
+                      ? t('تكلفة مرتفعة', 'Coût élevé')
+                      : t('أداء قياسي', 'Performance standard')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* عقل الذكاء الاصطناعي التنبؤي */}
           <div className="mt-2 mb-4">

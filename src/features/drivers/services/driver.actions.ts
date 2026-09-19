@@ -337,7 +337,10 @@ export async function saveDriverWithUserAction(rawInput: SaveDriverInput): Promi
       default_truck_id: input.default_truck_id ?? null,
       visa_number: input.visa_number?.trim() || null,
       visa_expiry_date: input.visa_expiry_date || null,
-      has_valid_visa: Boolean(input.visa_expiry_date),
+      has_valid_visa: Boolean(input.visa_expiry_date || input.african_visa_expiry_date),
+      visa_type: input.visa_type || 'schengen',
+      african_visa_number: input.african_visa_number?.trim() || null,
+      african_visa_expiry_date: input.african_visa_expiry_date || null,
       photo_url: input.photo_url?.trim() || null,
       company_id: currentCompanyId,
     };

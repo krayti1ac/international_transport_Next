@@ -2,98 +2,42 @@
 
 import Decimal from 'decimal.js';
 import { createClient } from '@/lib/supabase/server';
-import type {
-  DynamicPricingParams,
-  DynamicPricingQuote,
-  PricingCostBreakdown,
-  CorridorPreset,
+import { convertCurrency, STANDARD_FOREX_RATES } from '@/lib/forex';
+import {
+  type DynamicPricingParams,
+  type DynamicPricingQuote,
+  type PricingCostBreakdown,
+  type CorridorPreset,
+  type PricingCorridorType,
+  CORRIDOR_PRESETS,
 } from '../types';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
-export const CORRIDOR_PRESETS: CorridorPreset[] = [
-  {
-    id: 'agadir_perpignan',
-    nameAr: 'أكادير ⟵ بربينيان (منتجات فلاحية مبردة)',
-    nameFr: 'Agadir ⟵ Perpignan (Primeurs Frigo)',
-    originCity: 'Agadir',
-    destCity: 'Perpignan',
-    distanceKm: 2450,
-    moroccoKm: 820,
-    europeKm: 1630,
-    ferryRoute: 'tanger_med_algeciras',
-    defaultCargo: 'reefer_temperature_controlled',
-  },
-  {
-    id: 'casablanca_paris',
-    nameAr: 'الدار البيضاء ⟵ باريس (صناعات ومعدات)',
-    nameFr: 'Casablanca ⟵ Paris (Industriel & Équipements)',
-    originCity: 'Casablanca',
-    destCity: 'Paris',
-    distanceKm: 2320,
-    moroccoKm: 340,
-    europeKm: 1980,
-    ferryRoute: 'tanger_med_algeciras',
-    defaultCargo: 'dry_box',
-  },
-  {
-    id: 'tanger_madrid',
-    nameAr: 'طنجة ⟵ مدريد (شحن سريع ومكوكات)',
-    nameFr: 'Tanger ⟵ Madrid (Navette Express)',
-    originCity: 'Tanger',
-    destCity: 'Madrid',
-    distanceKm: 750,
-    moroccoKm: 50,
-    europeKm: 700,
-    ferryRoute: 'tanger_med_algeciras',
-    defaultCargo: 'mega_curtain',
-  },
-  {
-    id: 'nador_barcelona',
-    nameAr: 'الناظور ⟵ برشلونة (تصدير كيميائي / ADR)',
-    nameFr: 'Nador ⟵ Barcelone (Chimique / ADR)',
-    originCity: 'Nador',
-    destCity: 'Barcelona',
-    distanceKm: 1280,
-    moroccoKm: 60,
-    europeKm: 1220,
-    ferryRoute: 'nador_almeria',
-    defaultCargo: 'hazardous_adr',
-  },
-  {
-    id: 'marrakech_lyon',
-    nameAr: 'مراكش ⟵ ليون (منسوجات وسلع عامة)',
-    nameFr: 'Marrakech ⟵ Lyon (Textile & Général)',
-    originCity: 'Marrakech',
-    destCity: 'Lyon',
-    distanceKm: 2380,
-    moroccoKm: 580,
-    europeKm: 1800,
-    ferryRoute: 'tanger_med_algeciras',
-    defaultCargo: 'dry_box',
-  },
-];
-
 // Constants for logistical pricing
 const DIESEL_PRICE_MAD_LITER = new Decimal('12.85'); // Morocco average pump price
 const DIESEL_PRICE_EUR_LITER = new Decimal('1.55'); // Spain/France average pump price
+const DIESEL_PRICE_AFRICA_MAD_LITER = new Decimal('14.20'); // Mauritania/Senegal average equivalent
 const DEFAULT_EXCHANGE_RATE = new Decimal('10.90'); // MAD per EUR
+
 const FERRY_COSTS_MAD: Record<string, InstanceType<typeof Decimal>> = {
   tanger_med_algeciras: new Decimal('4600.00'),
   tanger_med_motril: new Decimal('6200.00'),
   nador_almeria: new Decimal('5100.00'),
+  none_land_africa: new Decimal('0.00'),
 };
+
+function isAfricanDestination(destCity: string): boolean {
+  const c = destCity.toLowerCase().trim();
+  const africanCities = ['nouakchott', 'dakar', 'nouadhibou', 'bamako', 'rosso', 'conakry', 'niamey', 'abidjan'];
+  return africanCities.some((city) => c.includes(city));
+}
 
 export async function calculateDynamicFreightPrice(
   params: DynamicPricingParams
 ): Promise<{ success: boolean; data?: DynamicPricingQuote; error?: string }> {
   try {
     const exchangeRate = new Decimal(params.exchangeRateEurToMad || DEFAULT_EXCHANGE_RATE);
-    
-    // Resolve distance and regional segments
-    let totalDistanceKm = params.roadDistanceKm || 2000;
-    let moroccoKm = params.moroccoKm;
-    let europeKm = params.europeKm;
 
     // Check presets if match
     const matchedPreset = CORRIDOR_PRESETS.find(
@@ -102,20 +46,47 @@ export async function calculateDynamicFreightPrice(
         p.destCity.toLowerCase() === params.destinationCity.toLowerCase()
     );
 
+    // Determine corridor
+    const isAfrican =
+      params.corridorType === 'african_overland' ||
+      matchedPreset?.corridorType === 'african_overland' ||
+      params.ferryRoute === 'none_land_africa' ||
+      isAfricanDestination(params.destinationCity);
+
+    const corridorType: PricingCorridorType = isAfrican ? 'african_overland' : 'european_maritime';
+
+    // Resolve distance and regional segments
+    let totalDistanceKm = params.roadDistanceKm || 2000;
+    let moroccoKm = params.moroccoKm;
+    let europeKm = params.europeKm;
+    let africaKm = params.africaKm;
+
     if (matchedPreset && !params.roadDistanceKm) {
       totalDistanceKm = matchedPreset.distanceKm;
       moroccoKm = matchedPreset.moroccoKm;
       europeKm = matchedPreset.europeKm;
+      africaKm = matchedPreset.africaKm;
+    } else if (isAfrican) {
+      if (moroccoKm === undefined || africaKm === undefined) {
+        const totalDec = new Decimal(totalDistanceKm);
+        moroccoKm = totalDec.times('0.65').round().toNumber();
+        africaKm = totalDec.minus(moroccoKm).toNumber();
+      }
+      europeKm = 0;
     } else if (moroccoKm === undefined || europeKm === undefined) {
-      // Default heuristic: 30% Morocco, 70% Europe for international TIR
+      // Default heuristic: 30% Morocco, 70% Europe for international TIR to Europe
       const totalDec = new Decimal(totalDistanceKm);
       moroccoKm = totalDec.times('0.30').round().toNumber();
       europeKm = totalDec.minus(moroccoKm).toNumber();
+      africaKm = 0;
     }
 
-    const moroccoKmDec = new Decimal(moroccoKm);
-    const europeKmDec = new Decimal(europeKm);
-    const totalKmDec = moroccoKmDec.plus(europeKmDec);
+    const moroccoKmDec = new Decimal(moroccoKm || 0);
+    const europeKmDec = new Decimal(europeKm || 0);
+    const africaKmDec = new Decimal(africaKm || 0);
+    const totalKmDec = isAfrican
+      ? moroccoKmDec.plus(africaKmDec)
+      : moroccoKmDec.plus(europeKmDec);
 
     // 1. Truck Fuel Consumption Model (33L/100km standard, +3L for 24t+ load)
     const weightTons = new Decimal(params.weightTons || 22);
@@ -131,65 +102,109 @@ export async function calculateDynamicFreightPrice(
 
     // Fuel consumed per segment
     const fuelLitersMorocco = moroccoKmDec.dividedBy(100).times(baseConsumptionLitersPer100Km);
-    const fuelLitersEurope = europeKmDec.dividedBy(100).times(baseConsumptionLitersPer100Km);
-
     const fuelCostMoroccoMad = fuelLitersMorocco.times(DIESEL_PRICE_MAD_LITER);
-    // European diesel in EUR converted to MAD
-    const fuelCostEuropeEur = fuelLitersEurope.times(DIESEL_PRICE_EUR_LITER);
-    const fuelCostEuropeMad = fuelCostEuropeEur.times(exchangeRate);
 
-    const fuelTotalMad = fuelCostMoroccoMad.plus(fuelCostEuropeMad);
+    let fuelCostEuropeMad = new Decimal(0);
+    let fuelCostAfricaMad = new Decimal(0);
+    let fuelLitersNonMorocco = new Decimal(0);
+
+    if (isAfrican) {
+      const fuelLitersAfrica = africaKmDec.dividedBy(100).times(baseConsumptionLitersPer100Km);
+      fuelCostAfricaMad = fuelLitersAfrica.times(DIESEL_PRICE_AFRICA_MAD_LITER);
+      fuelLitersNonMorocco = fuelLitersAfrica;
+    } else {
+      const fuelLitersEurope = europeKmDec.dividedBy(100).times(baseConsumptionLitersPer100Km);
+      const fuelCostEuropeEur = fuelLitersEurope.times(DIESEL_PRICE_EUR_LITER);
+      fuelCostEuropeMad = fuelCostEuropeEur.times(exchangeRate);
+      fuelLitersNonMorocco = fuelLitersEurope;
+    }
+
+    const fuelTotalMad = fuelCostMoroccoMad.plus(fuelCostEuropeMad).plus(fuelCostAfricaMad);
     const fuelTotalEur = fuelTotalMad.dividedBy(exchangeRate);
 
-    // 2. Smart Bunkering Calculation (Fill up 800L in Morocco vs purchasing in Spain/France)
-    // Price diff per liter: (1.55 EUR * 10.90) - 12.85 MAD = ~4.04 MAD/L
-    const eurPriceInMad = DIESEL_PRICE_EUR_LITER.times(exchangeRate);
-    const pumpDiffPerLiter = eurPriceInMad.minus(DIESEL_PRICE_MAD_LITER);
-    const bunkeredVolumeLiters = Decimal.min(new Decimal(750), fuelLitersEurope);
-    const smartBunkeringSavingsMad = bunkeredVolumeLiters.times(pumpDiffPerLiter);
+    // 2. Smart Bunkering Calculation
+    let smartBunkeringSavingsMad = new Decimal(0);
+    let bunkeringAdviceAr = '';
+    let bunkeringAdviceFr = '';
+
+    if (isAfrican) {
+      // Smart Bunkering for Africa: Fill up at Dakhla / Guerguerat station before crossing into Mauritania
+      const pumpDiffAfrica = DIESEL_PRICE_AFRICA_MAD_LITER.minus(DIESEL_PRICE_MAD_LITER);
+      const bunkeredVolume = Decimal.min(new Decimal(700), fuelLitersNonMorocco);
+      smartBunkeringSavingsMad = bunkeredVolume.times(pumpDiffAfrica);
+      bunkeringAdviceAr = `تزود بالكامل بمحطات الداخلة أو معبر الكركارات: يوفر ما يقارب ${smartBunkeringSavingsMad.toFixed(0)} درهم ويؤمن الوقود عبر المقاطع الصحراوية الخالية من المحطات.`;
+      bunkeringAdviceFr = `Plein complet à Dakhla ou El Guerguerat : économie estimée à ${smartBunkeringSavingsMad.toFixed(0)} MAD tout en sécurisant l'autonomie désertique.`;
+    } else {
+      // Smart Bunkering for Europe: Fill up 750L in Morocco before ferry
+      const eurPriceInMad = DIESEL_PRICE_EUR_LITER.times(exchangeRate);
+      const pumpDiffEurope = eurPriceInMad.minus(DIESEL_PRICE_MAD_LITER);
+      const bunkeredVolume = Decimal.min(new Decimal(750), fuelLitersNonMorocco);
+      smartBunkeringSavingsMad = bunkeredVolume.times(pumpDiffEurope);
+      const savingsEur = smartBunkeringSavingsMad.dividedBy(exchangeRate);
+      bunkeringAdviceAr = `تزود بالوقود كاملاً بميناء طنجة المتوسط قبل الإبحار: يوفر ما يقارب ${smartBunkeringSavingsMad.toFixed(0)} درهم مقارنة بأسعار محطات إسبانيا وفرنسا.`;
+      bunkeringAdviceFr = `Plein complet à Tanger Med avant traversée: économie estimée à ${savingsEur.toFixed(0)} € par rapport au gasoil européen.`;
+    }
     const smartBunkeringSavingsEur = smartBunkeringSavingsMad.dividedBy(exchangeRate);
 
-    // 3. Ferry Crossing Costs
-    const ferryRoute = params.ferryRoute || matchedPreset?.ferryRoute || 'tanger_med_algeciras';
-    const ferryCrossingCostMad = FERRY_COSTS_MAD[ferryRoute] || new Decimal('4600.00');
+    // 3. Ferry & Border Crossing Costs
+    let ferryCrossingCostMad = new Decimal(0);
+    let africanBorderFeesMad = new Decimal(0);
+
+    if (isAfrican) {
+      ferryCrossingCostMad = new Decimal(0); // 100% overland!
+      // Guerguerat clearing (1500 MAD) + Mauritania transit pass (2500 MAD) + ECOWAS brown card insurance (800 MAD)
+      africanBorderFeesMad = new Decimal('4800.00');
+    } else {
+      const ferryRoute = params.ferryRoute || matchedPreset?.ferryRoute || 'tanger_med_algeciras';
+      ferryCrossingCostMad = FERRY_COSTS_MAD[ferryRoute] || new Decimal('4600.00');
+    }
     const ferryCrossingCostEur = ferryCrossingCostMad.dividedBy(exchangeRate);
 
-    // 4. Highway Tolls (Péage)
-    // Morocco autoroutes ~ 0.42 MAD/km; Spain/France tolls ~ 0.21 EUR/km
-    const tollCostMoroccoMad = moroccoKmDec.times('0.42');
-    const tollCostEuropeEur = europeKmDec.times('0.21');
-    const tollCostEuropeMad = tollCostEuropeEur.times(exchangeRate);
+    // 4. Highway Tolls & Road Taxes (Péages)
+    let tollCostMoroccoMad = moroccoKmDec.times('0.42');
+    let tollCostEuropeMad = new Decimal(0);
+    if (!isAfrican) {
+      const tollCostEuropeEur = europeKmDec.times('0.21');
+      tollCostEuropeMad = tollCostEuropeEur.times(exchangeRate);
+    } else {
+      // African municipal / road transit fee in Mauritania & Senegal
+      tollCostEuropeMad = africaKmDec.times('0.25');
+    }
     const tollsTotalMad = tollCostMoroccoMad.plus(tollCostEuropeMad);
     const tollsTotalEur = tollsTotalMad.dividedBy(exchangeRate);
 
-    // 5. Driver Per Diem Allowances & International Transit (Indemnités de déplacement)
-    // Average speed 70 km/h -> driving hours + border/ferry 12h
-    const drivingHours = totalKmDec.dividedBy(65);
-    const totalTransitDays = drivingHours.plus(12).dividedBy(24).ceil(); // Transit days rounded up
-    // Driver daily allowance: ~750 MAD/day during international trip
-    const driverAllowancesMad = totalTransitDays.times('750.00');
+    // 5. Driver Per Diem Allowances & International Transit
+    // Average driving speed 65 km/h + border transit hours
+    const drivingHours = totalKmDec.dividedBy(60);
+    const borderDelayHours = isAfrican ? 24 : 12; // Guerguerat crossing typically 24h
+    const totalTransitDays = drivingHours.plus(borderDelayHours).dividedBy(24).ceil();
+    const driverDailyRate = isAfrican ? new Decimal('800.00') : new Decimal('750.00');
+    const driverAllowancesMad = totalTransitDays.times(driverDailyRate);
     const driverAllowancesEur = driverAllowancesMad.dividedBy(exchangeRate);
 
     // 6. Reefer (Frigo) Temperature Control Energy Consumption
     let reeferRunningCostMad = new Decimal(0);
     if (params.cargoType === 'reefer_temperature_controlled') {
       const transitHours = totalTransitDays.times(24);
-      // Reefer unit consumes 2.8 L/hr of non-road diesel (~9.50 MAD/L)
       const isFrozen = (params.reeferSetpointTemp ?? 4) <= -15;
-      const reeferConsumptionLitersPerHour = isFrozen ? new Decimal('3.4') : new Decimal('2.6');
-      const reeferDieselPrice = new Decimal('9.80');
-      reeferRunningCostMad = transitHours.times(reeferConsumptionLitersPerHour).times(reeferDieselPrice);
+      const reeferConsumptionPerHour = isFrozen ? new Decimal('3.5') : new Decimal('2.7');
+      const reeferDieselPrice = new Decimal('10.20');
+      reeferRunningCostMad = transitHours.times(reeferConsumptionPerHour).times(reeferDieselPrice);
     }
 
-    // 7. Customs Clearance, Port Handling & PortNet/DUM
-    let customsPortFeesMad = new Decimal('1850.00'); // PortNet + Tanger Med transit + DUM
+    // 7. Customs Clearance, Port Handling & Border DUM
+    let customsPortFeesMad = isAfrican
+      ? new Decimal('2200.00') // Guerguerat export scanner & clearance
+      : new Decimal('1850.00'); // PortNet + Tanger Med transit + DUM
+
     if (params.cargoType === 'hazardous_adr') {
-      customsPortFeesMad = customsPortFeesMad.plus('1200.00'); // ADR port escort & dangerous goods authorization
+      customsPortFeesMad = customsPortFeesMad.plus('1500.00');
     }
 
     // 8. Overhead & Insurance Buffer (5% of running cost)
     const subtotalDirect = fuelTotalMad
       .plus(ferryCrossingCostMad)
+      .plus(africanBorderFeesMad)
       .plus(tollsTotalMad)
       .plus(driverAllowancesMad)
       .plus(reeferRunningCostMad)
@@ -199,44 +214,38 @@ export async function calculateDynamicFreightPrice(
     // 9. Seasonality Index (الموسمية الفلاحية واللوجستية)
     const month = params.departureMonth || new Date().getMonth() + 1;
     let seasonalityIndex = new Decimal('1.00');
-    let seasonalityReasonAr = 'موسم تشغيلي اعتيادي لتدفق البضائع العامة والصناعية';
-    let seasonalityReasonFr = 'Saisonnalité régulière des flux de fret général et industriel';
+    let seasonalityReasonAr = 'موسم تشغيلي اعتيادي لتدفق البضائع العامة';
+    let seasonalityReasonFr = 'Saisonnalité régulière des flux de fret';
 
-    if (params.cargoType === 'reefer_temperature_controlled') {
+    if (isAfrican) {
+      if (month >= 10 || month <= 4) {
+        seasonalityIndex = new Decimal('1.18');
+        seasonalityReasonAr = 'موسم ذروة التصدير الفلاحي والغذائي المغربي إلى أسواق موريتانيا والسنغال وغرب إفريقيا';
+        seasonalityReasonFr = 'Pleine campagne d\'exportation des primeurs et vivres marocains vers l\'Afrique de l\'Ouest';
+      } else if (month >= 6 && month <= 8) {
+        seasonalityIndex = new Decimal('1.08');
+        seasonalityReasonAr = 'تدفقات تجارية صيفية منتظمة مع ارتفاع الطلب على شاحنات التبريد للحرارة الصحراوية';
+        seasonalityReasonFr = 'Flux estivaux réguliers avec forte demande sous température contrôlée';
+      }
+    } else if (params.cargoType === 'reefer_temperature_controlled') {
       if (month >= 11 || month <= 4) {
-        // High produce export season (Citrus, Tomatoes, Berries)
         seasonalityIndex = new Decimal('1.25');
-        seasonalityReasonAr = 'ذروة تصدير الخضروات والحوامض والبواكر المغربية (طلب مرتفع جداً على شاحنات التبريد)';
-        seasonalityReasonFr = 'Pic de la campagne maraîchère et agrumes au Maroc (Forte tension sur la capacité frigorifique)';
-      } else if (month === 5 || month === 6) {
-        seasonalityIndex = new Decimal('1.12');
-        seasonalityReasonAr = 'نهاية الموسم الفلاحي وتصدير الفواكه الصيفية المبكرة';
-        seasonalityReasonFr = 'Fin de campagne agricole et primeurs de printemps';
+        seasonalityReasonAr = 'ذروة تصدير الخضروات والحوامض والبواكر المغربية نحو أوروبا (طلب مرتفع جداً)';
+        seasonalityReasonFr = 'Pic de la campagne maraîchère et agrumes vers l\'Europe (Forte tension)';
       }
     } else {
       if (month === 9 || month === 10) {
-        // Post-summer industrial & automotive ramp-up
         seasonalityIndex = new Decimal('1.10');
         seasonalityReasonAr = 'انتعاش الإنتاج الصناعي وقطع غيار السيارات بعد العطلة الصيفية';
-        seasonalityReasonFr = 'Reprise industrielle et flux composants automobiles automne';
-      } else if (month === 12) {
-        seasonalityIndex = new Decimal('1.15');
-        seasonalityReasonAr = 'ذروة شحنات نهاية السنة وأعياد الميلاد في أوروبا';
-        seasonalityReasonFr = 'Pic logistique des fêtes de fin d’année en Europe';
+        seasonalityReasonFr = 'Reprise industrielle automnale';
       }
     }
 
-    // 10. Deadhead Return Cushion (عامل حمولة العودة الفارغة)
-    let deadheadRiskPercent = 25; // Base 25% empty return probability
+    // 10. Deadhead Return Cushion
+    let deadheadRiskPercent = isAfrican ? 35 : 25; // African routes have higher empty backhaul risk
     let deadheadCushionMad = new Decimal(0);
     if (params.includeReturnCushion !== false) {
-      if (seasonalityIndex.gte('1.20')) {
-        // In high produce season, return cargo from EU to Morocco is scarce
-        deadheadRiskPercent = 45;
-        deadheadCushionMad = fuelTotalMad.times('0.25'); // Cushion 25% of return fuel
-      } else {
-        deadheadCushionMad = fuelTotalMad.times('0.10');
-      }
+      deadheadCushionMad = isAfrican ? fuelTotalMad.times('0.20') : fuelTotalMad.times('0.15');
     }
 
     // Total Direct Cost (Breakeven / Floor Price)
@@ -248,12 +257,11 @@ export async function calculateDynamicFreightPrice(
     // Target Margins
     const baseTargetMargin = new Decimal(params.targetMarginPercent || 22).dividedBy(100);
 
-    // Tier 1: Floor (Breakeven - 0% profit)
+    // Tier 1: Floor
     const floorPriceMad = totalDirectCostMad;
     const floorPriceEur = totalDirectCostEur;
 
-    // Tier 2: Spot Recommended Rate (Adjusted for Seasonality & Target Margin)
-    // Formula: Floor * (1 + targetMargin) * seasonality
+    // Tier 2: Spot
     const spotPriceMad = totalDirectCostMad
       .times(new Decimal(1).plus(baseTargetMargin))
       .times(seasonalityIndex);
@@ -264,12 +272,12 @@ export async function calculateDynamicFreightPrice(
       ? spotProfitMad.dividedBy(spotPriceMad).times(100).toNumber()
       : 0;
 
-    // Tier 3: Express / Dedicated Premium (Priority slot, 2-driver relay, 24/7 telematics, +12% margin)
+    // Tier 3: Express / Dedicated Premium
     const expressMargin = baseTargetMargin.plus('0.12');
     const expressPriceMad = totalDirectCostMad
       .times(new Decimal(1).plus(expressMargin))
       .times(seasonalityIndex)
-      .plus(new Decimal('1500.00')); // Dual driver surcharge
+      .plus(new Decimal('1800.00'));
     const expressPriceEur = expressPriceMad.dividedBy(exchangeRate);
     const expressProfitMad = expressPriceMad.minus(totalDirectCostMad);
     const expressProfitEur = expressProfitMad.dividedBy(exchangeRate);
@@ -277,13 +285,23 @@ export async function calculateDynamicFreightPrice(
       ? expressProfitMad.dividedBy(expressPriceMad).times(100).toNumber()
       : 0;
 
+    // Currency conversions for African currencies (MRU, XOF)
+    const toMru = (mad: InstanceType<typeof Decimal>) =>
+      convertCurrency(mad.toNumber(), 'MAD', 'MRU').toFixed(2);
+    const toXof = (mad: InstanceType<typeof Decimal>) =>
+      convertCurrency(mad.toNumber(), 'MAD', 'XOF').toFixed(0);
+
     const breakdown: PricingCostBreakdown = {
       fuelCostMoroccoMad: fuelCostMoroccoMad.toFixed(2),
       fuelCostEuropeMad: fuelCostEuropeMad.toFixed(2),
+      fuelCostAfricaMad: fuelCostAfricaMad.toFixed(2),
       fuelTotalMad: fuelTotalMad.toFixed(2),
       fuelTotalEur: fuelTotalEur.toFixed(2),
+      fuelTotalMru: toMru(fuelTotalMad),
+      fuelTotalXof: toXof(fuelTotalMad),
       ferryCrossingCostMad: ferryCrossingCostMad.toFixed(2),
       ferryCrossingCostEur: ferryCrossingCostEur.toFixed(2),
+      africanBorderFeesMad: africanBorderFeesMad.toFixed(2),
       tollCostMoroccoMad: tollCostMoroccoMad.toFixed(2),
       tollCostEuropeMad: tollCostEuropeMad.toFixed(2),
       tollsTotalMad: tollsTotalMad.toFixed(2),
@@ -296,6 +314,8 @@ export async function calculateDynamicFreightPrice(
       deadheadCushionMad: deadheadCushionMad.toFixed(2),
       totalDirectCostMad: totalDirectCostMad.toFixed(2),
       totalDirectCostEur: totalDirectCostEur.toFixed(2),
+      totalDirectCostMru: toMru(totalDirectCostMad),
+      totalDirectCostXof: toXof(totalDirectCostMad),
     };
 
     const quoteId = `TBQ-${Date.now().toString(36).toUpperCase()}`;
@@ -306,9 +326,11 @@ export async function calculateDynamicFreightPrice(
       originCity: params.originCity,
       destinationCity: params.destinationCity,
       cargoType: params.cargoType,
+      corridorType,
       totalDistanceKm: totalKmDec.round().toNumber(),
-      moroccoKm,
-      europeKm,
+      moroccoKm: moroccoKm || 0,
+      europeKm: europeKm || 0,
+      africaKm: africaKm || 0,
       exchangeRate: exchangeRate.toNumber(),
       seasonalityIndex: seasonalityIndex.toNumber(),
       seasonalityImpactPercent: seasonalityIndex.minus(1).times(100).round().toNumber(),
@@ -317,31 +339,45 @@ export async function calculateDynamicFreightPrice(
       deadheadRiskPercent,
       smartBunkeringSavingsMad: smartBunkeringSavingsMad.toFixed(2),
       smartBunkeringSavingsEur: smartBunkeringSavingsEur.toFixed(2),
-      bunkeringAdviceAr: `تزود بالوقود كاملاً بميناء طنجة المتوسط قبل الإبحار: يوفر ما يقارب ${smartBunkeringSavingsMad.toFixed(0)} درهم مقارنة بأسعار محطات إسبانيا وفرنسا.`,
-      bunkeringAdviceFr: `Plein complet à Tanger Med avant traversée: économie estimée à ${smartBunkeringSavingsEur.toFixed(0)} € par rapport au gasoil européen.`,
+      smartBunkeringSavingsMru: toMru(smartBunkeringSavingsMad),
+      smartBunkeringSavingsXof: toXof(smartBunkeringSavingsMad),
+      bunkeringAdviceAr,
+      bunkeringAdviceFr,
       breakdown,
       tiers: {
         floor: {
           nameAr: 'السعر الأدنى التنافسي (سعر التكلفة)',
           nameFr: 'Tarif Plancher (Seuil de rentabilité)',
-          descriptionAr: 'يغطي التكاليف المباشرة دون هامش ربح (للشحنات الإستراتيجية وموازنة المسارات)',
+          descriptionAr: isAfrican
+            ? 'يغطي تكاليف الكيلومترات الصحراوية ورسوم معبر الكركارات دون هامش ربح'
+            : 'يغطي التكاليف المباشرة والعبّارة دون هامش ربح (للشحنات الإستراتيجية وموازنة المسارات)',
           descriptionFr: 'Couvre l\'intégralité des coûts opérationnels directs sans marge bénéficiaire',
           priceMad: floorPriceMad.toFixed(2),
           priceEur: floorPriceEur.toFixed(2),
+          priceMru: toMru(floorPriceMad),
+          priceXof: toXof(floorPriceMad),
           profitAmountMad: '0.00',
           profitAmountEur: '0.00',
+          profitAmountMru: '0.00',
+          profitAmountXof: '0',
           marginPercent: 0,
           highlightColor: 'slate',
         },
         spot: {
           nameAr: 'السعر الذكي المقترح (Spot Rate)',
           nameFr: 'Tarif Spot Recommandé (Marché Optimal)',
-          descriptionAr: 'السعر التنافسي الموصى به لتحقيق أعلى نسبة قبول من العميل مع ضمان ربحية مستدامة',
+          descriptionAr: isAfrican
+            ? 'التسعير التنافسي الأمثل لرحلات إفريقيا الغربية مع ضمان التغطية التأمينية والربحية المستدامة'
+            : 'السعر التنافسي الموصى به لتحقيق أعلى نسبة قبول من العميل مع ضمان ربحية مستدامة',
           descriptionFr: 'Tarif optimisé pour maximiser le taux de conversion tout en sécurisant la marge cible',
           priceMad: spotPriceMad.toFixed(2),
           priceEur: spotPriceEur.toFixed(2),
+          priceMru: toMru(spotPriceMad),
+          priceXof: toXof(spotPriceMad),
           profitAmountMad: spotProfitMad.toFixed(2),
           profitAmountEur: spotProfitEur.toFixed(2),
+          profitAmountMru: toMru(spotProfitMad),
+          profitAmountXof: toXof(spotProfitMad),
           marginPercent: Math.round(spotMarginPercent * 10) / 10,
           isRecommended: true,
           highlightColor: 'emerald',
@@ -349,12 +385,18 @@ export async function calculateDynamicFreightPrice(
         expressPremium: {
           nameAr: 'السعر السريع الممتاز (Express & Premium)',
           nameFr: 'Tarif Express & Sécurisé (Service Premium)',
-          descriptionAr: 'خدمة فائقة السرعة مع طاقم سائقين مزدوج، أولوية الصعود للباخرة، ومراقبة حرارية حية 24/7',
-          descriptionFr: 'Service express double équipage, priorité embarquement ferry et télématique active 24/7',
+          descriptionAr: isAfrican
+            ? 'خدمة سريعة بطاقم سائقين مزدوج، أولوية العبور بالكركارات، وتتبع GPS حي بالأقمار الاصطناعية'
+            : 'خدمة فائقة السرعة مع طاقم سائقين مزدوج، أولوية الصعود للباخرة، ومراقبة حرارية حية 24/7',
+          descriptionFr: 'Service express double équipage, priorité de passage et télématique active 24/7',
           priceMad: expressPriceMad.toFixed(2),
           priceEur: expressPriceEur.toFixed(2),
+          priceMru: toMru(expressPriceMad),
+          priceXof: toXof(expressPriceMad),
           profitAmountMad: expressProfitMad.toFixed(2),
           profitAmountEur: expressProfitEur.toFixed(2),
+          profitAmountMru: toMru(expressProfitMad),
+          profitAmountXof: toXof(expressProfitMad),
           marginPercent: Math.round(expressMarginPercent * 10) / 10,
           highlightColor: 'indigo',
         },
@@ -372,12 +414,12 @@ export async function saveQuotationProposal(quote: DynamicPricingQuote, clientId
   try {
     const supabase = await createClient();
 
-    // Prepare quotation audit entry or draft trip note
     const payload = {
       quote_id: quote.id,
       origin: quote.originCity,
       destination: quote.destinationCity,
       cargo_type: quote.cargoType,
+      corridor_type: quote.corridorType,
       recommended_price_mad: quote.tiers.spot.priceMad,
       recommended_price_eur: quote.tiers.spot.priceEur,
       client_id: clientId || null,
@@ -385,14 +427,13 @@ export async function saveQuotationProposal(quote: DynamicPricingQuote, clientId
       created_at: new Date().toISOString(),
     };
 
-    // Log to audit or internal proposal tracking
     await supabase.from('audit_logs').insert([
       {
         action: 'generate_dynamic_quote',
         entity_type: 'freight_quotation',
         entity_id: 0,
         new_values: JSON.stringify(payload),
-        reason: `Dynamic freight quote generated for ${quote.originCity} -> ${quote.destinationCity}`,
+        reason: `Dynamic freight quote generated for ${quote.originCity} -> ${quote.destinationCity} (${quote.corridorType})`,
       },
     ]);
 

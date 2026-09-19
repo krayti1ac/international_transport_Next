@@ -8,12 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Camera, RefreshCw, Scan, Sparkles, WifiOff } from 'lucide-react';
 import { compressImage } from '@/lib/image-compressor';
-import { saveToOfflineQueue, getOfflineQueue, processOfflineQueue } from '@/lib/offline-sync';
+import { saveToOfflineQueue, getOfflineQueueCount, processOfflineQueue } from '@/lib/offline-sync';
 import { processFuelReceiptOCR } from '@/features/fleet/services/ocr.actions';
 import { OfflineSyncBadge } from '@/components/offline-sync-badge';
 import { useLanguage } from '@/components/language-provider';
 import { useAutoIssueReporter } from '@/hooks/useAutoIssueReporter';
 import { auditFuelReceipt, type FuelAuditResult } from '@/features/fleet/services/fuel-fraud-detector.actions';
+import { triggerFuelReceiptAudit } from '@/features/fleet/services/fuel-audit-trigger';
 import { FuelFraudAuditBadge } from '@/features/fleet/components/FuelFraudAuditBadge';
 import { ShieldCheck } from 'lucide-react';
 import Decimal from 'decimal.js';
@@ -92,13 +93,14 @@ export default function FuelReceiptScanPage() {
       }
     } finally {
       setIsSyncing(false);
-      setPendingCount(getOfflineQueue().length);
+      const count = await getOfflineQueueCount();
+      setPendingCount(count);
     }
   };
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
-    setPendingCount(getOfflineQueue().length);
+    getOfflineQueueCount().then(setPendingCount);
     setDate(new Date().toISOString().split('T')[0]);
 
     const handleOnline = () => {
@@ -253,7 +255,7 @@ export default function FuelReceiptScanPage() {
         if (image) {
           base64 = await fileToBase64(image);
         }
-        saveToOfflineQueue({
+        await saveToOfflineQueue({
           truck_id: assignedTruckId,
           amount: parsedAmount,
           currency,
@@ -264,7 +266,8 @@ export default function FuelReceiptScanPage() {
         });
 
         toast({ title: t('💾 تم حفظ الإيصال محلياً، وستتم مزامنته آلياً فور توفر الشبكة', '💾 Reçu enregistré localement, synchronisation dès retour du réseau') });
-        setPendingCount(getOfflineQueue().length);
+        const count = await getOfflineQueueCount();
+        setPendingCount(count);
       } else {
         let imageUrl = '';
         if (image && session?.user) {
@@ -278,7 +281,7 @@ export default function FuelReceiptScanPage() {
 
         const finalNotes = imageUrl ? `${notesDetails}\n\n${t('رابط الإيصال:', 'Lien reçu :')} ${imageUrl}` : notesDetails;
 
-        const { error } = await supabase.from('truck_maintenance').insert({
+        const { data: insertedRec, error } = await supabase.from('truck_maintenance').insert({
           truck_id: assignedTruckId,
           type: 'fuel',
           expense_type: 'fuel',
@@ -287,10 +290,23 @@ export default function FuelReceiptScanPage() {
           maintenance_date: date,
           notes: finalNotes,
           payment_method: 'cash',
-        });
+        }).select('id').maybeSingle();
 
         if (error) throw error;
         toast({ title: t('✅ تم تسجيل وحفظ إيصال الوقود في النظام بنجاح', '✅ Reçu de carburant enregistré avec succès') });
+
+        // Trigger post-save automated audit with corridor cross-check and security alert
+        triggerFuelReceiptAudit({
+          receiptId: insertedRec?.id,
+          truckId: assignedTruckId,
+          liters: Number(liters) || 0,
+          amount: parsedAmount,
+          currency,
+          date,
+          stationName: station,
+        }).then((res) => {
+          if (res.auditResult) setFraudAudit(res.auditResult);
+        }).catch((auditErr) => console.warn('Post-save audit warning:', auditErr));
       }
 
       setAmount('');

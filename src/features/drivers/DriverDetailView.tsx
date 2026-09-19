@@ -163,6 +163,15 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
         return { label: t(`سارية (${diffDays} يوم)`, `Valide (${diffDays} j)`), className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25', daysLeft: diffDays };
     }, [driver, t]);
 
+    const africanVisa = useMemo(() => {
+        if (!driver?.african_visa_expiry_date) return null;
+        const expiry = new Date(driver.african_visa_expiry_date);
+        const diffDays = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        if (diffDays < 0) return { label: t('تأشيرة إفريقيا منتهية', 'Visa Afrique expiré'), className: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25', daysLeft: diffDays };
+        if (diffDays <= 30) return { label: t(`تنتهي خلال ${diffDays} يوم`, `Expire dans ${diffDays} j`), className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25', daysLeft: diffDays };
+        return { label: t(`سارية (${diffDays} يوم)`, `Valide (${diffDays} j)`), className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25', daysLeft: diffDays };
+    }, [driver, t]);
+
     const totalAdvances = useMemo(() => {
         return advances.reduce((sum, a) => {
             if (a.status !== 'approved') return sum;
@@ -339,31 +348,58 @@ export function DriverDetailView({ driverId }: DriverDetailViewProps) {
                     </Card>
 
                     <Card className="rounded-2xl border border-border/80">
-                        <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-                            <CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-teal-500" /> {t('صلاحية التأشيرة', 'Validité du Visa')}</CardTitle>
+                        <CardHeader className="pb-3 border-b border-border/40 bg-muted/20 flex flex-row items-center justify-between">
+                            <CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-teal-500" /> {t('تأشيرات الممرات الدولية', 'Visas des Corridors')}</CardTitle>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border border-border/70 bg-background text-foreground">
+                                {driver.visa_type === 'both' ? `🌐 ${t('كلا الممرين', 'Tous Corridors')}` : driver.visa_type === 'african_transit' ? `🌍 ${t('موريتانيا / إفريقيا', 'Afrique')}` : `🚢 ${t('شنغن الأوروبي', 'Schengen')}`}
+                            </span>
                         </CardHeader>
                         <CardContent className="p-5 space-y-4 text-xs">
+                            {/* European Schengen Visa */}
                             {driver.visa_expiry_date ? (
-                                <>
+                                <div className="p-2.5 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">{t('الحالة:', 'Statut :')}</span>
-                                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${visa?.className}`}>
+                                        <span className="font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1">
+                                            <span>🚢</span> {t('شنغن أوروبا:', 'Visa Schengen :')}
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${visa?.className}`}>
                                             {visa?.label}
                                         </span>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">{t('تاريخ الانتهاء:', 'Date d\'expiration :')}</span>
+                                    <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                                        <span>{t('تاريخ الانتهاء:', 'Date d\'expiration :')}</span>
                                         <span className="font-mono text-foreground" dir="ltr">{driver.visa_expiry_date}</span>
                                     </div>
-                                    {typeof visa?.daysLeft === 'number' && visa.daysLeft <= 30 && (
-                                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 flex items-start gap-2">
-                                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                                            <p className="leading-relaxed">{t('يرجى تجديد التأشيرة قبل تاريخ الانتهاء لضمان استمرارية الرحلات الدولية.', 'Veuillez renouveler le visa avant la date d\'expiration pour assurer la continuité des trajets.')}</p>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <p className="text-muted-foreground">{t('لا توجد تأشيرة مسجلة لهذا السائق.', 'Aucun visa enregistré pour ce chauffeur.')}</p>
+                                </div>
+                            ) : null}
+
+                            {/* African Corridor Visa */}
+                            {driver.african_visa_expiry_date ? (
+                                <div className="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-semibold text-amber-900 dark:text-amber-300 flex items-center gap-1">
+                                            <span>🌍</span> {t('موريتانيا / إفريقيا:', 'Visa Afrique :')}
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${africanVisa?.className}`}>
+                                            {africanVisa?.label}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                                        <span>{t('تاريخ الانتهاء:', 'Date d\'expiration :')}</span>
+                                        <span className="font-mono text-foreground" dir="ltr">{driver.african_visa_expiry_date}</span>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {!driver.visa_expiry_date && !driver.african_visa_expiry_date && (
+                                <p className="text-muted-foreground">{t('لا توجد تأشيرات دولية مسجلة لهذا السائق.', 'Aucun visa enregistré pour ce chauffeur.')}</p>
+                            )}
+
+                            {((typeof visa?.daysLeft === 'number' && visa.daysLeft <= 30) || (typeof africanVisa?.daysLeft === 'number' && africanVisa.daysLeft <= 30)) && (
+                                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <p className="leading-relaxed">{t('تنبيه: إحدى تأشيرات السائق على وشك الانتهاء أو منتهية، يرجى التجديد لضمان استمرارية الشحن الدولي.', 'Attention: Un des visas du chauffeur expire bientôt. Veuillez renouveler.')}</p>
+                                </div>
                             )}
                         </CardContent>
                     </Card>

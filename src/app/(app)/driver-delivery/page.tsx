@@ -105,8 +105,23 @@ function DriverDeliveryContent() {
         if (cancelled) return;
         if (error) throw error;
         setTrip(data);
+        try {
+          localStorage.setItem(`cached_trip_${id}`, JSON.stringify(data));
+        } catch {}
       } catch (error) {
         if (cancelled) return;
+        // Try fallback to offline cached trip
+        const id = parseInt(tripId, 10);
+        if (!isNaN(id)) {
+          try {
+            const cachedTrip = localStorage.getItem(`cached_trip_${id}`);
+            if (cachedTrip) {
+              setTrip(JSON.parse(cachedTrip));
+              setTripError(null);
+              return;
+            }
+          } catch {}
+        }
         const message = error instanceof Error ? error.message : t('لم يتم العثور على الرحلة', 'Voyage introuvable');
         setTripError(message);
         toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
@@ -169,6 +184,9 @@ function DriverDeliveryContent() {
 
         if (tripsRes.error) throw tripsRes.error;
         setTripsList(tripsRes.data || []);
+        try {
+          localStorage.setItem('cached_driver_delivery_trips', JSON.stringify(tripsRes.data || []));
+        } catch {}
 
         if (driversRes.data) {
           const dMap: Record<number, string> = {};
@@ -176,6 +194,9 @@ function DriverDeliveryContent() {
             dMap[d.id] = d.name;
           });
           setDriversMap(dMap);
+          try {
+            localStorage.setItem('cached_driver_delivery_drivers', JSON.stringify(dMap));
+          } catch {}
         }
 
         if (trucksRes.data) {
@@ -184,9 +205,25 @@ function DriverDeliveryContent() {
             tMap[t.id] = t.plate_number;
           });
           setTrucksMap(tMap);
+          try {
+            localStorage.setItem('cached_driver_delivery_trucks', JSON.stringify(tMap));
+          } catch {}
         }
       } catch (error) {
         if (cancelled) return;
+        // Offline fallback for trips list
+        try {
+          const cachedTrips = localStorage.getItem('cached_driver_delivery_trips');
+          const cachedDrivers = localStorage.getItem('cached_driver_delivery_drivers');
+          const cachedTrucks = localStorage.getItem('cached_driver_delivery_trucks');
+          if (cachedTrips) {
+            setTripsList(JSON.parse(cachedTrips));
+            if (cachedDrivers) setDriversMap(JSON.parse(cachedDrivers));
+            if (cachedTrucks) setTrucksMap(JSON.parse(cachedTrucks));
+            return;
+          }
+        } catch {}
+
         const message = error instanceof Error ? error.message : t('حدث خطأ أثناء تحميل الرحلات', 'Erreur de chargement des voyages');
         toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
       } finally {

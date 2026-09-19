@@ -10,12 +10,15 @@ import { useLanguage } from '@/components/language-provider';
 import { MapPin, Fuel, FileText, CheckCircle } from 'lucide-react';
 import { NavigationLauncher } from '@/features/trips/components/NavigationLauncher';
 import Decimal from 'decimal.js';
+import { calculateDriverSafetyScore, type DriverSafetyBreakdown } from '@/features/drivers/services/driver-safety-score.actions';
+import { DriverSafetyScoreCard } from '@/features/drivers/components/DriverSafetyScoreCard';
 
 export default function DriverTasksPage() {
   const { t, dir } = useLanguage();
   const [trips, setTrips] = useState<TripOrder[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [driver, setDriver] = useState<Driver | null>(null);
+  const [safetyData, setSafetyData] = useState<DriverSafetyBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -46,9 +49,10 @@ export default function DriverTasksPage() {
 
         setDriver(driverData);
 
-        const [tripsRes, advancesRes] = await Promise.all([
+        const [tripsRes, advancesRes, safetyScore] = await Promise.all([
           supabase.from('trip_orders').select('*').eq('driver_id', driverData.id).order('departure_date', { ascending: false }),
           supabase.from('advances').select('*').eq('driver_id', driverData.id).order('date', { ascending: false }),
+          calculateDriverSafetyScore(driverData.id, 30),
         ]);
 
         if (tripsRes.error) throw tripsRes.error;
@@ -68,6 +72,9 @@ export default function DriverTasksPage() {
 
         setTrips(tripsRes.data || []);
         setAdvances(advancesData);
+        if (safetyScore) {
+          setSafetyData(safetyScore);
+        }
 
         channel = supabase
           .channel(`driver-tasks-${driverData.id}`)
@@ -158,6 +165,10 @@ export default function DriverTasksPage() {
           {t('متابعة مسار الرحلات النشطة، وثائق CMR وسجل السلف الشخصية', 'Suivi de vos voyages actifs, documents CMR et historique des acomptes')}
         </p>
       </div>
+
+      {safetyData && (
+        <DriverSafetyScoreCard data={safetyData} />
+      )}
 
       {loading ? (
         <div className="text-center py-12">

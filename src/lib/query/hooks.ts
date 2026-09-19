@@ -30,6 +30,8 @@ import {
   fallbackArray,
 } from '@/lib/default-data';
 
+export { fallbackArray };
+
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export function useCurrentUser() {
@@ -189,9 +191,10 @@ export function useDashboardDataQuery() {
       const currentMonth = new Date().getMonth();
       const chartData = [];
       for (let i = Math.max(0, currentMonth - 5); i <= currentMonth; i++) {
+        const monthRev = monthlyMap[i]?.revenue ?? (i === currentMonth ? revMAD : new Decimal(0));
         chartData.push({
           month: months[i] || `شهر ${i + 1}`,
-          revenue: Math.round(monthlyMap[i]?.revenue ? monthlyMap[i].revenue.toNumber() : (i === currentMonth ? revenueMAD : 0)),
+          revenue: monthRev.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
           trips: monthlyMap[i]?.trips || (i === currentMonth ? (tripsCountRes.count || 0) : 0),
         });
       }

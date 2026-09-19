@@ -331,6 +331,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRole(localUser.role);
             setAuthStoreUser(loggedInUser);
 
+            const activeDeviceId = getOrCreateDeviceId();
+            try {
+              document.cookie = `app_device_id=${encodeURIComponent(activeDeviceId)}; path=/; max-age=31536000; SameSite=Lax`;
+            } catch {}
+
             document.cookie = `app_user_session=${encodeURIComponent(
               JSON.stringify({
                 id: loggedInUser.id,
@@ -338,11 +343,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 name: loggedInUser.name,
                 role: loggedInUser.role,
                 company_id: loggedInUser.company_id,
+                deviceId: activeDeviceId,
                 is_active: true,
               })
             )}; path=/; max-age=604800; SameSite=Lax`;
+            await loginUserAction({ email: cleanEmail, password, licenseNumber, deviceId: activeDeviceId }).catch(() => {});
 
-            loginUserAction({ email: cleanEmail, password, licenseNumber }).catch(() => {});
+            loginUserAction({ email: cleanEmail, password, licenseNumber, deviceId: activeDeviceId }).catch(() => {});
 
             if (localUser.role !== 'super_admin') {
               registerDevice(comp?.id || 1, licenseNumber, localUser.id).catch(() => {});
@@ -478,6 +485,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRole(profile.role);
         setAuthStoreUser(loggedInUser);
 
+        const activeDeviceId = getOrCreateDeviceId();
+        try {
+          document.cookie = `app_device_id=${encodeURIComponent(activeDeviceId)}; path=/; max-age=31536000; SameSite=Lax`;
+        } catch {}
+
         document.cookie = `app_user_session=${encodeURIComponent(
           JSON.stringify({
             id: loggedInUser.id,
@@ -485,11 +497,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: loggedInUser.name,
             role: loggedInUser.role,
             company_id: loggedInUser.company_id,
+            deviceId: activeDeviceId,
             is_active: loggedInUser.is_active !== false,
           })
         )}; path=/; max-age=604800; SameSite=Lax`;
+        await loginUserAction({ email: cleanEmail, password, licenseNumber, deviceId: activeDeviceId }).catch(() => {});
 
-        loginUserAction({ email: cleanEmail, password, licenseNumber }).catch(() => {});
+        loginUserAction({ email: cleanEmail, password, licenseNumber, deviceId: activeDeviceId }).catch(() => {});
 
         if (comp?.id) {
           registerDevice(comp.id, licenseNumber, profile.id).catch(() => {});
@@ -663,8 +677,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
       document.cookie = 'app_user_session=; path=/; max-age=0; SameSite=Lax';
+      document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
     }
     logoutUserAction().catch(() => {});
+    await logoutUserAction().catch(() => {});
     setUser(null);
     setCompany(null);
     setRole(null);

@@ -206,7 +206,10 @@ export function FleetFormModal({
           default_truck_id: formData.default_truck_id ? parseInt(String(formData.default_truck_id)) : null,
           visa_number: formData.visa_number?.trim() || null,
           visa_expiry_date: formData.visa_expiry_date || null,
-          has_valid_visa: Boolean(formData.visa_expiry_date),
+          has_valid_visa: Boolean(formData.visa_expiry_date || formData.african_visa_expiry_date),
+          visa_type: formData.visa_type || 'schengen',
+          african_visa_number: formData.african_visa_number?.trim() || null,
+          african_visa_expiry_date: formData.african_visa_expiry_date || null,
           photo_url: formData.photo_url?.trim() || null,
         };
         if (formData.photo_url) {
@@ -635,36 +638,123 @@ export function FleetFormModal({
                   </div>
                 </CollapsibleSection>
 
-                {/* تأشيرات الدخول الدولية */}
+                {/* تأشيرات الدخول الدولية والممرات */}
                 <CollapsibleSection
-                  title={t('تأشيرة الدخول الدولية (Visa Schengen)', 'Visa Schengen & Validité')}
-                  description={t('بيانات التأشيرة للرحلات الدولية والعبور الأوروبي', 'Données de visa pour le transport international')}
+                  title={t('تأشيرات الممرات الدولية (أوروبا / غرب إفريقيا)', 'Visas Internationaux (Europe / Afrique)')}
+                  description={t('بيانات التأشيرات للعبور الأوروبي (شنغن) والممر الإفريقي البري (موريتانيا/السنغال)', 'Données de visa pour le transport international (Schengen & Afrique)')}
                   icon={<Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
                   variant="purple"
-                  defaultOpen={Boolean(formData.visa_number || formData.visa_expiry_date)}
+                  defaultOpen={Boolean(formData.visa_number || formData.visa_expiry_date || formData.african_visa_number)}
                   isOpen={activeDriverSection === 'visa'}
                   onToggle={() => setActiveDriverSection((prev) => (prev === 'visa' ? null : 'visa'))}
-                  badge={formData.visa_number || undefined}
+                  badge={formData.visa_number || formData.african_visa_number || undefined}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-4 pt-1">
+                    {/* اختيار نوع التأشيرة / الممر */}
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">{t('رقم التأشيرة (Visa Schengen)', 'Numéro de visa (Visa Schengen)')}</label>
-                      <Input
-                        value={formData.visa_number || ''}
-                        onChange={(e) => setFormData({ ...formData, visa_number: e.target.value })}
-                        placeholder="ES-9812401"
-                        dir="ltr"
-                      />
+                      <label className="text-xs font-semibold text-foreground">
+                        {t('نطاق صلاحية السائق للرحلات الدولية', 'Corridor International Autorisé')}
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, visa_type: 'schengen' })}
+                          className={`p-2 rounded-xl border text-xs font-semibold transition-all ${
+                            (formData.visa_type || 'schengen') === 'schengen'
+                              ? 'bg-blue-500/10 border-blue-500 text-blue-800 dark:text-blue-300'
+                              : 'border-border text-muted-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          🚢 {t('شنغن الأوروبي', 'Schengen')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, visa_type: 'african_transit' })}
+                          className={`p-2 rounded-xl border text-xs font-semibold transition-all ${
+                            formData.visa_type === 'african_transit'
+                              ? 'bg-amber-500/10 border-amber-500 text-amber-800 dark:text-amber-300'
+                              : 'border-border text-muted-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          🌍 {t('موريتانيا / إفريقيا', 'Afrique')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, visa_type: 'both' })}
+                          className={`p-2 rounded-xl border text-xs font-semibold transition-all ${
+                            formData.visa_type === 'both'
+                              ? 'bg-purple-500/10 border-purple-500 text-purple-800 dark:text-purple-300'
+                              : 'border-border text-muted-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          🌐 {t('كلا الممرين', 'Tous Corridors')}
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">{t('تاريخ انتهاء التأشيرة', 'Date d\'expiration du visa')}</label>
-                      <Input
-                        type="date"
-                        value={formData.visa_expiry_date || ''}
-                        onChange={(e) => setFormData({ ...formData, visa_expiry_date: e.target.value })}
-                        dir="ltr"
-                      />
-                    </div>
+
+                    {/* تأشيرة شنغن الأوروبية */}
+                    {((formData.visa_type || 'schengen') === 'schengen' || formData.visa_type === 'both') && (
+                      <div className="p-3 bg-blue-500/5 rounded-xl border border-blue-500/20 space-y-3">
+                        <h5 className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                          <span>🚢</span>
+                          {t('تأشيرة شنغن الأوروبية (Visa Schengen)', 'Visa Schengen')}
+                        </h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-foreground">{t('رقم التأشيرة (Schengen)', 'Numéro de visa')}</label>
+                            <Input
+                              value={formData.visa_number || ''}
+                              onChange={(e) => setFormData({ ...formData, visa_number: e.target.value })}
+                              placeholder="ES-9812401"
+                              dir="ltr"
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-foreground">{t('تاريخ انتهاء التأشيرة', 'Date d\'expiration')}</label>
+                            <Input
+                              type="date"
+                              value={formData.visa_expiry_date || ''}
+                              onChange={(e) => setFormData({ ...formData, visa_expiry_date: e.target.value })}
+                              dir="ltr"
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* تأشيرة الممر الإفريقي البري */}
+                    {(formData.visa_type === 'african_transit' || formData.visa_type === 'both') && (
+                      <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/20 space-y-3">
+                        <h5 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                          <span>🌍</span>
+                          {t('تأشيرة موريتانيا وغرب إفريقيا (الممر البري)', 'Visa Mauritanie & CEDEAO')}
+                        </h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-foreground">{t('رقم التأشيرة / بطاقة العبور', 'Numéro de visa / Laissez-passer')}</label>
+                            <Input
+                              value={formData.african_visa_number || ''}
+                              onChange={(e) => setFormData({ ...formData, african_visa_number: e.target.value })}
+                              placeholder="MR-552019"
+                              dir="ltr"
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-foreground">{t('تاريخ انتهاء تأشيرة إفريقيا', 'Date d\'expiration')}</label>
+                            <Input
+                              type="date"
+                              value={formData.african_visa_expiry_date || ''}
+                              onChange={(e) => setFormData({ ...formData, african_visa_expiry_date: e.target.value })}
+                              dir="ltr"
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CollapsibleSection>
               </>

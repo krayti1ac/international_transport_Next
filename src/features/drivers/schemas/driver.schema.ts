@@ -22,6 +22,9 @@ export const saveDriverSchema = z.object({
   visa_number: z.string().trim().nullable().optional(),
   visa_expiry_date: z.string().nullable().optional(),
   has_valid_visa: z.boolean().optional(),
+  visa_type: z.enum(['schengen', 'african_transit', 'both']).default('schengen').optional(),
+  african_visa_number: z.string().trim().nullable().optional(),
+  african_visa_expiry_date: z.string().nullable().optional(),
   photo_url: z.string().nullable().optional(),
   // User account options
   create_user_account: z.boolean().optional().default(true),
