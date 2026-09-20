@@ -19,9 +19,13 @@ export const DOCUMENT_TYPE_LABELS: Record<string, { label_ar: string; label_fr: 
   transport_license: { label_ar: 'رخصة النقل / CMR', label_fr: 'Autorisation de Transport', label_es: 'Autorización de Transporte / CMR', label_en: 'Transport License / CMR' },
   atp_certificate: { label_ar: 'شهادة التبريد ATP', label_fr: 'Certificat ATP', label_es: 'Certificado ATP', label_en: 'ATP Certificate' },
   tachograph_calibration: { label_ar: 'معايرة التاكوغراف', label_fr: 'Tachygraphe', label_es: 'Calibración del Tacógrafo', label_en: 'Tachograph Calibration' },
+  ecowas_brown_card: { label_ar: 'تأمين البطاقة البنية (Carte Brune CEDEAO)', label_fr: 'Carte Brune CEDEAO', label_es: 'Tarjeta Marrón CEDEAO', label_en: 'ECOWAS Brown Card' },
   other: { label_ar: 'وثيقة أخرى', label_fr: 'Autre Document', label_es: 'Otro Documento', label_en: 'Other Document' },
 
   assurance: { label_ar: 'التأمين الدولي / المحلي', label_fr: 'Assurance', label_es: 'Seguro', label_en: 'Insurance' },
+  carte_brune: { label_ar: 'تأمين البطاقة البنية (Carte Brune CEDEAO)', label_fr: 'Carte Brune CEDEAO', label_es: 'Tarjeta Marrón CEDEAO', label_en: 'ECOWAS Brown Card' },
+  'البطاقة البنية': { label_ar: 'تأمين البطاقة البنية (Carte Brune CEDEAO)', label_fr: 'Carte Brune CEDEAO', label_es: 'Tarjeta Marrón CEDEAO', label_en: 'ECOWAS Brown Card' },
+  'carte brune': { label_ar: 'تأمين البطاقة البنية (Carte Brune CEDEAO)', label_fr: 'Carte Brune CEDEAO', label_es: 'Tarjeta Marrón CEDEAO', label_en: 'ECOWAS Brown Card' },
   visite_technique: { label_ar: 'الفحص التقني', label_fr: 'Visite Technique', label_es: 'Inspección Técnica', label_en: 'Technical Inspection' },
   carte_grise: { label_ar: 'البطاقة الرمادية', label_fr: 'Carte Grise', label_es: 'Permiso de Circulación', label_en: 'Grey Card' },
   'التأمين': { label_ar: 'التأمين', label_fr: 'Assurance', label_es: 'Seguro', label_en: 'Insurance' },
@@ -50,6 +54,8 @@ export const DEFAULT_DOCUMENT_CATEGORIES: Array<{
   { id: 5, name: 'شهادة التبريد ATP', name_fr: 'Certificat ATP', name_es: 'Certificado ATP', name_en: 'ATP Certificate', applicable_to: 'both', is_active: true },
   { id: 6, name: 'معايرة التاكوغراف', name_fr: 'Tachygraphe', name_es: 'Calibración del Tacógrafo', name_en: 'Tachograph Calibration', applicable_to: 'truck', is_active: true },
   { id: 7, name: 'وثيقة أخرى', name_fr: 'Autre Document', name_es: 'Otro Documento', name_en: 'Other Document', applicable_to: 'both', is_active: true },
+  { id: 7, name: 'تأمين البطاقة البنية (Carte Brune CEDEAO)', name_fr: 'Carte Brune CEDEAO', name_es: 'Tarjeta Marrón CEDEAO', name_en: 'ECOWAS Brown Card', applicable_to: 'both', is_active: true },
+  { id: 8, name: 'وثيقة أخرى', name_fr: 'Autre Document', name_es: 'Otro Documento', name_en: 'Other Document', applicable_to: 'both', is_active: true },
 ];
 
 export const CORE_DOC_TYPES = [
@@ -59,6 +65,7 @@ export const CORE_DOC_TYPES = [
   'transport_license',
   'atp_certificate',
   'tachograph_calibration',
+  'ecowas_brown_card',
 ];
 
 /**

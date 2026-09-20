@@ -17,11 +17,13 @@ import {
   MapPin, 
   ShieldCheck, 
   Award, 
-  Wallet 
+  Wallet,
+  Globe2 
 } from 'lucide-react';
 import Decimal from 'decimal.js';
 import { formatCurrency } from '@/lib/forex';
 import { resolveDriverPhoto } from '@/lib/driver-photos';
+import { evaluateAfricanDriverVisa } from '@/lib/african-corridor';
 import type { Driver, TripOrder, Advance, FinePenalty, DriverSalary } from '@/types/database';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
@@ -109,6 +111,12 @@ export default async function DriverDetailPage({ params }: DriverDetailPageProps
       visaStatus = 'valid';
     }
   }
+
+  // فحص صلاحية تأشيرة الممر الإفريقي البري (موريتانيا / السنغال)
+  const africanVisa = evaluateAfricanDriverVisa(
+    driver.african_visa_expiry_date,
+    driver.african_visa_number
+  );
 
   const photoUrl = resolveDriverPhoto(driver);
 
@@ -238,51 +246,107 @@ export default async function DriverDetailPage({ params }: DriverDetailPageProps
             </Card>
           </div>
 
-          {/* رادار تأشيرة شنغن (Schengen Visa Radar) */}
-          <Card className="rounded-2xl shadow-sm border-border/80">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-500" />
-                <span>حالة التأشيرة الدولية (Visa Schengen)</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl">
-              <div>
-                <p className="text-xs text-muted-foreground">رقم التأشيرة:</p>
-                <p className="font-mono font-bold text-sm">{driver.visa_number || 'غير مسجلة'}</p>
-                <p className="text-xs text-muted-foreground mt-2">تاريخ الانتهاء المعتمد:</p>
-                <p className="font-mono font-bold text-sm text-foreground">
-                  {driver.visa_expiry_date || 'غير محدد'}
-                </p>
-              </div>
+          {/* رادارات التأشيرات الدولية (الممر الأوروبي والإفريقي) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* رادار تأشيرة شنغن (Schengen Visa Radar) */}
+            <Card className="rounded-2xl shadow-sm border-border/80">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                  <span>تأشيرة شنغن (أوروبا بحراً)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 bg-muted/20 p-4 rounded-xl">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">رقم التأشيرة:</span>
+                  <span className="font-mono font-bold">{driver.visa_number || 'غير مسجلة'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">تاريخ الانتهاء:</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {driver.visa_expiry_date || 'غير محدد'}
+                  </span>
+                </div>
+                <div className="pt-1">
+                  {visaStatus === 'valid' && (
+                    <Badge className="bg-emerald-500 text-white gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>سارية (متبقي {daysUntilVisaExpiry} يوماً)</span>
+                    </Badge>
+                  )}
+                  {visaStatus === 'expiring' && (
+                    <Badge className="bg-amber-500 text-white gap-1 py-1 px-2.5 text-[11px] animate-pulse w-full justify-center">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>توشك على الانتهاء ({daysUntilVisaExpiry} يوماً)</span>
+                    </Badge>
+                  )}
+                  {visaStatus === 'expired' && (
+                    <Badge variant="destructive" className="gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <XCircle className="w-3 h-3" />
+                      <span>منتهية الصلاحية (ممنوع من العبور)</span>
+                    </Badge>
+                  )}
+                  {visaStatus === 'none' && (
+                    <Badge variant="secondary" className="gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <span>بدون تأشيرة أوروبية</span>
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-              <div>
-                {visaStatus === 'valid' && (
-                  <Badge className="bg-emerald-500 text-white gap-1 py-1 px-3 text-xs">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>سارية (متبقي {daysUntilVisaExpiry} يوماً)</span>
-                  </Badge>
-                )}
-                {visaStatus === 'expiring' && (
-                  <Badge className="bg-amber-500 text-white gap-1 py-1 px-3 text-xs animate-pulse">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>توشك على الانتهاء ({daysUntilVisaExpiry} يوماً)</span>
-                  </Badge>
-                )}
-                {visaStatus === 'expired' && (
-                  <Badge variant="destructive" className="gap-1 py-1 px-3 text-xs">
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>منتهية الصلاحية (ممنوع من العبور الدولي)</span>
-                  </Badge>
-                )}
-                {visaStatus === 'none' && (
-                  <Badge variant="secondary" className="gap-1 py-1 px-3 text-xs">
-                    <span>بدون تأشيرة دولية</span>
-                  </Badge>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            {/* رادار تأشيرة الممر الإفريقي البري (African Overland Visa Radar) */}
+            <Card className="rounded-2xl shadow-sm border-border/80">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Globe2 className="w-4 h-4 text-emerald-600" />
+                    <span>تأشيرة الممر الإفريقي (موريتانيا / السنغال)</span>
+                  </span>
+                  <span className="text-base">🇲🇷 🇸🇳</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 bg-muted/20 p-4 rounded-xl">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">رقم التأشيرة / المرور:</span>
+                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                    {driver.african_visa_number || 'غير مسجلة'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">تاريخ الانتهاء:</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {driver.african_visa_expiry_date || 'غير محدد'}
+                  </span>
+                </div>
+                <div className="pt-1">
+                  {africanVisa.status === 'valid' && (
+                    <Badge className="bg-emerald-600 text-white gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{africanVisa.badgeLabelAr}</span>
+                    </Badge>
+                  )}
+                  {africanVisa.status === 'expiring' && (
+                    <Badge className="bg-amber-500 text-white gap-1 py-1 px-2.5 text-[11px] animate-pulse w-full justify-center">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>{africanVisa.badgeLabelAr}</span>
+                    </Badge>
+                  )}
+                  {africanVisa.status === 'expired' && (
+                    <Badge variant="destructive" className="gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <XCircle className="w-3 h-3" />
+                      <span>{africanVisa.badgeLabelAr}</span>
+                    </Badge>
+                  )}
+                  {africanVisa.status === 'missing' && (
+                    <Badge variant="secondary" className="gap-1 py-1 px-2.5 text-[11px] w-full justify-center">
+                      <span>{africanVisa.badgeLabelAr}</span>
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 

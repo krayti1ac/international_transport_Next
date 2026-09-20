@@ -131,6 +131,7 @@ export interface Driver {
   name: string;
   phone: string;
   license: string;
+  cin?: string | null;
   status: string;
   base_salary: number;
   bonus_percentage: number;
