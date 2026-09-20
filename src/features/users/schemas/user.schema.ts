@@ -7,6 +7,7 @@ export const userRoleSchema = z.enum([
   'driver',
   'accountant',
   'fleet_manager',
+  'client',
 ]);
 
 export const createUserSchema = z

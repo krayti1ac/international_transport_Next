@@ -4,7 +4,8 @@ export type UserRole =
   | 'secretary' 
   | 'driver' 
   | 'accountant' 
-  | 'fleet_manager';
+  | 'fleet_manager'
+  | 'client';
 
 export type MailProviderType = 'cpanel' | 'hostinger' | 'ovh' | 'custom';
 
@@ -82,6 +83,8 @@ export interface User {
   is_active?: boolean;
   branch_id?: number | null;
   branch?: CompanyBranch | null;
+  client_id?: number | null;
+  client?: Client | null;
 }
 
 export interface Client {
@@ -924,5 +927,34 @@ export interface FiscalYear {
   closed_at?: string | null;
   closed_by?: string | null;
   created_at: string;
+}
+
+export type BookingStatus = 'pending' | 'confirmed' | 'assigned' | 'rejected' | 'cancelled';
+
+export interface BookingRequest {
+  id: number;
+  company_id?: number | null;
+  client_id: number;
+  client?: Client | null;
+  created_by_user_id?: string | null;
+  booking_number: string;
+  route_from: string;
+  route_to: string;
+  corridor_type?: 'european_maritime' | 'african_overland' | string;
+  cargo_type: 'fresh_produce' | 'frozen_fish' | 'general_cargo' | 'pharmaceuticals' | string;
+  trailer_type: 'frigo' | 'bache' | 'box' | 'container' | string;
+  target_temperature?: number | null;
+  weight_tons?: number | null;
+  pickup_date: string;
+  delivery_deadline?: string | null;
+  pickup_address?: string | null;
+  pickup_gps_url?: string | null;
+  delivery_address?: string | null;
+  delivery_gps_url?: string | null;
+  special_instructions?: string | null;
+  status: BookingStatus;
+  assigned_trip_id?: number | null;
+  created_at: string;
+  updated_at: string;
 }
 

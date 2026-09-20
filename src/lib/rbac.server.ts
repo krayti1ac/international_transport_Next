@@ -20,13 +20,14 @@ export async function getCurrentUser(): Promise<AuthResult | null> {
       userId: session.sub,
       role: (session.role as UserRole) || 'driver',
       companyId: (session.companyId as number) ?? null,
+      clientId: (session.clientId as number) ?? null,
       isActive: session.isActive !== false,
     };
   }
 
   const { data: profile } = await supabase
     .from('users')
-    .select('role, company_id, is_active')
+    .select('role, company_id, client_id, is_active')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -38,6 +39,7 @@ export async function getCurrentUser(): Promise<AuthResult | null> {
       userId: session.sub,
       role: (session.role as UserRole) || 'driver',
       companyId: (session.companyId as number) ?? null,
+      clientId: (session.clientId as number) ?? null,
       isActive: session.isActive !== false,
     };
   }
@@ -46,6 +48,7 @@ export async function getCurrentUser(): Promise<AuthResult | null> {
     userId: user.id,
     role: (profile.role as UserRole) || 'driver',
     companyId: (profile.company_id as number) ?? null,
+    clientId: (profile.client_id as number) ?? null,
     isActive: profile.is_active !== false,
   };
 }
@@ -61,18 +64,20 @@ export async function requirePermission(
 
   let role: UserRole = 'driver';
   let companyId: number | null = null;
+  let clientId: number | null = null;
   let isActive = true;
 
   if (user) {
     const { data: profile } = await supabase
       .from('users')
-      .select('role, company_id, is_active')
+      .select('role, company_id, client_id, is_active')
       .eq('id', user.id)
       .maybeSingle();
 
     if (profile) {
       role = (profile.role as UserRole) || 'driver';
       companyId = (profile.company_id as number) ?? null;
+      clientId = (profile.client_id as number) ?? null;
       if (profile.is_active === false) isActive = false;
     }
   }
@@ -82,6 +87,7 @@ export async function requirePermission(
     if (session) {
       role = (session.role as UserRole) || 'driver';
       companyId = (session.companyId as number) ?? null;
+      clientId = (session.clientId as number) ?? null;
       if (session.isActive === false) isActive = false;
     }
   }
@@ -106,6 +112,7 @@ export async function requirePermission(
     userId: user?.id || '',
     role,
     companyId,
+    clientId,
     isActive: true,
   };
 }

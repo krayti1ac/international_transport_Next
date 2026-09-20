@@ -39,7 +39,9 @@ import { Input } from '@/components/ui/input';
 import { InvoicePrintModal } from '@/components/invoice-print-modal';
 import { getClientPortalDataAction, getAvailablePortalClientsAction } from '../services/portal.actions';
 import type { ClientPortalData, PortalTripItem } from '../types';
-import type { Invoice, Client, DeliverySignature } from '@/types/database';
+import type { Invoice, Client, DeliverySignature, BookingRequest } from '@/types/database';
+import { BookingRequestModal } from './BookingRequestModal';
+import { ClientReeferBadge } from '@/features/tracking/components/ClientReeferBadge';
 
 import { SPANISH_DICTIONARY } from '@/i18n/dictionary';
 
@@ -49,12 +51,14 @@ interface CustomerPortalViewProps {
   initialIce?: string;
   initialClientId?: number;
   initialCmr?: string;
+  initialTab?: 'shipments' | 'bookings' | 'invoices' | 'pod';
 }
 
 export function CustomerPortalView({
   initialIce,
   initialClientId,
   initialCmr,
+  initialTab,
 }: CustomerPortalViewProps) {
   const [lang, setLang] = useState<'ar' | 'fr' | 'es'>('ar');
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -71,12 +75,15 @@ export function CustomerPortalView({
   const [showClientSelector, setShowClientSelector] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Active Tab: 'shipments' | 'invoices' | 'pod'
-  const [activeTab, setActiveTab] = useState<'shipments' | 'invoices' | 'pod'>('shipments');
+  // Active Tab: 'shipments' | 'bookings' | 'invoices' | 'pod'
+  const [activeTab, setActiveTab] = useState<'shipments' | 'bookings' | 'invoices' | 'pod'>(
+    initialTab || 'shipments'
+  );
 
   // Modals
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedPodTrip, setSelectedPodTrip] = useState<PortalTripItem | null>(null);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [activeSearchInput, setActiveSearchInput] = useState(initialCmr || initialIce || '');
 
   const [isPending, startTransition] = useTransition();
@@ -159,7 +166,48 @@ export function CustomerPortalView({
   const client = portalData?.client;
   const trips = portalData?.trips || [];
   const invoices = portalData?.invoices || [];
+  const bookings = portalData?.bookings || [];
   const stats = portalData?.stats;
+
+  const handleExportInvoicesCsv = () => {
+    if (!invoices.length) return;
+    const headers = [
+      'Invoice Number',
+      'Issue Date',
+      'Due Date',
+      'TTC Amount',
+      'Paid Amount',
+      'Remaining Balance',
+      'Currency',
+      'Status',
+    ];
+    const rows = invoices.map((inv) => {
+      const totalDec = new Decimal(inv.ttc_amount || inv.total_amount || 0);
+      const paidDec = new Decimal(inv.paid_amount || 0);
+      const remDec = totalDec.minus(paidDec);
+      const status = remDec.lessThanOrEqualTo(0) ? 'PAID' : paidDec.greaterThan(0) ? 'PARTIALLY_PAID' : 'PENDING';
+      return [
+        inv.invoice_number,
+        inv.issue_date || '',
+        inv.due_date || '',
+        totalDec.toFixed(2),
+        paidDec.toFixed(2),
+        remDec.toFixed(2),
+        inv.currency || client?.currency || 'EUR',
+        status,
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Invoices_Statement_${client?.ice || 'Client'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Filter available clients in selector modal
   const filteredClients = useMemo(() => {
@@ -223,6 +271,17 @@ export function CustomerPortalView({
 
           {/* Client badge & switch button */}
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            {client && (
+              <Button
+                size="sm"
+                onClick={() => setIsBookingModalOpen(true)}
+                className="h-9 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold gap-1.5 shadow-sm shadow-blue-500/20 shrink-0"
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>{t('+ طلب حجز شاحنة', '+ Réserver Fret', '+ Reservar Flete')}</span>
+              </Button>
+            )}
+
             {client && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/50">
                 <Building className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -425,6 +484,22 @@ export function CustomerPortalView({
 
               <button
                 type="button"
+                onClick={() => setActiveTab('bookings')}
+                className={`pb-3 px-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'bookings'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>{t('طلبات الحجز الذاتية', 'Demandes de Réservation', 'Reservas de Carga')}</span>
+                <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                  {bookings.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab('invoices')}
                 className={`pb-3 px-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
                   activeTab === 'invoices'
@@ -476,6 +551,12 @@ export function CustomerPortalView({
 
                     const priceExportDec = new Decimal(trip.price_export || trip.price || 0);
 
+                    const isAfrican =
+                      trip.corridor_type === 'african_overland' ||
+                      /dakar|rosso|nouakchott|mauritanie|senegal|sénégal|guerguerat|nouadhibou|الكركارات|روصو|دكار/i.test(
+                        `${trip.route} ${trip.route_export} ${trip.destination}`
+                      );
+
                     return (
                       <Card
                         key={trip.id}
@@ -505,6 +586,27 @@ export function CustomerPortalView({
                           </div>
 
                           <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] sm:text-[11px] gap-1 px-2.5 py-0.5 font-bold ${
+                                isAfrican
+                                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                              }`}
+                            >
+                              {isAfrican ? (
+                                <>
+                                  <span>🌍</span>
+                                  <span>{t('الممر الإفريقي البري', 'Corridor Africain', 'Corredor Africano')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>🚢</span>
+                                  <span>{t('الممر الأوروبي البحري', 'Corridor Maritime Europe', 'Corredor Marítimo Europa')}</span>
+                                </>
+                              )}
+                            </Badge>
+
                             <span
                               className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                                 isCompleted
@@ -515,15 +617,30 @@ export function CustomerPortalView({
                               }`}
                             >
                               {isCompleted
-                                ? t('تم التسليم بنجاح', 'Livré')
+                                ? t('تم التسليم بنجاح', 'Livré', 'Entregado')
                                 : isInTransit
-                                  ? t('الشحنة في الطريق', 'En transit')
-                                  : t('قيد التجهيز', 'En préparation')}
+                                  ? t('الشحنة في الطريق', 'En transit', 'En tránsito')
+                                  : t('قيد التجهيز', 'En préparation', 'En preparación')}
                             </span>
                           </div>
                         </CardHeader>
 
-                        <CardContent className="p-4 sm:p-6 space-y-6">
+                        <CardContent className="p-4 sm:p-6 space-y-5">
+                          {/* Cold Chain & Telematics Banner */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-500">{t('طبيعة الشحنة:', 'Nature fret :', 'Tipo carga :')}</span>
+                              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                {trip.cargo_type || trip.cargo_description || t('بضائع مبردة طازجة', 'Produits frais', 'Productos frescos')}
+                              </span>
+                            </div>
+                            <ClientReeferBadge
+                              temperature={typeof trip.current_temperature === 'number' ? trip.current_temperature : typeof trip.target_temperature === 'number' ? trip.target_temperature : 4}
+                              cargoDescription={trip.cargo_type || trip.cargo_description || 'خضار وفواكه'}
+                              compact
+                            />
+                          </div>
+
                           {/* 3-Stage Direct Point-to-Point Flow */}
                           <div className="relative border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-white dark:bg-slate-900/60">
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
@@ -672,10 +789,171 @@ export function CustomerPortalView({
               </div>
             )}
 
+            {/* TAB 1.5: BOOKING REQUESTS (Self-Service Engine) */}
+            {activeTab === 'bookings' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                      <span>{t('طلبات حجز الشاحنات الدولية', 'Demandes de Réservation de Fret', 'Reservas de Transporte Internacional')}</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {t(
+                        'إرسال ومتابعة طلبات حجز المأموريات ذاتياً مع التنبيه الفوري لغرفة العمليات عبر WhatsApp.',
+                        'Réservation directe et alerte temps réel à la régulation via WhatsApp.',
+                        'Reserva directa y alerta en tiempo real a operaciones vía WhatsApp.'
+                      )}
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={() => setIsBookingModalOpen(true)}
+                    className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold gap-1.5 shadow-sm shadow-blue-500/20 shrink-0"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>{t('+ طلب حجز جديد', '+ Nouvelle Demande', '+ Nueva Reserva')}</span>
+                  </Button>
+                </div>
+
+                {bookings.length === 0 ? (
+                  <Card className="p-12 text-center border-dashed rounded-2xl">
+                    <Calendar className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      {t('لا توجد طلبات حجز مسجلة حالياً', 'Aucune demande de réservation', 'No hay solicitudes de reserva')}
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      {t(
+                        'يمكنك تقديم طلب حجز شاحنة دولية (مبرد أو شراع) بالضغط على الزر أدناه.',
+                        'Vous pouvez soumettre une nouvelle réservation de transport en cliquant ci-dessous.',
+                        'Puede enviar una nueva reserva de transporte haciendo clic a continuación.'
+                      )}
+                    </p>
+                    <Button
+                      onClick={() => setIsBookingModalOpen(true)}
+                      className="mt-4 h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                    >
+                      {t('تقديم طلب حجز الآن', 'Créer une Réservation', 'Crear una Reserva')}
+                    </Button>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {bookings.map((booking) => {
+                      const isAfrican =
+                        booking.corridor_type === 'african_overland' ||
+                        /dakar|rosso|nouakchott|mauritanie|senegal|sénégal|guerguerat/i.test(booking.route_to);
+
+                      return (
+                        <Card
+                          key={booking.id}
+                          className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-xs hover:border-blue-500/40 transition"
+                        >
+                          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                                {booking.booking_number}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] px-2 py-0.5 font-bold ${
+                                  isAfrican
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                }`}
+                              >
+                                {isAfrican ? '🌍 إفريقي' : '🚢 أوروبي'}
+                              </Badge>
+                            </div>
+
+                            <Badge
+                              variant="outline"
+                              className={`text-[11px] font-bold ${
+                                booking.status === 'confirmed' || booking.status === 'assigned'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                  : booking.status === 'rejected' || booking.status === 'cancelled'
+                                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              }`}
+                            >
+                              {booking.status === 'assigned'
+                                ? t('تم تعيين الشاحنة 🚛', 'Camion Affecté 🚛', 'Camión Asignado 🚛')
+                                : booking.status === 'confirmed'
+                                  ? t('مؤكد وجاري التجهيز', 'Confirmé', 'Confirmado')
+                                  : booking.status === 'rejected'
+                                    ? t('مرفوض', 'Refusé', 'Rechazado')
+                                    : t('قيد المراجعة والتعيين', 'En attente', 'Pendiente')}
+                            </Badge>
+                          </CardHeader>
+
+                          <CardContent className="p-4 space-y-3 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">{t('المسار:', 'Trajet :', 'Trayecto :')}</span>
+                              <span className="font-bold text-slate-900 dark:text-white">
+                                {booking.route_from} ➔ {booking.route_to}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">{t('تاريخ الشحن المرغوب:', 'Date d\'enlèvement :', 'Fecha de recogida :')}</span>
+                              <span className="font-mono font-bold">{booking.pickup_date}</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                <span className="text-[10px] text-slate-400 block">{t('نوع الحمولة', 'Marchandise', 'Carga')}</span>
+                                <span className="font-bold text-[11px]">
+                                  {booking.cargo_type === 'frozen_fish'
+                                    ? '❄️ أسماك مجمدة'
+                                    : booking.cargo_type === 'fresh_produce'
+                                      ? '🥬 خضار وفواكه'
+                                      : booking.cargo_type === 'pharmaceuticals'
+                                        ? '💊 أدوية وصحي'
+                                        : '📦 بضائع عامة'}
+                                </span>
+                              </div>
+
+                              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                <span className="text-[10px] text-slate-400 block">{t('المقطورة والحرارة', 'Équipement', 'Equipo')}</span>
+                                <span className="font-bold text-[11px]">
+                                  {booking.trailer_type === 'frigo' ? '❄️ Frigo' : '🚛 Bâchée'}{' '}
+                                  {booking.target_temperature !== null && booking.target_temperature !== undefined
+                                    ? `(${booking.target_temperature}°C)`
+                                    : ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            {booking.special_instructions && (
+                              <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg">
+                                &quot;{booking.special_instructions}&quot;
+                              </p>
+                            )}
+
+                            {booking.pickup_gps_url && (
+                              <a
+                                href={booking.pickup_gps_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-bold hover:underline"
+                              >
+                                <Navigation className="w-3 h-3" />
+                                <span>{t('موقع التحميل (Google Maps)', 'Lieu d\'enlèvement GPS', 'Lugar de carga GPS')}</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* TAB 2: INVOICES & FINANCIAL SUMMARY */}
             {activeTab === 'invoices' && (
               <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                <CardHeader className="bg-slate-50/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 py-4 px-6 flex flex-row items-center justify-between">
+                <CardHeader className="bg-slate-50/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 py-4 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-base font-bold">
                       {t('سجل فواتير النقل المستحقة والمسددة', 'Relevé des factures de transport')}
@@ -683,6 +961,18 @@ export function CustomerPortalView({
                     <CardDescription className="text-xs mt-0.5">
                       {t('كافة الفواتير محتسبة بدقة متناهية تشمل ضريبة القيمة المضافة ومطابقة الأرصدة.', 'Calculs financiers conformes et conformité TVA.')}
                     </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportInvoicesCsv}
+                      className="h-9 rounded-xl text-xs gap-1.5 border-slate-300 dark:border-slate-700"
+                    >
+                      <Download className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{t('تصدير كشف الحساب (CSV)', 'Exporter Relevé (CSV)', 'Exportar Estado (CSV)')}</span>
+                    </Button>
                   </div>
                 </CardHeader>
 
@@ -1067,6 +1357,26 @@ export function CustomerPortalView({
           onClose={() => setSelectedInvoice(null)}
           invoice={selectedInvoice}
           client={client || undefined}
+        />
+      )}
+
+      {/* 8. Self-Service Booking Request Modal */}
+      {client && (
+        <BookingRequestModal
+          isOpen={isBookingModalOpen}
+          onClose={() => setIsBookingModalOpen(false)}
+          client={client}
+          lang={lang}
+          onBookingCreated={(newBooking) => {
+            setPortalData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    bookings: [newBooking, ...(prev.bookings || [])],
+                  }
+                : null
+            );
+          }}
         />
       )}
     </div>

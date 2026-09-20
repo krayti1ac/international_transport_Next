@@ -56,5 +56,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20261006_add_user_phone_and_personal_email.sql` — Add user personal phone and email columns for credential notifications (`phone`, `personal_email`, indexes).
 - `supabase/migrations/20261008_phase1_security_device_authorizations.sql` — Phase 1: Security Hardening, Device Binding Authorizations View, Multi-Tenant JWT Claims Isolation, and Enhanced RLS Enforcement (`device_authorizations` view, `current_company_id`, RLS policies).
 - `supabase/migrations/20261009_african_trade_corridor_expansion.sql` — African Overland Trade Corridor Expansion (Mauritania, Senegal, Guerguerat Geofence, Driver African Visas, and Multi-Corridor Architecture).
+- `supabase/migrations/20261011_client_portal_and_booking_requests.sql` — Client Portal & Self-Service Booking System for Exporters (`booking_requests` table, RLS policies, `users.client_id`).
 
 

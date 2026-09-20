@@ -25,6 +25,7 @@ import {
   XCircle,
   Calculator,
   Wrench,
+  Building,
 } from 'lucide-react';
 import { UserAvatar } from '@/components/users/UserAvatar';
 import { PRESET_USER_AVATARS, saveUserPhotoLocal, resolveUserPhoto } from '@/lib/user-photos';
@@ -105,12 +106,12 @@ export function UserManagementView() {
   // Secretary can only change roles to secretary or driver (never admin or super_admin)
   const availableRoles = useMemo<UserRole[]>(() => {
     if (isSuperAdmin) {
-      return ['super_admin', 'admin', 'secretary', 'accountant', 'fleet_manager', 'driver'];
+      return ['super_admin', 'admin', 'secretary', 'accountant', 'fleet_manager', 'driver', 'client'];
     }
     if (isSecretary) {
-      return ['secretary', 'driver'];
+      return ['secretary', 'driver', 'client'];
     }
-    return ['admin', 'secretary', 'accountant', 'fleet_manager', 'driver'];
+    return ['admin', 'secretary', 'accountant', 'fleet_manager', 'driver', 'client'];
   }, [isSuperAdmin, isSecretary]);
 
   const { data: users = [], isLoading } = useUsersQuery();
@@ -216,6 +217,13 @@ export function UserManagementView() {
         'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
       icon: Truck,
       desc: t('مهام النقل، إثباتات التسليم، ورفع إيصالات الوقود', 'Missions de transport et justificatifs carburant'),
+    },
+    client: {
+      label: t('عميل / مصدّر معتمد', 'Client / Exportateur'),
+      badgeClass:
+        'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
+      icon: Building,
+      desc: t('بوابة العملاء الذاتية، تتبع الشحنات، وطلبات الحجز', 'Portail client, suivi et demandes de réservation'),
     },
   };
 

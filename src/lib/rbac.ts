@@ -41,7 +41,10 @@ export type Permission =
   | 'chat:access'
   | 'branches:manage'
   | 'branches:read'
-  | 'devices:manage';
+  | 'devices:manage'
+  | 'bookings:create'
+  | 'bookings:read'
+  | 'portal:access';
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -77,6 +80,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'chat:access',
     'branches:manage',
     'devices:manage',
+    'bookings:create',
+    'bookings:read',
+    'portal:access',
   ],
   admin: [
     'companies:manage',
@@ -111,6 +117,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'chat:access',
     'branches:manage',
     'devices:manage',
+    'bookings:create',
+    'bookings:read',
+    'portal:access',
   ],
   secretary: [
     'trips:read',
@@ -131,6 +140,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'maintenance:read',
     'branches:read',
     'pricing:read',
+    'bookings:create',
+    'bookings:read',
+    'portal:access',
   ],
   driver: [
     'trips:read',
@@ -170,6 +182,15 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'pricing:read',
     'predictive:read',
     'clients:read',
+  ],
+  // 🏢 صلاحيات دور العميل المصدر / المستورد
+  client: [
+    'portal:access',
+    'trips:read',
+    'invoices:read',
+    'documents:read',
+    'bookings:create',
+    'bookings:read',
   ],
 };
 
@@ -250,6 +271,14 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/providers',
     '/chat',
   ],
+  // 🏢 مسارات دور العميل المصدر / المستورد
+  client: [
+    '/portal',
+    '/portal/bookings',
+    '/portal/invoices',
+    '/portal/trips',
+    '/track',
+  ],
 };
 
 export const ROLE_DEFAULT_REDIRECT: Record<UserRole, string> = {
@@ -259,6 +288,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<UserRole, string> = {
   driver: '/driver-tasks',
   accountant: '/invoices',
   fleet_manager: '/fleet',
+  client: '/portal',
 };
 
 export function isRouteAllowed(role: UserRole, pathname: string): boolean {
@@ -290,6 +320,7 @@ export interface AuthResult {
   userId: string;
   role: UserRole;
   companyId: number | null;
+  clientId?: number | null;
   isActive: boolean;
 }
 

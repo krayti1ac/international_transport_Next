@@ -2,21 +2,17 @@ import { Suspense } from 'react';
 import { CustomerPortalView } from '@/features/portal/components/CustomerPortalView';
 
 export const metadata = {
-  title: 'بوابة العملاء للنقل الدولي | Trans Bodanon TMS',
-  description: 'بوابة العملاء المستقلة لتتبع الشحنات المباشرة واستعراض الفواتير وإثباتات التسليم الرقمية e-POD',
+  title: 'فواتير الشحن والوضعية المالية | Trans Bodanon TMS',
+  description: 'بوابة العملاء المصدرين - كشوفات الحساب وفواتير النقل المستحقة والمسددة',
 };
 
-export default async function PortalPage({
+export default async function PortalInvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ice?: string; client_id?: string; cmr?: string; tab?: string }>;
+  searchParams: Promise<{ ice?: string; client_id?: string; cmr?: string }>;
 }) {
   const resolvedParams = await searchParams;
   const clientId = resolvedParams.client_id ? parseInt(resolvedParams.client_id, 10) : undefined;
-  const validTabs = ['shipments', 'bookings', 'invoices', 'pod'];
-  const initialTab = validTabs.includes(resolvedParams.tab || '')
-    ? (resolvedParams.tab as 'shipments' | 'bookings' | 'invoices' | 'pod')
-    : undefined;
 
   return (
     <Suspense
@@ -30,7 +26,7 @@ export default async function PortalPage({
         initialIce={resolvedParams.ice}
         initialClientId={clientId}
         initialCmr={resolvedParams.cmr}
-        initialTab={initialTab}
+        initialTab="invoices"
       />
     </Suspense>
   );

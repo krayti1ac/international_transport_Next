@@ -6,6 +6,7 @@ export type SessionPayload = {
   name?: string;
   role: string;
   companyId?: number | null;
+  clientId?: number | null;
   deviceId?: string | null;
   isActive?: boolean;
 };

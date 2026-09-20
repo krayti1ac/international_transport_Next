@@ -127,6 +127,23 @@ describe('RBAC', () => {
       expect(hasPermission('fleet_manager', 'payroll:approve')).toBe(false);
       expect(hasPermission('fleet_manager', 'treasury:manage')).toBe(false);
     });
+    it('should grant client portal and booking permissions', () => {
+      expect(hasPermission('client', 'portal:access')).toBe(true);
+      expect(hasPermission('client', 'bookings:create')).toBe(true);
+      expect(hasPermission('client', 'bookings:read')).toBe(true);
+      expect(hasPermission('client', 'trips:read')).toBe(true);
+      expect(hasPermission('client', 'invoices:read')).toBe(true);
+      expect(hasPermission('client', 'documents:read')).toBe(true);
+    });
+
+    it('should deny client operational and financial management permissions', () => {
+      expect(hasPermission('client', 'trips:create')).toBe(false);
+      expect(hasPermission('client', 'invoices:create')).toBe(false);
+      expect(hasPermission('client', 'fleet:manage')).toBe(false);
+      expect(hasPermission('client', 'treasury:manage')).toBe(false);
+      expect(hasPermission('client', 'companies:manage')).toBe(false);
+      expect(hasPermission('client', 'users:manage')).toBe(false);
+    });
   });
 
   describe('isRouteAllowed', () => {
@@ -140,6 +157,7 @@ describe('RBAC', () => {
       expect(isRouteAllowed('driver', '/super-admin')).toBe(false);
       expect(isRouteAllowed('accountant', '/super-admin')).toBe(false);
       expect(isRouteAllowed('fleet_manager', '/super-admin')).toBe(false);
+      expect(isRouteAllowed('client', '/super-admin')).toBe(false);
     });
 
     it('should restrict super_admin to super-admin routes only', () => {
@@ -197,11 +215,25 @@ describe('RBAC', () => {
       expect(isRouteAllowed('fleet_manager', '/truck-tracking')).toBe(true);
       expect(isRouteAllowed('fleet_manager', '/documents')).toBe(true);
     });
+
+    it('should allow client to portal routes only', () => {
+      expect(isRouteAllowed('client', '/portal')).toBe(true);
+      expect(isRouteAllowed('client', '/portal/bookings')).toBe(true);
+      expect(isRouteAllowed('client', '/portal/invoices')).toBe(true);
+      expect(isRouteAllowed('client', '/portal/trips')).toBe(true);
+      expect(isRouteAllowed('client', '/track/123')).toBe(true);
+
+      expect(isRouteAllowed('client', '/dashboard')).toBe(false);
+      expect(isRouteAllowed('client', '/trips')).toBe(false);
+      expect(isRouteAllowed('client', '/fleet')).toBe(false);
+      expect(isRouteAllowed('client', '/settings')).toBe(false);
+      expect(isRouteAllowed('client', '/treasury')).toBe(false);
+    });
   });
 
   describe('ROLE_DEFAULT_REDIRECT', () => {
     it('should have redirect for all roles', () => {
-      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager'];
+      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager', 'client'];
       for (const role of roles) {
         expect(ROLE_DEFAULT_REDIRECT[role]).toBeDefined();
         expect(ROLE_DEFAULT_REDIRECT[role].startsWith('/')).toBe(true);
@@ -215,11 +247,15 @@ describe('RBAC', () => {
     it('should redirect driver to driver-tasks', () => {
       expect(ROLE_DEFAULT_REDIRECT.driver).toBe('/driver-tasks');
     });
+
+    it('should redirect client to portal', () => {
+      expect(ROLE_DEFAULT_REDIRECT.client).toBe('/portal');
+    });
   });
 
   describe('ROLE_PERMISSIONS coverage', () => {
     it('should have permissions defined for all roles', () => {
-      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager'];
+      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager', 'client'];
       for (const role of roles) {
         expect(ROLE_PERMISSIONS[role]).toBeDefined();
         expect(ROLE_PERMISSIONS[role].length).toBeGreaterThan(0);
@@ -227,7 +263,7 @@ describe('RBAC', () => {
     });
 
     it('should not have duplicate permissions within a role', () => {
-      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager'];
+      const roles: UserRole[] = ['super_admin', 'admin', 'secretary', 'driver', 'accountant', 'fleet_manager', 'client'];
       for (const role of roles) {
         const perms = ROLE_PERMISSIONS[role];
         const unique = new Set(perms);
