@@ -22,6 +22,7 @@ import { useLanguage } from '@/components/language-provider';
 import { PublicTripShareBar } from '@/features/tracking/components/PublicTripShareBar';
 import { PublicTripTimeline } from '@/features/tracking/components/PublicTripTimeline';
 import { PublicTripPodCard } from '@/features/tracking/components/PublicTripPodCard';
+import { ClientReeferBadge } from '@/features/tracking/components/ClientReeferBadge';
 import { calculateLiveTripEta, type EtaResult } from '@/features/tracking/services/eta-calculator.actions';
 
 const TrackingMap = dynamic(
@@ -115,6 +116,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
             longitude: Number(l.longitude),
             timestamp: (l.recorded_at as string) || (l.timestamp as string),
             recorded_at: (l.recorded_at as string) || (l.timestamp as string),
+            frigo_temperature: typeof l.frigo_temperature === 'number' ? l.frigo_temperature : null,
           }));
           locMap.set(tripData.truck_id, normalized);
           setLocations(locMap);
@@ -204,6 +206,7 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
               longitude: Number(rawLoc.longitude),
               timestamp: (rawLoc.recorded_at as string) || (rawLoc.timestamp as string),
               recorded_at: (rawLoc.recorded_at as string) || (rawLoc.timestamp as string),
+              frigo_temperature: typeof rawLoc.frigo_temperature === 'number' ? rawLoc.frigo_temperature : null,
             };
             setLocations((prev) => {
               const next = new Map(prev);
@@ -371,6 +374,12 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           </div>
         </div>
 
+        {/* Cold-Chain Telematics Guard (Reefer Frigo Status) */}
+        <ClientReeferBadge
+          temperature={latestLoc?.frigo_temperature}
+          cargoDescription={trip.goods_description_export}
+        />
+
         {/* 3. Operational Specs Strip (Completely Free of Sensitive Financials) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Departure Date */}
@@ -485,6 +494,11 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
                   {typeof latestLoc.speed === 'number' && (
                     <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border">
                       {Math.round(latestLoc.speed)} km/h
+                    </span>
+                  )}
+                  {typeof latestLoc.frigo_temperature === 'number' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-mono text-xs font-semibold border border-cyan-500/20">
+                      ❄️ {latestLoc.frigo_temperature > 0 ? `+${latestLoc.frigo_temperature.toFixed(1)}` : latestLoc.frigo_temperature.toFixed(1)}°C
                     </span>
                   )}
                   {etaInfo && (
