@@ -19,8 +19,6 @@ export { STRATEGIC_PORT_ZONES, ALERT_COOLDOWN_MS };
 // Memory cache to track last known port presence per truck
 const portPresenceCache = new Map<string, string>(); // truckKey -> zoneId
 
-// Deduplication guard: 30 minutes cooldown to avoid notification spam from boundary signal jitter
-export const ALERT_COOLDOWN_MS = 30 * 60 * 1000;
 const portAlertCooldownCache = new Map<string, number>(); // truckId_zoneId_event -> timestampMs
 
 export function isAlertCooldownActive(
