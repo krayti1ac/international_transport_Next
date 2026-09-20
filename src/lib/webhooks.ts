@@ -2,7 +2,12 @@ import crypto from 'crypto';
 import { recordAuditLog } from '@/lib/audit.server';
 
 export interface WebhookEventPayload {
-  event: 'trip.status_changed' | 'trip.delivered' | 'trip.geofence_entered';
+  event:
+    | 'trip.status_changed'
+    | 'trip.delivered'
+    | 'trip.geofence_entered'
+    | 'trip.geofence_exited'
+    | 'trip.port_entry';
   timestamp: string;
   tripId: number;
   data: Record<string, unknown>;

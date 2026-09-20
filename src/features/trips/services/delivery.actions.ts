@@ -87,6 +87,10 @@ export async function submitProofOfDelivery(input: {
     revalidatePath('/dashboard');
 
     dispatchTripLifecycleNotifications(input.tripOrderId, 'delivery_completed', {
+      recipientName: input.recipientName,
+      signedAt: new Date().toISOString(),
+      latitude: input.latitude,
+      longitude: input.longitude,
       signatureUrl,
       cmrUrl,
     }).catch((notifyErr) => console.warn('Notification trigger error:', notifyErr));

@@ -4,6 +4,7 @@ import Decimal from 'decimal.js';
 import { createClient } from '@/lib/supabase/server';
 import { recordAuditLog } from '@/lib/audit.server';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
+import { dispatchTripLifecycleNotifications } from '@/features/trips/services/notification-dispatcher';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -229,6 +230,18 @@ export async function evaluatePortGeofences(params: {
         }).catch((err) => console.warn('Port geofence WhatsApp notification error:', err));
       }
 
+      // Dispatch automated port entry alert to client if trip is active
+      if (activeTrip?.id) {
+        dispatchTripLifecycleNotifications(activeTrip.id, 'port_geofence_entry', {
+          plateNumber: effectivePlate,
+          zoneId: matchedZone?.id,
+          zoneNameAr,
+          zoneNameFr,
+          zoneNameEs: matchedZone?.name_fr,
+          zoneType: matchedZone?.zoneType,
+        }).catch((err) => console.warn('Client port geofence notification error:', err));
+      }
+
       // Record Audit Log
       await recordAuditLog({
         entityType: 'port_geofence',
@@ -282,6 +295,18 @@ export async function evaluatePortGeofences(params: {
           to: adminPhone,
           message: msgLines,
         }).catch((err) => console.warn('Port geofence exit WhatsApp notification error:', err));
+      }
+
+      // Dispatch automated port exit alert to client if trip is active
+      if (activeTrip?.id) {
+        dispatchTripLifecycleNotifications(activeTrip.id, 'port_geofence_exit', {
+          plateNumber: effectivePlate,
+          zoneId: exitedZone?.id,
+          zoneNameAr,
+          zoneNameFr: exitedZone?.name_fr,
+          zoneNameEs: exitedZone?.name_fr,
+          zoneType: exitedZone?.zoneType,
+        }).catch((err) => console.warn('Client port exit notification error:', err));
       }
 
       await recordAuditLog({

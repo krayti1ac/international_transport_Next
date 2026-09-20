@@ -11,7 +11,8 @@ export type AuditAction =
   | 'role_change' 
   | 'security_alert' 
   | 'fifo_payment'
-  | 'customs_push';
+  | 'customs_push'
+  | 'whatsapp_notification';
 
 export interface LogActionParams {
   entityType: string;
@@ -30,11 +31,18 @@ export interface LogActionParams {
  */
 export async function recordAuditLog(params: LogActionParams): Promise<void> {
   try {
-    const supabase = await createClient();
-    
-    // محاولة جلب هوية المستخدم (ستكون system إذا تم الاستدعاء من Cron)
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id || 'system';
+    let supabase;
+    let userId = 'system';
+    try {
+      supabase = await createClient();
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user?.id) {
+        userId = data.session.user.id;
+      }
+    } catch {
+      // In non-request contexts (unit tests, CLI tools, offline sync), cookies() is not available
+      return;
+    }
 
     let ipAddress = params.ipAddress || 'Unknown IP';
     let userAgent = params.userAgent || 'Unknown Agent';

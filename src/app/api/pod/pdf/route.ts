@@ -5,13 +5,11 @@ import { generateDeliverySignatureHash } from '@/lib/signature-crypto';
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
-    const tripOrderId = req.nextUrl.searchParams.get('tripOrderId');
     const tripOrderId =
       req.nextUrl.searchParams.get('tripId') ||
       req.nextUrl.searchParams.get('tripOrderId');
 
     if (!tripOrderId) {
-      return NextResponse.json({ error: 'tripOrderId مطلوب' }, { status: 400 });
       return NextResponse.json(
         { error: 'tripId أو tripOrderId مطلوب' },
         { status: 400 }
@@ -38,10 +36,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: deliveryError.message }, { status: 500 });
     }
 
-    const signedAt = delivery?.signed_at ? new Date(delivery.signed_at).toLocaleString('ar-MA') : '—';
-    const mapsUrl = delivery?.latitude && delivery?.longitude
-      ? `https://www.google.com/maps/search/?api=1&query=${delivery.latitude},${delivery.longitude}`
-      : null;
     const signedAt = delivery?.signed_at
       ? new Date(delivery.signed_at).toLocaleString('ar-MA', {
           year: 'numeric',
@@ -296,8 +290,7 @@ export async function GET(req: NextRequest) {
         'Content-Type': 'text/html; charset=utf-8',
       },
     });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'حدث خطأ غير متوقع' }, { status: 500 });
+  } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'حدث خطأ غير متوقع' },
       { status: 500 }

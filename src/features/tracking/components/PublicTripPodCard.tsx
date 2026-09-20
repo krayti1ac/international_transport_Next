@@ -1,6 +1,5 @@
 'use client';
 
-import React, { useState } from 'react';
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/language-provider';
 import type { TripOrder, DeliverySignature } from '@/types/database';
@@ -71,7 +70,6 @@ export function PublicTripPodCard({ trip, deliverySignature, loading }: PublicTr
 
   const handleDownloadPdf = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const pdfUrl = `${origin}/api/pod/pdf?tripOrderId=${trip.id}`;
     // Direct endpoint supporting both tripId & tripOrderId
     const pdfUrl = `${origin}/api/pod?tripId=${trip.id}`;
     window.open(pdfUrl, '_blank', 'noopener,noreferrer');

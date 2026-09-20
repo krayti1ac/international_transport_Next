@@ -40,7 +40,8 @@ export async function updateTripStatus(tripId: number, status: string) {
 
     if (error) throw error;
 
-    dispatchTripLifecycleNotifications(tripId, 'status_update').catch((err) =>
+    const eventType = status === 'in_transit' ? 'trip_dispatched' : 'status_update';
+    dispatchTripLifecycleNotifications(tripId, eventType).catch((err) =>
       console.warn('Status notification trigger error:', err)
     );
 
