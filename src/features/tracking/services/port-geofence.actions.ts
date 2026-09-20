@@ -16,10 +16,14 @@ export interface StrategicPortZone {
   latitude: number;
   longitude: number;
   radiusKm: number;
-  zoneType: 'seaport' | 'border_crossing';
+  zoneType: 'seaport' | 'border_crossing' | 'customs_hub' | 'logistics_platform';
 }
 
-const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
+/**
+ * مصفوفة الموانئ البحرية والمعابر الحدودية الاستراتيجية (الممر الأوروبي والإفريقي)
+ */
+export const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
+  // 1. الموانئ البحرية الأوروبية (European Maritime Corridor)
   {
     id: 'port_tanger_med',
     name: 'Tanger Med Port',
@@ -39,6 +43,28 @@ const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
     name_es: 'Puerto de Algeciras',
     latitude: 36.132,
     longitude: -5.438,
+    radiusKm: 3.0,
+    zoneType: 'seaport',
+  },
+  {
+    id: 'port_almeria',
+    name: 'Almería Port',
+    name_ar: 'ميناء ألميريا',
+    name_fr: 'Port d’Almería',
+    name_es: 'Puerto de Almería',
+    latitude: 36.8340,
+    longitude: -2.4637,
+    radiusKm: 3.0,
+    zoneType: 'seaport',
+  },
+  {
+    id: 'port_motril',
+    name: 'Motril Port',
+    name_ar: 'ميناء موتريل',
+    name_fr: 'Port de Motril',
+    name_es: 'Puerto de Motril',
+    latitude: 36.7214,
+    longitude: -3.5222,
     radiusKm: 3.0,
     zoneType: 'seaport',
   },
@@ -64,6 +90,8 @@ const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
     radiusKm: 2.5,
     zoneType: 'border_crossing',
   },
+
+  // 2. معابر ومحطات الممر الإفريقي البري (African Overland Trade Corridor)
   {
     id: 'border_guerguerat',
     name: 'El Guerguerat Border Crossing',
@@ -75,12 +103,88 @@ const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
     radiusKm: 5.0,
     zoneType: 'border_crossing',
   },
+  {
+    id: 'hub_nouadhibou',
+    name: 'Nouadhibou Free Zone',
+    name_ar: 'منطقة نواديبو الحرة (موريتانيا)',
+    name_fr: 'Zone Franche de Nouadhibou (Mauritanie)',
+    name_es: 'Zona Franca de Nouadhibou (Mauritania)',
+    latitude: 20.9412,
+    longitude: -17.0347,
+    radiusKm: 4.0,
+    zoneType: 'customs_hub',
+  },
+  {
+    id: 'hub_nouakchott',
+    name: 'Nouakchott Logistics Platform',
+    name_ar: 'مركز نواكشوط اللوجستي وتفريغ الشاحنات (موريتانيا)',
+    name_fr: 'Plateforme Logistique de Nouakchott (Mauritanie)',
+    name_es: 'Centro Logístico de Nuakchot (Mauritania)',
+    latitude: 18.0735,
+    longitude: -15.9582,
+    radiusKm: 5.0,
+    zoneType: 'logistics_platform',
+  },
+  {
+    id: 'border_rosso',
+    name: 'Rosso River Border & Ferry Crossing',
+    name_ar: 'معبر روصو الحدودي والعبارة النهرية (موريتانيا / السنغال)',
+    name_fr: 'Poste Frontière et Bac de Rosso (Mauritanie / Sénégal)',
+    name_es: 'Paso Fronterizo y Ferry de Rosso (Mauritania / Senegal)',
+    latitude: 16.5133,
+    longitude: -15.8083,
+    radiusKm: 3.0,
+    zoneType: 'border_crossing',
+  },
+  {
+    id: 'port_dakar',
+    name: 'Dakar Port & Distribution Warehouses',
+    name_ar: 'ميناء ومستودعات توزيع دكار (السنغال)',
+    name_fr: 'Port et Entrepôts Logistiques de Dakar (Sénégal)',
+    name_es: 'Puerto y Almacenes de Dakar (Senegal)',
+    latitude: 14.7167,
+    longitude: -17.4677,
+    radiusKm: 6.0,
+    zoneType: 'seaport',
+  },
 ];
 
-// Memory cache to track last known port presence per truck to prevent spam notifications
+// Memory cache to track last known port presence per truck
 const portPresenceCache = new Map<string, string>(); // truckKey -> zoneId
 
-function calculateHaversineDistanceKm(
+// Deduplication guard: 30 minutes cooldown to avoid notification spam from boundary signal jitter
+export const ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+const portAlertCooldownCache = new Map<string, number>(); // truckId_zoneId_event -> timestampMs
+
+export function isAlertCooldownActive(
+  truckId: number,
+  zoneId: string,
+  event: 'enter' | 'exit',
+  nowMs: number = Date.now()
+): boolean {
+  const key = `${truckId}_${zoneId}_${event}`;
+  const lastAlertTime = portAlertCooldownCache.get(key);
+  if (lastAlertTime && nowMs - lastAlertTime < ALERT_COOLDOWN_MS) {
+    return true;
+  }
+  portAlertCooldownCache.set(key, nowMs);
+  return false;
+}
+
+export function resetAlertCooldown(truckId?: number) {
+  if (truckId) {
+    for (const key of portAlertCooldownCache.keys()) {
+      if (key.startsWith(`${truckId}_`)) {
+        portAlertCooldownCache.delete(key);
+      }
+    }
+  } else {
+    portAlertCooldownCache.clear();
+    portPresenceCache.clear();
+  }
+}
+
+export function calculateHaversineDistanceKm(
   lat1: number,
   lon1: number,
   lat2: number,
@@ -117,12 +221,13 @@ export async function evaluatePortGeofences(params: {
   try {
     const { truckId, truckPlate, latitude, longitude } = params;
     const nowIso = params.timestamp || new Date().toISOString();
+    const nowMs = new Date(nowIso).getTime();
     const truckKey = `truck-${truckId}`;
     const previousZoneId = portPresenceCache.get(truckKey);
 
     let matchedZone: StrategicPortZone | null = null;
 
-    // 1. Check proximity against all strategic port zones
+    // 1. Check proximity against all strategic port & border zones
     for (const zone of STRATEGIC_PORT_ZONES) {
       const distance = calculateHaversineDistanceKm(
         latitude,
@@ -138,7 +243,7 @@ export async function evaluatePortGeofences(params: {
 
     const currentZoneId = matchedZone ? matchedZone.id : null;
 
-    // If state did not transition, no alert needed
+    // If state did not transition, truck remains inside or outside
     if (previousZoneId === currentZoneId) {
       return {
         matchedZone,
@@ -174,47 +279,73 @@ export async function evaluatePortGeofences(params: {
       .maybeSingle();
 
     // 4. Handle State Transitions (ENTER vs EXIT)
-    let eventType: 'enter' | 'exit' = 'enter';
-
     if (currentZoneId && previousZoneId !== currentZoneId) {
       // ENTER EVENT
-      eventType = 'enter';
       portPresenceCache.set(truckKey, currentZoneId);
+
+      // Check deduplication guard
+      if (isAlertCooldownActive(truckId, currentZoneId, 'enter', nowMs)) {
+        return { matchedZone, event: 'enter', alertDispatched: false };
+      }
 
       const zoneNameAr = matchedZone?.name_ar || 'الميناء / المعبر الدولي';
       const zoneNameFr = matchedZone?.name_fr || 'Port / Frontière';
 
-      // Update trip status if entering a seaport or Guerguerat border
-      if (activeTrip && matchedZone?.zoneType === 'seaport') {
-        await supabase
-          .from('trip_orders')
-          .update({
-            status: 'at_ferry_port',
-            notes: `وصلت الشاحنة إلى ${zoneNameAr} في ${new Date(nowIso).toLocaleTimeString('ar-MA')}`,
-          })
-          .eq('id', activeTrip.id);
-      } else if (activeTrip && matchedZone?.id === 'border_guerguerat') {
-        await supabase
-          .from('trip_orders')
-          .update({
-            notes: `وصلت الشاحنة إلى معبر الكركارات الحدودي في ${new Date(nowIso).toLocaleTimeString('ar-MA')} استعداداً للعبور إلى موريتانيا`,
-          })
-          .eq('id', activeTrip.id);
+      // Update trip status: automate transition to 'customs_export' when entering Tanger Med or Guerguerat
+      if (activeTrip) {
+        if (matchedZone?.id === 'port_tanger_med' || matchedZone?.id === 'border_guerguerat') {
+          await supabase
+            .from('trip_orders')
+            .update({
+              status: 'customs_export',
+              notes: `وصلت الشاحنة إلى ${zoneNameAr} في ${new Date(nowIso).toLocaleTimeString('ar-MA')} (إجراءات التخليص الجمركي)`,
+            })
+            .eq('id', activeTrip.id);
+        } else if (matchedZone?.id === 'border_rosso') {
+          await supabase
+            .from('trip_orders')
+            .update({
+              notes: `وصلت الشاحنة إلى معبر روصو النهري في ${new Date(nowIso).toLocaleTimeString('ar-MA')} استعداداً للعبور نحو السنغال`,
+            })
+            .eq('id', activeTrip.id);
+        } else if (matchedZone?.id === 'port_dakar') {
+          await supabase
+            .from('trip_orders')
+            .update({
+              notes: `وصلت الشاحنة إلى محطة دكار النهائية في ${new Date(nowIso).toLocaleTimeString('ar-MA')}`,
+            })
+            .eq('id', activeTrip.id);
+        } else if (matchedZone?.zoneType === 'seaport') {
+          await supabase
+            .from('trip_orders')
+            .update({
+              status: 'at_ferry_port',
+              notes: `وصلت الشاحنة إلى ${zoneNameAr} في ${new Date(nowIso).toLocaleTimeString('ar-MA')}`,
+            })
+            .eq('id', activeTrip.id);
+        }
       }
 
       // Dispatch WhatsApp Alert to Operations & Admin
       if (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY) {
         const isGuerguerat = matchedZone?.id === 'border_guerguerat';
-        let actionProcedure = `🛂 الإجراء: عبور المعبر الحدودي الأوروبي بنجاح.`;
+        const isRosso = matchedZone?.id === 'border_rosso';
+        const isDakar = matchedZone?.id === 'port_dakar';
+
+        let actionProcedure = `🛂 الإجراء: عبور الميناء / المعبر بنجاح.`;
         if (isGuerguerat) {
-          actionProcedure = `🌍 الإجراء: إنهاء إجراءات التفتيش الجمركي بمعبر الكركارات والتراخيص للعبور نحو موريتانيا وغرب إفريقيا.`;
+          actionProcedure = `🌍 الإجراء: إنهاء إجراءات التفتيش الجمركي بالكركارات والترخيص للعبور نحو موريتانيا وغرب إفريقيا.`;
+        } else if (isRosso) {
+          actionProcedure = `🚢 الإجراء: ركوب العبارة النهرية بروصو ودخول الأراضي السنغالية.`;
+        } else if (isDakar) {
+          actionProcedure = `🏁 الإجراء: تفريغ الحمولة في مستودعات التوزيع بميناء دكار.`;
         } else if (matchedZone?.zoneType === 'seaport') {
           actionProcedure = `🚢 الإجراء: الاستعداد لركوب العبّارة البحرية وإنهاء المعاملات الجمركية.`;
         }
 
         const msgLines = [
-          isGuerguerat
-            ? `🌍 *تنبيه الممر الإفريقي البري - معبر الكركارات - Trans Bodanon*`
+          isGuerguerat || isRosso || isDakar
+            ? `🌍 *تنبيه الممر الإفريقي البري - Trans Bodanon*`
             : `⚓ *تنبيه عبور الموانئ والمعابر الدولية - Trans Bodanon*`,
           `---------------------------`,
           `🚛 الشاحنة: *${effectivePlate || `#${truckId}`}*`,
@@ -222,6 +353,7 @@ export async function evaluatePortGeofences(params: {
           `⏰ التوقيت: ${new Date(nowIso).toLocaleString('ar-MA')}`,
           activeTrip ? `📦 الرحلة: #${activeTrip.id} (${activeTrip.route || 'شحنة دولية'})` : null,
           actionProcedure,
+          activeTrip ? `🌐 رابط التتبع: ${process.env.NEXT_PUBLIC_APP_URL || ''}/track/${activeTrip.id}` : null,
         ]
           .filter(Boolean)
           .join('\n');
@@ -252,8 +384,12 @@ export async function evaluatePortGeofences(params: {
       return { matchedZone, event: 'enter', alertDispatched: true };
     } else if (!currentZoneId && previousZoneId) {
       // EXIT EVENT
-      eventType = 'exit';
       portPresenceCache.delete(truckKey);
+
+      // Check deduplication guard
+      if (isAlertCooldownActive(truckId, previousZoneId, 'exit', nowMs)) {
+        return { matchedZone: null, event: 'exit', alertDispatched: false };
+      }
 
       const exitedZone = STRATEGIC_PORT_ZONES.find((z) => z.id === previousZoneId);
       const zoneNameAr = exitedZone?.name_ar || 'الميناء الدولي';
@@ -308,4 +444,3 @@ export async function evaluatePortGeofences(params: {
     return { matchedZone: null, event: 'outside', alertDispatched: false };
   }
 }
-

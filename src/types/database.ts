@@ -689,6 +689,9 @@ export interface TruckLocation {
   heading?: number;
   accuracy?: number;
   trip_id?: number;
+  ignition?: boolean;
+  frigo_temperature?: number | null;
+  device_id?: number;
 }
 
 export interface DeliverySignature {
