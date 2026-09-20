@@ -6,6 +6,11 @@ import {
   validatePhoneField,
   type ValidationResult,
 } from '@/lib/validators/morocco-business';
+import {
+  sanitizeICE,
+  sanitizeMoroccanPlate,
+  sanitizePhoneNumber,
+} from '@/lib/data-sanitizer';
 
 export type ImportRow = Record<string, unknown>;
 
@@ -39,10 +44,13 @@ const normalizeCellValue = (value: unknown): string => {
 };
 
 const resolveFieldName = (rawHeader: string, aliases?: Record<string, string[]>): string | null => {
-  const normalized = rawHeader.toLowerCase();
+  const normalized = rawHeader.toLowerCase().trim().replace(/[\s_-]+/g, '_');
   if (aliases) {
     for (const [canonical, variants] of Object.entries(aliases)) {
-      const all = [canonical.toLowerCase(), ...variants.map((v) => v.toLowerCase())];
+      const all = [
+        canonical.toLowerCase().replace(/[\s_-]+/g, '_'),
+        ...variants.map((v) => v.toLowerCase().trim().replace(/[\s_-]+/g, '_')),
+      ];
       if (all.includes(normalized)) return canonical;
     }
   }
@@ -54,7 +62,7 @@ export const parseExcelFile = (file: File): Promise<BulkImportResult> => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const workbook = XLSX.read(reader.result as string, { type: 'binary' });
+        const workbook = XLSX.read(reader.result, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         if (!worksheet) {
@@ -110,6 +118,25 @@ export const validateRows = (
       if (!canonical || seenCanonical.has(canonical)) continue;
       seenCanonical.add(canonical);
       normalizedRow[canonical] = normalizeCellValue(value);
+    }
+
+    // تخطي صفوف الأمثلة التوضيحية التي تم تنزيلها مع النموذج
+    const isSampleRow = Object.values(normalizedRow).some(
+      (val) => typeof val === 'string' && (val.includes('(مثال)') || val.includes('(Exemple)') || val.includes('(Ejemplo)'))
+    );
+    if (isSampleRow) {
+      return;
+    }
+
+    // تطهير المدخلات تلقائياً (Auto-Sanitization) قبل التحقق
+    if (normalizedRow.ice) {
+      normalizedRow.ice = sanitizeICE(normalizedRow.ice);
+    }
+    if (normalizedRow.plate_number) {
+      normalizedRow.plate_number = sanitizeMoroccanPlate(normalizedRow.plate_number);
+    }
+    if (normalizedRow.phone) {
+      normalizedRow.phone = sanitizePhoneNumber(normalizedRow.phone);
     }
 
     for (const field of requiredFields) {
