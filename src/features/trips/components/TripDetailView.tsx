@@ -33,6 +33,7 @@ import { TripProfitabilityTab } from './tabs/TripProfitabilityTab';
 import { TripInvoicesTab } from './tabs/TripInvoicesTab';
 import { TripFormModal } from '@/components/trip-form-modal';
 import { CMRPrintModal } from '@/components/cmr-print-modal';
+import { updateTripStatus } from '../services/trips.actions';
 
 interface TripDetailViewProps {
   tripId: number;
@@ -245,6 +246,31 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
     }
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const res = await updateTripStatus(tripId, newStatus);
+      if (!res.success) {
+        toast({
+          title: t('تعذر تغيير حالة الرحلة', 'Transition impossible', 'Transición no permitida'),
+          description: res.error || t('فشل التحقق من محرك الحالات الجبرية', 'Échec du contrôle de transition'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: t('تم تغيير حالة الرحلة بنجاح', 'Statut mis à jour avec succès', 'Estado actualizado con éxito'),
+      });
+      fetchData(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error';
+      toast({
+        title: t('خطأ غير متوقع', 'Erreur inattendue', 'Error inesperado'),
+        description: msg,
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3.5" dir={dir}>
@@ -272,6 +298,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
         clientExport={clientExport}
         onEditTrip={() => setIsEditModalOpen(true)}
         onPrintCmr={() => handleOpenCmrModal('export')}
+        onStatusChange={handleStatusChange}
       />
 
       {/* 2. Point-to-Point Flow (Export Aller vs Import Retour) */}

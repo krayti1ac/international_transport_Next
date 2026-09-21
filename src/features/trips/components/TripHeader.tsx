@@ -1,11 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/components/language-provider';
 import type { TripOrder, Client } from '@/types/database';
+import {
+  ALLOWED_STAGE_TRANSITIONS,
+  normalizeTripStage,
+  type TripStage,
+} from '@/features/trips/services/trip-state-machine';
 import {
   ArrowRight,
   Printer,
@@ -13,6 +18,9 @@ import {
   Edit3,
   MapPin,
   MessageSquare,
+  Loader2,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 
 interface TripHeaderProps {
@@ -20,11 +28,13 @@ interface TripHeaderProps {
   clientExport: Client | null;
   onEditTrip?: () => void;
   onPrintCmr?: () => void;
+  onStatusChange?: (newStatus: string) => Promise<void>;
 }
 
-export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripHeaderProps) {
+export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr, onStatusChange }: TripHeaderProps) {
   const router = useRouter();
   const { t, dir, locale } = useLanguage();
+  const [transitioningTo, setTransitioningTo] = useState<string | null>(null);
 
   const handleDownloadDossier = () => {
     const dossierUrl = `/api/trips/${trip.id}/dossier-pdf?lang=${locale}`;
@@ -56,11 +66,24 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'draft':
       case 'pending':
         return {
-          label: t('قيد الانتظار', 'En attente', 'Pendiente'),
+          label: t('مسودة / قيد الانتظار', 'Brouillon / En attente', 'Borrador / Pendiente'),
           className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
           dot: 'bg-amber-500',
+        };
+      case 'assigned':
+        return {
+          label: t('تم تعيين الطاقم', 'Équipage assigné', 'Tripulación asignada'),
+          className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30',
+          dot: 'bg-sky-500',
+        };
+      case 'loading':
+        return {
+          label: t('جاري التحميل', 'En cours de chargement', 'En carga'),
+          className: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30',
+          dot: 'bg-indigo-500 animate-pulse',
         };
       case 'in_transit':
         return {
@@ -86,6 +109,7 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
           className: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30',
           dot: 'bg-teal-500 animate-pulse',
         };
+      case 'delivered':
       case 'completed':
         return {
           label: t('تم التسليم بنجاح', 'Livraison effectuée', 'Entregado con éxito'),
@@ -98,6 +122,18 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
           className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30',
           dot: 'bg-slate-400',
         };
+      case 'closed':
+        return {
+          label: t('ملف مغلق ومؤرشف', 'Dossier clôturé', 'Expediente cerrado'),
+          className: 'bg-gray-500/15 text-gray-700 dark:text-gray-300 border-gray-500/30',
+          dot: 'bg-gray-500',
+        };
+      case 'cancelled':
+        return {
+          label: t('ملغاة', 'Annulée', 'Cancelada'),
+          className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30',
+          dot: 'bg-rose-500',
+        };
       default:
         return {
           label: status,
@@ -107,6 +143,41 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
     }
   };
 
+  const getStageActionLabel = (stage: TripStage) => {
+    switch (stage) {
+      case 'assigned':
+        return t('تعيين الطاقم', 'Assigner équipage', 'Asignar tripulación');
+      case 'loading':
+        return t('بدء التحميل', 'Commencer chargement', 'Iniciar carga');
+      case 'in_transit':
+        return t('انطلاق الشاحنة', 'Départ en transit', 'Salida en tránsito');
+      case 'customs_export':
+        return t('دخول الجمارك', 'Entrée en douane', 'Entrada en aduana');
+      case 'delivered':
+        return t('تأكيد التسليم (e-POD)', 'Confirmer livraison (e-POD)', 'Confirmar entrega (e-POD)');
+      case 'settled':
+        return t('اعتماد التسوية', 'Valider règlement', 'Liquidar');
+      case 'closed':
+        return t('إغلاق وأرشفة الرحلة', 'Clôturer le dossier', 'Cerrar expediente');
+      default:
+        return stage;
+    }
+  };
+
+  const handleStageTransition = async (targetStage: string) => {
+    if (!onStatusChange) return;
+    setTransitioningTo(targetStage);
+    try {
+      await onStatusChange(targetStage);
+    } finally {
+      setTransitioningTo(null);
+    }
+  };
+
+  const currentStage = normalizeTripStage(trip.status);
+  const nextAllowedStages = (ALLOWED_STAGE_TRANSITIONS[currentStage] || []).filter(
+    (s) => s !== 'cancelled'
+  );
   const statusBadge = getStatusBadge(trip.status);
 
   return (
@@ -157,6 +228,27 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
+          {/* State Machine Transition Buttons */}
+          {onStatusChange && nextAllowedStages.map((targetStage) => (
+            <Button
+              key={targetStage}
+              variant="secondary"
+              size="sm"
+              disabled={transitioningTo !== null}
+              onClick={() => handleStageTransition(targetStage)}
+              className="rounded-xl text-xs gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 font-bold"
+            >
+              {transitioningTo === targetStage ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : dir === 'rtl' ? (
+                <ChevronLeft className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+              <span>{getStageActionLabel(targetStage)}</span>
+            </Button>
+          ))}
+
           {/* WhatsApp Tracking Share */}
           <Button
             variant="outline"
@@ -196,7 +288,7 @@ export function TripHeader({ trip, clientExport, onEditTrip, onPrintCmr }: TripH
           </Button>
 
           {/* Edit Trip Details */}
-          {onEditTrip && (
+          {onEditTrip && currentStage !== 'closed' && (
             <Button
               variant="default"
               size="sm"
