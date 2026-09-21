@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { recordAuditLog } from '@/lib/audit.server';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import { dispatchTripLifecycleNotifications } from '@/features/trips/services/notification-dispatcher';
+import { updateTripStatus } from '@/features/trips/services/trips.actions';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -173,6 +174,14 @@ export async function evaluatePortGeofences(params: {
               status: 'at_ferry_port',
             })
             .eq('id', activeTrip.id);
+      // Update trip status via Trip State Machine: automate transition to 'customs_export' when entering strategic port/border zones
+      if (activeTrip && activeTrip.status === 'in_transit') {
+        const transitionRes = await updateTripStatus(activeTrip.id, 'customs_export');
+        if (!transitionRes.success) {
+          console.warn(
+            `[PortGeofence] Could not transition trip #${activeTrip.id} to customs_export:`,
+            transitionRes.error
+          );
         }
       }
 
@@ -256,6 +265,17 @@ export async function evaluatePortGeofences(params: {
       const exitedZone = STRATEGIC_PORT_ZONES.find((z) => z.id === previousZoneId);
       const zoneNameAr = exitedZone?.name_ar || 'الميناء الدولي';
       const isGuergueratExit = previousZoneId === 'border_guerguerat';
+
+      // Transition trip status back to in_transit when exiting customs/port zone via State Machine
+      if (activeTrip && activeTrip.status === 'customs_export') {
+        const transitionRes = await updateTripStatus(activeTrip.id, 'in_transit');
+        if (!transitionRes.success) {
+          console.warn(
+            `[PortGeofence] Could not transition trip #${activeTrip.id} back to in_transit:`,
+            transitionRes.error
+          );
+        }
+      }
 
       if (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY) {
         const exitAction = isGuergueratExit

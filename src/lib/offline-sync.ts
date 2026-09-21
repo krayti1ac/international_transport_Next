@@ -10,6 +10,8 @@ export interface QueuedReceipt {
   imageDataBase64?: string;
   fileName?: string;
   timestamp: string;
+  idempotency_key?: string;
+  receipt_number?: string;
 }
 
 export interface QueuedPodSignature {
@@ -81,6 +83,7 @@ export function openDB(): Promise<IDBDatabase> {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         store.createIndex('timestamp', 'timestamp', { unique: false });
         store.createIndex('truck_id', 'truck_id', { unique: false });
+        store.createIndex('idempotency_key', 'idempotency_key', { unique: false });
       }
 
       // 2. Proof of Delivery (POD) Signatures queue
@@ -219,16 +222,38 @@ export async function getOfflineQueueCount(): Promise<number> {
 
 /**
  * Persists a new receipt into IndexedDB with payload size validation.
+ * Persists a new receipt into IndexedDB with payload size validation and idempotency verification.
+ * If an item with the same idempotency_key or receipt_number already exists, returns the existing record without duplicate insertion.
  */
 export async function saveToOfflineQueue(
   item: Omit<QueuedReceipt, 'id' | 'timestamp'>
+  item: Omit<QueuedReceipt, 'id' | 'timestamp'> & { id?: string; timestamp?: string }
 ): Promise<QueuedReceipt> {
   await ensureMigrated();
+
+  // Generate deterministic/unique idempotency key if not provided
+  const idempotencyKey =
+    item.idempotency_key ||
+    `fuel_${item.truck_id ?? 'no_truck'}_${item.amount}_${item.date}_${Math.random().toString(36).substring(2, 8)}`;
+
+  // Deduplication check: check if same receipt or idempotency key is already queued
+  const existingQueue = await getOfflineQueue();
+  const existing = existingQueue.find(
+    (q) =>
+      (q.idempotency_key && q.idempotency_key === idempotencyKey) ||
+      (item.receipt_number && q.receipt_number && q.receipt_number === item.receipt_number)
+  );
+  if (existing) {
+    return existing;
+  }
 
   const newItem: QueuedReceipt = {
     ...item,
     id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     timestamp: new Date().toISOString(),
+    id: item.id || `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: item.timestamp || new Date().toISOString(),
+    idempotency_key: idempotencyKey,
   };
 
   // Pre-storage payload sanity check (warn if uncompressed image exceeds 10MB)
@@ -324,6 +349,34 @@ export async function processOfflineQueue(
   for (let i = 0; i < queue.length; i++) {
     const item = queue[i];
     try {
+      // 1. Append-Only Idempotency Guard:
+      // Verify if a record with the same truck, amount, and date already exists in truck_maintenance
+      if (item.truck_id) {
+        try {
+          const maintenanceTable = supabase.from('truck_maintenance') as any;
+          if (typeof maintenanceTable.select === 'function') {
+            const { data: existingRecords } = await maintenanceTable
+              .select('id')
+              .eq('truck_id', item.truck_id)
+              .eq('amount', item.amount)
+              .eq('date', item.date)
+              .limit(1);
+
+            if (existingRecords && existingRecords.length > 0) {
+              // Record already exists on server: safely remove from offline queue without duplicate insertion
+              await removeOfflineReceipt(item.id);
+              successCount++;
+              if (onProgress) {
+                onProgress(queue.length - (i + 1), queue.length);
+              }
+              continue;
+            }
+          }
+        } catch {
+          // If query fails, proceed to regular insert
+        }
+      }
+
       let publicImageUrl = '';
 
       if (item.imageDataBase64 && item.fileName) {
@@ -336,6 +389,13 @@ export async function processOfflineQueue(
       }
 
       const finalNotes = publicImageUrl ? `${item.notes}\n\nرابط الإيصال: ${publicImageUrl}` : item.notes;
+      const noteParts = [
+        item.notes,
+        item.receipt_number ? `رقم الإيصال: ${item.receipt_number}` : null,
+        item.idempotency_key ? `مفتاح المطابقة: ${item.idempotency_key}` : null,
+        publicImageUrl ? `رابط الإيصال: ${publicImageUrl}` : null,
+      ].filter(Boolean);
+      const finalNotes = noteParts.join('\n\n');
 
       const { error } = await supabase.from('truck_maintenance').insert({
         truck_id: item.truck_id,
@@ -572,12 +632,46 @@ export async function processPodSignaturesOfflineQueue(
           latitude: item.latitude,
           longitude: item.longitude,
         });
+      // 3. Insert into delivery_signatures table if not already existing
+      let shouldInsertSignature = true;
+      const sigTable = supabase.from('delivery_signatures') as any;
+      if (typeof sigTable.select === 'function') {
+        try {
+          const { data: existingSig } = await sigTable
+            .select('id')
+            .eq('trip_order_id', item.trip_id)
+            .maybeSingle();
+          if (existingSig) {
+            shouldInsertSignature = false;
+          }
+        } catch {
+          // If query fails, continue to insert
+        }
+      }
 
       if (insertError) throw insertError;
+      if (shouldInsertSignature) {
+        const { error: insertError } = await supabase
+          .from('delivery_signatures')
+          .insert({
+            trip_order_id: item.trip_id,
+            signature_url: signatureUrl,
+            cmr_image_url: cmrUrl,
+            signed_by: item.signed_by,
+            signed_at: item.signed_at || new Date().toISOString(),
+            latitude: item.latitude,
+            longitude: item.longitude,
+          });
 
       // 4. Update trip order status to 'completed' and attach CMR URLs
+        if (insertError) throw insertError;
+      }
+
+      // 4. Update trip order status to 'delivered' and attach CMR URLs
       const updateData: Record<string, unknown> = {
         status: 'completed',
+        status: 'delivered',
+        updated_at: new Date().toISOString(),
       };
       if (cmrUrl) {
         if (item.leg === 'export') {
@@ -753,6 +847,9 @@ export async function clearDriverTasksQueue(): Promise<void> {
 
 /**
  * Synchronizes offline driver tasks with `trip_orders`.
+ * Synchronizes offline driver tasks with `trip_orders` using Last-Write-Wins (LWW) conflict resolution.
+ * If server `updated_at` is newer than the client `timestamp`, the stale offline task is discarded
+ * and the authoritative server state is retained.
  */
 export async function processDriverTasksOfflineQueue(): Promise<{ successCount: number; failCount: number }> {
   const queue = await getDriverTasksOfflineQueue();
@@ -764,6 +861,40 @@ export async function processDriverTasksOfflineQueue(): Promise<{ successCount: 
 
   for (const item of queue) {
     try {
+      // 1. Last-Write-Wins (LWW) Conflict Resolution:
+      // Verify if server state was updated after the driver's queued offline action
+      let shouldDiscardStale = false;
+      const tripOrdersTable = supabase.from('trip_orders') as any;
+      if (typeof tripOrdersTable.select === 'function') {
+        try {
+          const { data: serverTrip } = await tripOrdersTable
+            .select('id, status, updated_at')
+            .eq('id', item.trip_id)
+            .maybeSingle();
+
+          if (serverTrip && serverTrip.updated_at) {
+            const serverTime = new Date(serverTrip.updated_at).getTime();
+            const clientTime = new Date(item.timestamp).getTime();
+            if (serverTime > clientTime) {
+              // Server has a more recent update than this offline action: discard stale item
+              shouldDiscardStale = true;
+              console.warn(
+                `[LWW Conflict] Discarding stale driver task for trip #${item.trip_id}. Server updated_at (${serverTrip.updated_at}) > Client timestamp (${item.timestamp})`
+              );
+            }
+          }
+        } catch {
+          // If query fails, fall back to applying update
+        }
+      }
+
+      if (shouldDiscardStale) {
+        await removeDriverTaskOffline(item.id);
+        successCount++;
+        continue;
+      }
+
+      // 2. Client update is current or newer: apply to trip_orders
       const { error } = await supabase
         .from('trip_orders')
         .update({

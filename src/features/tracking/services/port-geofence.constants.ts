@@ -24,6 +24,7 @@ export const STRATEGIC_PORT_ZONES: StrategicPortZone[] = [
     latitude: 35.885,
     longitude: -5.505,
     radiusKm: 3.5,
+    radiusKm: 5.0,
     zoneType: 'seaport',
   },
   {
