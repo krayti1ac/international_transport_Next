@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { findMatchingZone, calculateDistance } from '@/lib/geofence';
 import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
+import { evaluateColdChainTemperatureDrift } from '@/features/predictive/services/cold-chain-monitor.service';
 
 interface RawGPSPayload {
   plate_number?: string;
@@ -235,6 +236,27 @@ export async function POST(req: NextRequest) {
         longitude: norm.longitude,
         timestamp: recordTime,
       });
+
+      // 6. رصد انحراف درجات حرارة مقطورات التبريد Frigo في الوقت الفعلي
+      if (norm.frigoTemperature !== null && norm.frigoTemperature !== undefined) {
+        const { data: activeTrip } = await supabase
+          .from('trip_orders')
+          .select('id, driver_id, status')
+          .eq('truck_id', truckId)
+          .in('status', ['in_transit', 'loading', 'customs_export'])
+          .order('departure_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        await evaluateColdChainTemperatureDrift({
+          truckId,
+          currentTemp: norm.frigoTemperature,
+          timestampMs: norm.timestampMs,
+          driverId: activeTrip?.driver_id,
+          tripId: activeTrip?.id,
+          truckPlate: norm.plateNumber,
+        }).catch((driftErr) => console.warn('Cold chain drift evaluation error:', driftErr));
+      }
 
       results.push({ success: true, truckId });
     }

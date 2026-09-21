@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getAuthenticatedCompanyId } from '@/lib/rbac.server';
 import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
 import { validateTripTransition } from './trip-state-machine';
+import { computeTruckTireWear } from '@/features/predictive/services/fleet-predictive.service';
 import { recordAuditLog } from '@/lib/audit.server';
 import { revalidatePath } from 'next/cache';
 import type { TripOrder, Driver, Truck, Trailer, DeliverySignature } from '@/types/database';
@@ -46,8 +47,8 @@ export async function updateTripStatus(tripId: number, newStatus: string) {
       return { success: false, error: 'الرحلة غير موجودة في النظام.' };
     }
 
-    // 2. جلب بيانات السائق، الشاحنة، المقطورة، التوقيع الرقمي، والسلف المرتبطة
-    const [driverRes, truckRes, trailerRes, podRes, advanceRes] = await Promise.all([
+    // 2. جلب بيانات السائق، الشاحنة، المقطورة، التوقيع الرقمي، السلف، وسجل الرحلات لحساب TWI
+    const [driverRes, truckRes, trailerRes, podRes, advanceRes, pastTripsRes] = await Promise.all([
       trip.driver_id
         ? supabase.from('drivers').select('*').eq('id', trip.driver_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -65,7 +66,24 @@ export async function updateTripStatus(tripId: number, newStatus: string) {
       trip.driver_id
         ? supabase.from('advances').select('status').eq('driver_id', trip.driver_id)
         : Promise.resolve({ data: [] }),
+      trip.truck_id
+        ? supabase
+            .from('trip_orders')
+            .select('*')
+            .eq('truck_id', trip.truck_id)
+            .in('status', ['in_transit', 'delivered', 'settled', 'closed'])
+        : Promise.resolve({ data: [] }),
     ]);
+
+    let truckTwi: number | undefined = undefined;
+    if (truckRes.data && pastTripsRes.data && pastTripsRes.data.length > 0) {
+      try {
+        const twiResult = computeTruckTireWear(truckRes.data as Truck, pastTripsRes.data as any);
+        truckTwi = twiResult.twiPercentage;
+      } catch {
+        // Fallback gracefully if calculation fails
+      }
+    }
 
     const allAdvancesSettled =
       !advanceRes.data || advanceRes.data.length === 0
@@ -73,6 +91,7 @@ export async function updateTripStatus(tripId: number, newStatus: string) {
         : (advanceRes.data as Array<{ status: string }>).every((a) => a.status === 'settled');
 
     // 3. تشغيل فحص محرك الحالة (State Machine Guard)
+    // 3. تشغيل فحص محرك الحالة (State Machine Guard) مع قفل TWI الإلزامي
     const validation = validateTripTransition(trip.status, newStatus, {
       trip: trip as TripOrder,
       driver: (driverRes.data as Driver) || null,
@@ -80,6 +99,7 @@ export async function updateTripStatus(tripId: number, newStatus: string) {
       trailer: (trailerRes.data as Trailer) || null,
       deliveryProof: (podRes.data as DeliverySignature) || null,
       hasSettlementClosed: allAdvancesSettled,
+      truckTwiPercentage: truckTwi,
     });
 
     if (!validation.valid) {

@@ -158,22 +158,6 @@ export async function evaluatePortGeofences(params: {
       const zoneNameAr = matchedZone?.name_ar || 'الميناء / المعبر الدولي';
       const zoneNameFr = matchedZone?.name_fr || 'Port / Frontière';
 
-      // Update trip status: automate transition to 'customs_export' when entering Tanger Med or Guerguerat
-      if (activeTrip) {
-        if (matchedZone?.id === 'port_tanger_med' || matchedZone?.id === 'border_guerguerat') {
-          await supabase
-            .from('trip_orders')
-            .update({
-              status: 'customs_export',
-            })
-            .eq('id', activeTrip.id);
-        } else if (matchedZone?.zoneType === 'seaport') {
-          await supabase
-            .from('trip_orders')
-            .update({
-              status: 'at_ferry_port',
-            })
-            .eq('id', activeTrip.id);
       // Update trip status via Trip State Machine: automate transition to 'customs_export' when entering strategic port/border zones
       if (activeTrip && activeTrip.status === 'in_transit') {
         const transitionRes = await updateTripStatus(activeTrip.id, 'customs_export');

@@ -56,6 +56,7 @@ export interface TransitionContext {
   deliveryProof?: DeliverySignature | null;
   hasSettlementClosed?: boolean;
   userRole?: string;
+  truckTwiPercentage?: number;
 }
 
 export interface TransitionValidationResult {
@@ -111,6 +112,15 @@ export function validateTripTransition(
     }
     if (!context.truck) {
       return { valid: false, code: 'MISSING_TRUCK', error: 'يلزم تعيين رأس الشاحنة للرحلة.' };
+    }
+
+    // فحص مؤشر تآكل الإطارات التنبؤي (TWI Engine)
+    if (context.truckTwiPercentage !== undefined && context.truckTwiPercentage >= 90) {
+      return {
+        valid: false,
+        code: 'TRUCK_TIRE_WEAR_CRITICAL',
+        error: `حظر فوري لإسناد الشاحنة [${context.truck.plate_number || 'المحددة'}]: تجاوز مؤشر تآكل الإطارات (TWI) العتبة الحرجة (${context.truckTwiPercentage}% ≥ 90%). يلزم استبدال الإطارات في الورشة قبل أي رحلة دولية.`,
+      };
     }
 
     // فحص تأشيرة السائق حسب الممر

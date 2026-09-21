@@ -377,7 +377,6 @@ describe('Driver Offline e-POD & Roaming Guard (IndexedDB & Image Compressor)', 
       // Trip orders table update
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'completed',
           status: 'delivered',
           cmr_export_url: 'https://test.storage/proof.png',
         })

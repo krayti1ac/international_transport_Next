@@ -221,12 +221,10 @@ export async function getOfflineQueueCount(): Promise<number> {
 }
 
 /**
- * Persists a new receipt into IndexedDB with payload size validation.
  * Persists a new receipt into IndexedDB with payload size validation and idempotency verification.
  * If an item with the same idempotency_key or receipt_number already exists, returns the existing record without duplicate insertion.
  */
 export async function saveToOfflineQueue(
-  item: Omit<QueuedReceipt, 'id' | 'timestamp'>
   item: Omit<QueuedReceipt, 'id' | 'timestamp'> & { id?: string; timestamp?: string }
 ): Promise<QueuedReceipt> {
   await ensureMigrated();
@@ -249,8 +247,6 @@ export async function saveToOfflineQueue(
 
   const newItem: QueuedReceipt = {
     ...item,
-    id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    timestamp: new Date().toISOString(),
     id: item.id || `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     timestamp: item.timestamp || new Date().toISOString(),
     idempotency_key: idempotencyKey,
@@ -388,7 +384,6 @@ export async function processOfflineQueue(
         }
       }
 
-      const finalNotes = publicImageUrl ? `${item.notes}\n\nرابط الإيصال: ${publicImageUrl}` : item.notes;
       const noteParts = [
         item.notes,
         item.receipt_number ? `رقم الإيصال: ${item.receipt_number}` : null,
@@ -620,18 +615,6 @@ export async function processPodSignaturesOfflineQueue(
         cmrUrl = publicUrl;
       }
 
-      // 3. Insert into delivery_signatures table
-      const { error: insertError } = await supabase
-        .from('delivery_signatures')
-        .insert({
-          trip_order_id: item.trip_id,
-          signature_url: signatureUrl,
-          cmr_image_url: cmrUrl,
-          signed_by: item.signed_by,
-          signed_at: item.signed_at || new Date().toISOString(),
-          latitude: item.latitude,
-          longitude: item.longitude,
-        });
       // 3. Insert into delivery_signatures table if not already existing
       let shouldInsertSignature = true;
       const sigTable = supabase.from('delivery_signatures') as any;
@@ -649,7 +632,6 @@ export async function processPodSignaturesOfflineQueue(
         }
       }
 
-      if (insertError) throw insertError;
       if (shouldInsertSignature) {
         const { error: insertError } = await supabase
           .from('delivery_signatures')
@@ -663,13 +645,11 @@ export async function processPodSignaturesOfflineQueue(
             longitude: item.longitude,
           });
 
-      // 4. Update trip order status to 'completed' and attach CMR URLs
         if (insertError) throw insertError;
       }
 
       // 4. Update trip order status to 'delivered' and attach CMR URLs
       const updateData: Record<string, unknown> = {
-        status: 'completed',
         status: 'delivered',
         updated_at: new Date().toISOString(),
       };
@@ -846,7 +826,6 @@ export async function clearDriverTasksQueue(): Promise<void> {
 }
 
 /**
- * Synchronizes offline driver tasks with `trip_orders`.
  * Synchronizes offline driver tasks with `trip_orders` using Last-Write-Wins (LWW) conflict resolution.
  * If server `updated_at` is newer than the client `timestamp`, the stale offline task is discarded
  * and the authoritative server state is retained.
