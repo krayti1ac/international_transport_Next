@@ -170,6 +170,11 @@ const OPTIONAL_VARS = [
     label: 'PDF Signing Key',
     example: 'your-pdf-signing-key',
   },
+  {
+    key: 'WHATSAPP_LIVE_DISPATCH',
+    label: 'WhatsApp Live Dispatch Mode (set "true" for real live sending)',
+    example: 'true',
+  },
 ];
 
 let errors = 0;
@@ -204,6 +209,14 @@ function checkRequiredVars() {
     } else {
       ok(`${label} (${key}) is set`);
     }
+  }
+
+  const isLive = process.env.WHATSAPP_LIVE_DISPATCH === 'true';
+  process.stdout.write('\n');
+  if (isLive) {
+    ok(`WhatsApp Gateway: 🟢 LIVE DISPATCH MODE (Directly messaging drivers & clients)`);
+  } else {
+    ok(`WhatsApp Gateway: 🧪 SAFE SIMULATION MODE (Safety override active - messages kept to test numbers)`);
   }
 }
 

@@ -104,25 +104,29 @@ export function normalizeGPSPayload(item: RawGPSPayload): NormalizedGPSData {
   };
 }
 
+export function isWebhookAuthorized(
+  req: { headers: { get: (name: string) => string | null }; url: string },
+  expectedSecret?: string
+): boolean {
+  if (!expectedSecret) return true;
+  const authHeader = req.headers.get('x-gps-secret') || req.headers.get('x-api-key');
+  const bearerHeader = req.headers.get('authorization');
+  const url = new URL(req.url, 'http://localhost');
+  const querySecret = url.searchParams.get('secret') || url.searchParams.get('key');
+  const token = bearerHeader?.startsWith('Bearer ') ? bearerHeader.slice(7).trim() : null;
+
+  return (
+    authHeader === expectedSecret ||
+    token === expectedSecret ||
+    querySecret === expectedSecret
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. فحص التوثيق الأمني المرن
-    const authHeader = req.headers.get('x-gps-secret') || req.headers.get('x-api-key');
-    const bearerHeader = req.headers.get('authorization');
-    const url = new URL(req.url);
-    const querySecret = url.searchParams.get('secret') || url.searchParams.get('key');
     const expectedSecret = process.env.GPS_WEBHOOK_SECRET;
-
-    let isAuthorized = true;
-    if (expectedSecret) {
-      const token = bearerHeader?.startsWith('Bearer ') ? bearerHeader.slice(7).trim() : null;
-      isAuthorized =
-        authHeader === expectedSecret ||
-        token === expectedSecret ||
-        querySecret === expectedSecret;
-    }
-
-    if (!isAuthorized) {
+    if (!isWebhookAuthorized(req, expectedSecret)) {
       return NextResponse.json({ error: 'غير مصرح بالوصول (Unauthorized)' }, { status: 401 });
     }
 

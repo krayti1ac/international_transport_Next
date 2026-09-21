@@ -6,7 +6,7 @@ import {
   resetAlertCooldown,
   ALERT_COOLDOWN_MS,
 } from '@/features/tracking/services/port-geofence.actions';
-import { normalizeGPSPayload } from '@/app/api/webhooks/gps/route';
+import { normalizeGPSPayload, isWebhookAuthorized } from '@/app/api/webhooks/gps/route';
 
 describe('Traccar GPS Ingestion & Automated Port/Border Geofencing Engine', () => {
   beforeEach(() => {
@@ -168,6 +168,50 @@ describe('Traccar GPS Ingestion & Automated Port/Border Geofencing Engine', () =
 
       // Second enter within cooldown is blocked
       expect(isAlertCooldownActive(truckId, zoneId, 'enter', now + 2000)).toBe(true);
+    });
+  });
+
+  describe('5. GPS Webhook Authentication & Security Guard', () => {
+    const SECRET = 'sec_super_strong_production_gps_secret_2026';
+
+    const createMockReq = (headers: Record<string, string>, url = 'https://app.transbodanon.ma/api/webhooks/gps') => ({
+      headers: {
+        get: (key: string) => headers[key.toLowerCase()] || null,
+      },
+      url,
+    });
+
+    it('allows all requests when no secret is configured (open mode)', () => {
+      const req = createMockReq({});
+      expect(isWebhookAuthorized(req, undefined)).toBe(true);
+    });
+
+    it('authorizes requests with matching x-gps-secret header', () => {
+      const req = createMockReq({ 'x-gps-secret': SECRET });
+      expect(isWebhookAuthorized(req, SECRET)).toBe(true);
+    });
+
+    it('authorizes requests with matching x-api-key header', () => {
+      const req = createMockReq({ 'x-api-key': SECRET });
+      expect(isWebhookAuthorized(req, SECRET)).toBe(true);
+    });
+
+    it('authorizes requests with matching Bearer token in Authorization header', () => {
+      const req = createMockReq({ authorization: `Bearer ${SECRET}` });
+      expect(isWebhookAuthorized(req, SECRET)).toBe(true);
+    });
+
+    it('authorizes requests with matching query parameter secret', () => {
+      const req = createMockReq({}, `https://app.transbodanon.ma/api/webhooks/gps?secret=${SECRET}`);
+      expect(isWebhookAuthorized(req, SECRET)).toBe(true);
+    });
+
+    it('rejects requests with invalid or missing secret', () => {
+      const emptyReq = createMockReq({});
+      expect(isWebhookAuthorized(emptyReq, SECRET)).toBe(false);
+
+      const wrongReq = createMockReq({ 'x-gps-secret': 'wrong-secret' });
+      expect(isWebhookAuthorized(wrongReq, SECRET)).toBe(false);
     });
   });
 });

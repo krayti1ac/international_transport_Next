@@ -23,8 +23,11 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Send,
+  Globe,
 } from 'lucide-react';
 import { getTripCustomsData } from '../services/customs-gateway.actions';
+import { pushDirectCustomsApiDeclaration } from '../services/portnet-badr-push.actions';
 import { generatePortNetXml, generateTirEpdXml } from '../utils/customs-xml';
 import type { PortNetGatePass, TirEpdDeclaration, CustomsPreCheckResult } from '../types';
 
@@ -42,6 +45,49 @@ export function CustomsGatewayModal({ tripId, isOpen, onClose }: CustomsGatewayM
   const [readiness, setReadiness] = useState<CustomsPreCheckResult | null>(null);
   const [activeTab, setActiveTab] = useState<'portnet' | 'tirepd'>('portnet');
   const [copied, setCopied] = useState(false);
+  const [submittingApi, setSubmittingApi] = useState<'portnet' | 'tir_epd' | null>(null);
+  const [apiResult, setApiResult] = useState<{
+    gateway: 'portnet' | 'tir_epd';
+    referenceNumber: string;
+    customsRegistrationNumber?: string;
+    barcode?: string;
+    mode: string;
+  } | null>(null);
+
+  const handleDirectApiPush = async (gateway: 'portnet' | 'tir_epd') => {
+    if (!tripId) return;
+    setSubmittingApi(gateway);
+    try {
+      const res = await pushDirectCustomsApiDeclaration(tripId, gateway);
+      if (res.success && res.data) {
+        setApiResult({
+          gateway,
+          referenceNumber: res.data.referenceNumber,
+          customsRegistrationNumber: res.data.customsRegistrationNumber,
+          barcode: res.data.barcode,
+          mode: res.data.mode,
+        });
+        toast({
+          title: `تم إرسال التصريح بنجاح إلى ${gateway === 'portnet' ? 'PortNet' : 'IRU TIR-EPD'} (${res.data.mode.toUpperCase()})`,
+          description: `المرجع: ${res.data.referenceNumber} ${res.data.customsRegistrationNumber ? `| رقم التسجيل: ${res.data.customsRegistrationNumber}` : ''}`,
+        });
+      } else {
+        toast({
+          title: 'فشل الإرسال المباشر',
+          description: res.error || 'حدث خطأ أثناء معالجة التصريح الجمركي',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: unknown) {
+      toast({
+        title: 'خطأ غير متوقع',
+        description: err instanceof Error ? err.message : 'تعذر الاتصال بالخادم',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingApi(null);
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!tripId) return;
@@ -287,27 +333,90 @@ export function CustomsGatewayModal({ tripId, isOpen, onClose }: CustomsGatewayM
               </div>
             </div>
 
+            {/* Direct API Submission Result Card */}
+            {apiResult && (
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-bold text-foreground">
+                      تم استلام التصريح الإلكتروني بنجاح من {apiResult.gateway === 'portnet' ? 'بوابة PortNet' : 'منظومة IRU TIR-EPD'}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background">
+                    {apiResult.mode}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1 border-t border-emerald-500/20">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">رقم المرجع:</span>
+                    <span className="font-mono font-bold text-foreground">{apiResult.referenceNumber}</span>
+                  </div>
+                  {apiResult.customsRegistrationNumber && (
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">رقم التسجيل الجمركي (MRN/EPD):</span>
+                      <span className="font-mono font-bold text-foreground">{apiResult.customsRegistrationNumber}</span>
+                    </div>
+                  )}
+                  {apiResult.barcode && (
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">رمز الباركود الرقمي:</span>
+                      <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{apiResult.barcode}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t">
               <Button variant="outline" size="sm" onClick={onClose} className="rounded-xl text-xs">
                 إغلاق
               </Button>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => handleDownloadXml('portnet')}
-                  className="rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-2xs"
+                  className="rounded-xl text-xs gap-1.5"
                 >
-                  <Download className="w-4 h-4" />
-                  تحميل PortNet XML
+                  <Download className="w-3.5 h-3.5" />
+                  PortNet XML
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownloadXml('tirepd')}
+                  className="rounded-xl text-xs gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  TIR-EPD XML
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleDownloadXml('tirepd')}
+                  disabled={submittingApi !== null || !readiness?.isReadyForPortNet}
+                  onClick={() => handleDirectApiPush('portnet')}
+                  className="rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-2xs"
+                >
+                  {submittingApi === 'portnet' ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Globe className="w-3.5 h-3.5" />
+                  )}
+                  إرسال مباشر PortNet API
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={submittingApi !== null || !readiness?.isReadyForTirEpd}
+                  onClick={() => handleDirectApiPush('tir_epd')}
                   className="rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs"
                 >
-                  <Download className="w-4 h-4" />
-                  تحميل TIR-EPD XML
+                  {submittingApi === 'tir_epd' ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  إرسال مباشر TIR-EPD API
                 </Button>
               </div>
             </div>

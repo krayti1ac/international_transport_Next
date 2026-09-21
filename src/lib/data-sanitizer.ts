@@ -85,6 +85,9 @@ export function sanitizeMoroccanPlate(raw?: unknown): string {
   let str = String(raw).trim();
   if (!str) return '';
 
+  // إزالة الكشيدة أو التطويل العربي (مثل هـ تصبح ه)
+  str = str.replace(/\u0640/g, '');
+
   // استبدال الشرائح المائلة والخطوط العمودية والشرطات السفلية بشرطة عادية
   str = str.replace(/[\/|\\_]+/g, '-');
   

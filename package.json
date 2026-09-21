@@ -48,6 +48,7 @@
     "recharts": "^3.10.1",
     "resend": "^6.28.0",
     "tailwind-merge": "^3.0.2",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^4.5.4",
     "zustand": "^5.0.15"
@@ -62,6 +63,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "@vitest/coverage-v8": "^2.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",

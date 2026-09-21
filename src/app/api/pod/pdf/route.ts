@@ -36,8 +36,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: deliveryError.message }, { status: 500 });
     }
 
-    const signedAt = delivery?.signed_at
-      ? new Date(delivery.signed_at).toLocaleString('ar-MA', {
+    const effectiveSigUrl = delivery?.signature_url || delivery?.signature_image_url || null;
+    const effectiveRecipient = delivery?.signed_by || delivery?.recipient_name || 'UNKNOWN';
+    const effectiveSignedAt = delivery?.signed_at || delivery?.delivered_at || new Date().toISOString();
+
+    const signedAt = (delivery?.signed_at || delivery?.delivered_at)
+      ? new Date(delivery.signed_at || delivery.delivered_at).toLocaleString('ar-MA', {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
@@ -53,15 +57,15 @@ export async function GET(req: NextRequest) {
 
     // Generate cryptographic integrity hash
     let integrityHash: string | null = null;
-    if (delivery?.signature_url) {
+    if (effectiveSigUrl) {
       try {
         integrityHash = generateDeliverySignatureHash({
           tripOrderId: tripOrder.id,
-          recipientName: delivery.signed_by || 'UNKNOWN',
-          signedAt: delivery.signed_at || new Date().toISOString(),
+          recipientName: effectiveRecipient,
+          signedAt: effectiveSignedAt,
           latitude: delivery.latitude,
           longitude: delivery.longitude,
-          signatureUrl: delivery.signature_url,
+          signatureUrl: effectiveSigUrl,
         });
       } catch {
         integrityHash = null;
@@ -72,81 +76,124 @@ export async function GET(req: NextRequest) {
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>إثبات التسليم - رحلة #${tripOrder.id}</title>
   <title>إثبات التسليم الإلكتروني المعتمد - رحلة #${tripOrder.id}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #fff;
       background: #f8fafc;
       color: #0f172a;
       padding: 24px;
       line-height: 1.6;
     }
     .page {
-      max-width: 800px;
       max-width: 840px;
       margin: 0 auto;
-      background: #ffffff;
-      border: 2px solid #0f172a;
-      padding: 24px;
-      padding: 28px;
+      background: #fff;
+      padding: 32px;
+      border: 1px solid #cbd5e1;
       border-radius: 8px;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
     }
     .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
       border-bottom: 2px solid #0f172a;
-      padding-bottom: 12px;
       padding-bottom: 16px;
-      margin-bottom: 16px;
-    }
-    .header h1 { font-size: 20px; letter-spacing: 0.5px; }
-    .header .doc-number { font-family: monospace; font-size: 14px; }
-    .header h1 { font-size: 22px; font-weight: 800; color: #0f172a; }
-    .header .meta { font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.5px; }
-    .header .doc-number { text-align: left; font-family: monospace; font-size: 13px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-    .box { border: 1px solid #0f172a; padding: 10px; min-height: 80px; }
-    .box label { font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px; }
-    .box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; background: #fafafa; }
-    .box label { font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; display: block; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .box p { font-size: 13px; margin-bottom: 4px; }
-    .full { grid-column: 1 / -1; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
-    .signature-box { border: 1px solid #0f172a; padding: 10px; text-align: center; }
-    .signature-box label { font-size: 10px; font-weight: bold; color: #64748b; display: block; margin-bottom: 6px; }
-    .signature-box img { max-height: 100px; max-width: 100%; object-fit: contain; }
-    .cmr-img { max-height: 180px; max-width: 100%; object-fit: contain; border: 1px solid #e2e8f0; padding: 4px; }
-    .meta { font-size: 12px; color: #475569; margin-top: 4px; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #059669; color: #fff; }
-    .seal-box {
-      background: #f0fdf4;
-      border: 1px solid #86efac;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .seal-title { font-size: 12px; font-weight: 800; color: #166534; }
-    .seal-hash { font-family: monospace; font-size: 11px; color: #15803d; word-break: break-all; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
-    .signature-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; background: #fafafa; }
-    .signature-box label { font-size: 11px; font-weight: bold; color: #475569; display: block; margin-bottom: 6px; }
-    .signature-box img { max-height: 80px; max-width: 100%; object-fit: contain; }
-    .cmr-img { max-height: 220px; max-width: 100%; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #fff; }
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background: #059669; color: #fff; }
-    .badge-corridor { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; background: #e0e7ff; color: #3730a3; margin-top: 4px; }
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0284c7;
+      letter-spacing: -0.5px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: #e0f2fe;
+      color: #0369a1;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .box {
+      border: 1px solid #e2e8f0;
+      padding: 16px;
+      border-radius: 6px;
+      background: #f8fafc;
+    }
+    .box.full {
+      grid-column: span 2;
+    }
+    .box label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .box p {
+      font-size: 14px;
+      font-weight: 500;
+      color: #0f172a;
+    }
+    .signatures {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .signature-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+      background: #fff;
+    }
+    .signature-box label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+    .cmr-img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    .hash-badge {
+      background: #f1f5f9;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px dashed #94a3b8;
+      font-family: monospace;
+      font-size: 11px;
+      word-break: break-all;
+      margin-top: 16px;
+      direction: ltr;
+      text-align: left;
+    }
     @media print {
-      body { padding: 0; }
-      .page { border: 2px solid #000; max-width: 100%; }
       body { background: #fff; padding: 0; }
-      .page { border: 1px solid #000; box-shadow: none; max-width: 100%; border-radius: 0; padding: 16px; }
+      .page { border: none; padding: 0; }
       .no-print { display: none !important; }
     }
   </style>
@@ -155,57 +202,26 @@ export async function GET(req: NextRequest) {
   <div class="page">
     <div class="header">
       <div>
-        <h1>إثبات التسليم الرقمي (E-POD)</h1>
-        <p class="meta">TRANS BODANON INTERNATIONAL LOGISTICS</p>
-        <h1>إثبات التسليم الرقمي المعتمد (e-POD)</h1>
-        <p class="meta">TRANS BODANON INTERNATIONAL LOGISTICS • CERTIFIED TRANSPORT RECORD</p>
-        <span class="badge-corridor">
-          ${tripOrder.corridor_type === 'african_overland' ? 'African Overland Trade Corridor 🌍' : 'European Maritime Logistics Corridor 🚢'}
-        </span>
+        <div class="logo">TRANS BODANON TMS</div>
+        <h1>وثيقة إثبات التسليم الرسمية (e-POD Report)</h1>
       </div>
-      <div class="doc-number">
-        <p>رحلة #${tripOrder.id}</p>
-        <p>${tripOrder.route}</p>
-        <span class="badge">E-POD</span>
-        <p><strong>EXPÉDITION #${tripOrder.id}</strong></p>
-        <p>${tripOrder.route || ''}</p>
-        <span class="badge">VERIFIED e-POD</span>
-      </div>
-    </div>
-
-    <!-- Cryptographic SHA-256 HMAC Seal Banner -->
-    <div class="seal-box">
-      <div>
-        <span class="seal-title">🔒 ختم النزاهة الرقمي والتشفير (HMAC-SHA256 DIGITAL INTEGRITY SEAL)</span>
-        <p class="seal-hash">HASH: ${integrityHash ? integrityHash : 'TB-SEC-VERIFIED-' + tripOrder.id}</p>
-      </div>
-      <div style="text-align: left; font-size: 10px; color: #166534; font-weight: bold;">
-        ISO 19845 / e-CMR<br />NON-ALTERABLE
+      <div style="text-align: left;">
+        <span class="badge">معتمد إلكترونياً</span>
+        <div style="font-size: 12px; color: #64748b; margin-top: 4px;">رقم الرحلة: #${tripOrder.id}</div>
       </div>
     </div>
 
     <div class="grid">
       <div class="box">
-        <label>1. تفاصيل الرحلة</label>
-        <p><strong>المسار:</strong> ${tripOrder.route}</p>
-        <p><strong>تاريخ الانطلاق:</strong> ${tripOrder.departure_date}</p>
-        <p><strong>الحالة:</strong> ${tripOrder.status}</p>
-        ${tripOrder.cmr_number ? `<p><strong>رقم CMR:</strong> ${tripOrder.cmr_number}</p>` : ''}
-        <label>1. تفاصيل الإرسالية والمسار (Shipment & Route)</label>
-        <p><strong>المسار اللوجستي:</strong> ${tripOrder.route || '—'}</p>
-        <p><strong>تاريخ الانطلاق:</strong> ${tripOrder.departure_date || '—'}</p>
-        <p><strong>طبيعة البضاعة:</strong> ${tripOrder.goods_description_export || 'بضائع دولية عامة'}</p>
-        ${tripOrder.cmr_number ? `<p><strong>رقم CMR الدولي:</strong> ${tripOrder.cmr_number}</p>` : ''}
-        ${tripOrder.weight_export ? `<p><strong>الوزن الإجمالي:</strong> ${tripOrder.weight_export} T</p>` : ''}
+        <label>1. بيانات الرحلة والمسار</label>
+        <p><strong>المسار:</strong> ${tripOrder.route || 'غير محدد'}</p>
+        <p><strong>تاريخ الانطلاق:</strong> ${tripOrder.departure_date ? new Date(tripOrder.departure_date).toLocaleDateString('ar-MA') : '—'}</p>
+        <p><strong>رقم الـ CMR:</strong> ${tripOrder.cmr_number || tripOrder.cmr_export_number || '—'}</p>
       </div>
 
       <div class="box">
-        <label>2. تفاصيل التسليم</label>
-        <p><strong>المستلم:</strong> ${delivery?.signed_by || '—'}</p>
-        <p><strong>تاريخ التوقيع:</strong> ${signedAt}</p>
-        ${mapsUrl ? `<p><strong>الموقع:</strong> <a href="${mapsUrl}" target="_blank">عرض على الخريطة</a></p>` : '<p><strong>الموقع:</strong> غير متاح</p>'}
-        <label>2. تفاصيل التسليم والموقع (Delivery & Geofence)</label>
-        <p><strong>المستلم المعتمد:</strong> ${delivery?.signed_by || '—'}</p>
+        <label>2. تفاصيل التسليم والمستلم</label>
+        <p><strong>اسم المستلم:</strong> ${effectiveRecipient}</p>
         <p><strong>تاريخ وتوقيت التوقيع:</strong> ${signedAt}</p>
         ${
           mapsUrl
@@ -216,66 +232,63 @@ export async function GET(req: NextRequest) {
       </div>
 
       <div class="box full">
-        <label>3. التوقيع</label>
-        ${delivery?.signature_url ? `<img src="${delivery.signature_url}" alt="Signature" class="cmr-img" />` : '<p>لا يوجد توقيع</p>'}
         <label>3. التوقيع الحي للمستلم (Consignee Handwritten Signature)</label>
         <div style="text-align: center; padding: 8px;">
           ${
-            delivery?.signature_url
-              ? `<img src="${delivery.signature_url}" alt="Signature" class="cmr-img" style="max-height: 120px;" />`
+            effectiveSigUrl
+              ? `<img src="${effectiveSigUrl}" alt="Signature" class="cmr-img" style="max-height: 120px;" />`
               : '<p style="color: #64748b;">لا يوجد توقيع مسجل</p>'
           }
         </div>
       </div>
-      ${delivery?.cmr_image_url ? `
 
       ${
         delivery?.cmr_image_url
           ? `
       <div class="box full">
-        <label>4. صورة CMR المختوم</label>
-        <img src="${delivery.cmr_image_url}" alt="CMR" class="cmr-img" />
         <label>4. صورة وثيقة الـ CMR المؤشرة بختم الوصول (Stamped CMR Document)</label>
         <div style="text-align: center; padding: 8px;">
           <img src="${delivery.cmr_image_url}" alt="Stamped CMR" class="cmr-img" />
         </div>
       </div>
-      ` : ''}
       `
           : ''
       }
     </div>
 
+    ${
+      integrityHash
+        ? `
+    <div class="hash-badge">
+      <div style="font-weight: bold; margin-bottom: 4px; color: #0f172a;">🔒 Cryptographic Proof (HMAC-SHA256):</div>
+      <div>${integrityHash}</div>
+      <div style="font-size: 10px; color: #64748b; margin-top: 4px;">هذه الوثيقة مشفرة ومحمية ضد التزوير والتلاعب في بيانات الاستلام الدولية.</div>
+    </div>
+    `
+        : ''
+    }
+
     <div class="signatures">
       <div class="signature-box">
-        <label>توقيع المرسل</label>
-        <div style="height: 60px; border-bottom: 1px dashed #94a3b8;"></div>
         <label>توقيع وختم المرسل (Expéditeur)</label>
         <div style="height: 65px; border-bottom: 1px dashed #94a3b8;"></div>
       </div>
       <div class="signature-box">
-        <label>توقيع الناقل</label>
-        <div style="height: 60px; border-bottom: 1px dashed #94a3b8;"></div>
         <label>توقيع وختم الناقل (Transporteur)</label>
         <div style="height: 65px; border-bottom: 1px dashed #94a3b8; display: flex; align-items: center; justify-content: center;">
           <span style="font-size: 11px; font-weight: bold; color: #0284c7;">TRANS BODANON TMS</span>
         </div>
       </div>
       <div class="signature-box">
-        <label>توقيع المستلم</label>
-        ${delivery?.signature_url ? `<img src="${delivery.signature_url}" alt="Signature" style="max-height: 60px;" />` : '<div style="height: 60px; border-bottom: 1px dashed #94a3b8;"></div>'}
         <label>توقيع وختم المستلم (Destinataire)</label>
         ${
-          delivery?.signature_url
-            ? `<img src="${delivery.signature_url}" alt="Signature" style="max-height: 55px;" />`
+          effectiveSigUrl
+            ? `<img src="${effectiveSigUrl}" alt="Signature" style="max-height: 55px;" />`
             : '<div style="height: 65px; border-bottom: 1px dashed #94a3b8;"></div>'
         }
       </div>
     </div>
 
-    <div class="no-print" style="margin-top: 24px; text-align: center;">
-      <button onclick="window.print()" style="padding: 10px 20px; border: 1px solid #0f172a; background: #0f172a; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px;">
-        طباعة / حفظ كـ PDF
     <div class="no-print" style="margin-top: 24px; text-align: center; display: flex; justify-content: center; gap: 12px;">
       <button onclick="window.print()" style="padding: 10px 24px; border: 1px solid #0f172a; background: #0f172a; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">
         طباعة الوثيقة / حفظ كـ PDF

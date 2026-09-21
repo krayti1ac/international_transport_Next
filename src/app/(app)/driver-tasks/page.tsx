@@ -12,6 +12,7 @@ import { NavigationLauncher } from '@/features/trips/components/NavigationLaunch
 import Decimal from 'decimal.js';
 import { calculateDriverSafetyScore, type DriverSafetyBreakdown } from '@/features/drivers/services/driver-safety-score.actions';
 import { DriverSafetyScoreCard } from '@/features/drivers/components/DriverSafetyScoreCard';
+import { PushSubscriptionManager } from '@/features/push/components/PushSubscriptionManager';
 
 export default function DriverTasksPage() {
   const { t, dir } = useLanguage();
@@ -165,6 +166,8 @@ export default function DriverTasksPage() {
           {t('متابعة مسار الرحلات النشطة، وثائق CMR وسجل السلف الشخصية', 'Suivi de vos voyages actifs, documents CMR et historique des acomptes')}
         </p>
       </div>
+
+      <PushSubscriptionManager driverId={driver?.id} />
 
       {safetyData && (
         <DriverSafetyScoreCard data={safetyData} />

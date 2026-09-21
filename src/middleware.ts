@@ -29,6 +29,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/public') ||
     pathname.startsWith('/api/pod') ||
+    pathname.startsWith('/api/cron') ||
+    pathname.startsWith('/api/webhooks') ||
     pathname.includes('/favicon.ico') ||
     pathname.includes('/manifest.json') ||
     normalizedPath === '/' ||

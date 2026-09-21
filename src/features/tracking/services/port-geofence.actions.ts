@@ -164,21 +164,6 @@ export async function evaluatePortGeofences(params: {
             .from('trip_orders')
             .update({
               status: 'customs_export',
-              notes: `وصلت الشاحنة إلى ${zoneNameAr} في ${new Date(nowIso).toLocaleTimeString('ar-MA')} (إجراءات التخليص الجمركي)`,
-            })
-            .eq('id', activeTrip.id);
-        } else if (matchedZone?.id === 'border_rosso') {
-          await supabase
-            .from('trip_orders')
-            .update({
-              notes: `وصلت الشاحنة إلى معبر روصو النهري في ${new Date(nowIso).toLocaleTimeString('ar-MA')} استعداداً للعبور نحو السنغال`,
-            })
-            .eq('id', activeTrip.id);
-        } else if (matchedZone?.id === 'port_dakar') {
-          await supabase
-            .from('trip_orders')
-            .update({
-              notes: `وصلت الشاحنة إلى محطة دكار النهائية في ${new Date(nowIso).toLocaleTimeString('ar-MA')}`,
             })
             .eq('id', activeTrip.id);
         } else if (matchedZone?.zoneType === 'seaport') {
@@ -186,7 +171,6 @@ export async function evaluatePortGeofences(params: {
             .from('trip_orders')
             .update({
               status: 'at_ferry_port',
-              notes: `وصلت الشاحنة إلى ${zoneNameAr} في ${new Date(nowIso).toLocaleTimeString('ar-MA')}`,
             })
             .eq('id', activeTrip.id);
         }

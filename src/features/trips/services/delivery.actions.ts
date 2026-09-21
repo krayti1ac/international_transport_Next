@@ -25,38 +25,60 @@ export async function submitProofOfDelivery(input: {
       ? Buffer.from(input.cmrImageBase64.split(',')[1] || input.cmrImageBase64, 'base64')
       : null;
 
-    const [sigUpload] = await Promise.all([
-      supabase.storage.from('delivery-proofs').upload(signatureFileName, signatureBuffer, {
-        contentType: 'image/png',
-        upsert: true,
-      }),
-    ]);
+    let signatureUrl = '';
+    try {
+      const [sigUpload] = await Promise.all([
+        supabase.storage.from('delivery-proofs').upload(signatureFileName, signatureBuffer, {
+          contentType: 'image/png',
+          upsert: true,
+        }),
+      ]);
 
-    if (sigUpload.error) throw sigUpload.error;
+      if (!sigUpload.error) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('delivery-proofs')
+          .getPublicUrl(signatureFileName);
+        signatureUrl = publicUrl;
+      }
+    } catch {
+      // Storage upload failed or bucket not available
+    }
 
-    const { data: { publicUrl: signatureUrl } } = supabase.storage
-      .from('delivery-proofs')
-      .getPublicUrl(signatureFileName);
+    if (!signatureUrl) {
+      signatureUrl = input.signatureBase64.startsWith('data:')
+        ? input.signatureBase64
+        : `data:image/png;base64,${input.signatureBase64}`;
+    }
 
     let cmrUrl: string | undefined;
     if (cmrBuffer) {
-      const { error: cmrError } = await supabase.storage.from('delivery-proofs').upload(cmrFileName, cmrBuffer, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-      if (cmrError) throw cmrError;
-      const { data: { publicUrl } } = supabase.storage.from('delivery-proofs').getPublicUrl(cmrFileName);
-      cmrUrl = publicUrl;
+      try {
+        const { error: cmrError } = await supabase.storage.from('delivery-proofs').upload(cmrFileName, cmrBuffer, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+        if (!cmrError) {
+          const { data: { publicUrl } } = supabase.storage.from('delivery-proofs').getPublicUrl(cmrFileName);
+          cmrUrl = publicUrl;
+        }
+      } catch {
+        // Storage upload failed
+      }
+      if (!cmrUrl) {
+        cmrUrl = input.cmrImageBase64?.startsWith('data:')
+          ? input.cmrImageBase64
+          : `data:image/jpeg;base64,${input.cmrImageBase64}`;
+      }
     }
 
     const { error: insertError } = await supabase
       .from('delivery_signatures')
       .insert({
         trip_order_id: input.tripOrderId,
-        signature_url: signatureUrl,
-        cmr_image_url: cmrUrl,
-        signed_by: input.recipientName,
-        signed_at: new Date().toISOString(),
+        signature_image_url: signatureUrl,
+        receipt_image_url: cmrUrl,
+        recipient_name: input.recipientName,
+        delivered_at: new Date().toISOString(),
         latitude: input.latitude,
         longitude: input.longitude,
       });
@@ -82,9 +104,13 @@ export async function submitProofOfDelivery(input: {
 
     if (updateError) throw updateError;
 
-    revalidatePath('/trips');
-    revalidatePath('/driver-tasks');
-    revalidatePath('/dashboard');
+    try {
+      revalidatePath('/trips');
+      revalidatePath('/driver-tasks');
+      revalidatePath('/dashboard');
+    } catch {
+      // Safe no-op outside Next.js request context
+    }
 
     dispatchTripLifecycleNotifications(input.tripOrderId, 'delivery_completed', {
       recipientName: input.recipientName,

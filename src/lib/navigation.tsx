@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Sparkles,
   Activity,
+  Compass,
 } from 'lucide-react';
 
 export const navigationGroups: SidebarGroup[] = [
@@ -322,6 +323,14 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Análisis predictivos',
         href: '/predictive-analytics',
         icon: <TrendingUp className="w-4 h-4 text-primary" />,
+        roles: ['admin', 'accountant', 'fleet_manager', 'secretary'],
+      },
+      {
+        title: 'تحليلات الممرين والوقود',
+        titleFr: 'P&L des Corridors',
+        titleEs: 'P&L y Combustible de Corredores',
+        href: '/analytics/corridors',
+        icon: <Compass className="w-4 h-4 text-emerald-500" />,
         roles: ['admin', 'accountant', 'fleet_manager'],
       },
     ],

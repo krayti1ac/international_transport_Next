@@ -13,6 +13,7 @@ import { LanguageToggle } from '@/components/language-toggle';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/users/UserAvatar';
 import { BranchSwitcher } from '@/features/branches/components/BranchSwitcher';
+import { InAppHelpModal } from '@/components/help/InAppHelpModal';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -278,6 +279,9 @@ export function AppHeader({
         >
           <RotateCw className={`w-4 h-4 stroke-[2.3] transition-transform duration-700 ${isRefreshing ? 'animate-spin' : ''}`} />
         </Button>
+
+        {/* In-App Contextual Help Modal Button */}
+        <InAppHelpModal role={effectiveRole} />
 
         {/* User Profile Pill Trigger with Dropdown containing Mode and Language */}
         {displayName && (

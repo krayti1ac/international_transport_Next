@@ -703,9 +703,16 @@ export interface DeliverySignature {
   signature_url: string;
   signed_by: string;
   signed_at: string;
+  signature_image_url?: string;
+  recipient_name?: string;
+  delivered_at?: string;
   latitude?: number;
   longitude?: number;
   cmr_image_url?: string;
+  receipt_image_url?: string;
+  notes?: string | null;
+  driver_id?: number | null;
+  created_at?: string;
 }
 
 export interface PendingUpdate {
