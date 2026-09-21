@@ -71,6 +71,11 @@ export function calculateFIFOAllocation(
   unallocatedCredit: number;
   affectedInvoicesCount: number;
   allocations: FIFOAllocationItem[];
+  creditNotePayload?: {
+    amount: number;
+    currency: string;
+    reason: string;
+  };
 } {
   Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
   let remaining = new Decimal(paymentAmount || 0);
@@ -152,12 +157,26 @@ export function calculateFIFOAllocation(
     unallocatedCredit: number;
     affectedInvoicesCount: number;
     allocations: FIFOAllocationItem[];
+    creditNotePayload?: {
+      amount: number;
+      currency: string;
+      reason: string;
+    };
   };
 
+  const unallocatedAmount = parseFloat(remaining.toFixed(2));
   result.totalAllocated = parseFloat(totalAllocatedDec.toFixed(2));
-  result.unallocatedCredit = parseFloat(remaining.toFixed(2));
+  result.unallocatedCredit = unallocatedAmount;
   result.affectedInvoicesCount = allocations.length;
   result.allocations = allocations;
+
+  if (unallocatedAmount > 0) {
+    result.creditNotePayload = {
+      amount: unallocatedAmount,
+      currency: invoices[0]?.currency || 'MAD',
+      reason: 'فائض سداد دفعات العميل بنظام FIFO (رصيد دائن معلق)',
+    };
+  }
 
   return result;
 }
@@ -214,6 +233,12 @@ export interface FIFOPaymentResult {
   totalAllocated: number;
   unallocatedCredit: number;
   affectedInvoicesCount: number;
+  creditBalanceId?: number;
+  creditNotePayload?: {
+    amount: number;
+    currency: string;
+    reason: string;
+  };
   allocations: {
     invoiceId: number;
     invoiceNumber: string;
@@ -236,6 +261,7 @@ export interface FIFOPaymentResult {
     amount: number;
     type: 'gain' | 'loss' | 'neutral';
     id?: number;
+    treasuryTransactionId?: number;
   }>;
   treasuryTransactionId?: number;
   error?: string;
@@ -257,5 +283,6 @@ export function previewFIFOAllocation(
     unallocatedCredit: allocationResult.unallocatedCredit,
     affectedInvoicesCount: allocationResult.affectedInvoicesCount,
     allocations: allocationResult.allocations,
+    creditNotePayload: allocationResult.creditNotePayload,
   };
 }

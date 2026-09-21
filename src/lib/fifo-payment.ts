@@ -100,7 +100,9 @@ export async function processFIFOPayment(
     const { data: paymentRecord, error: paymentError } = await supabase
       .from('payments')
       .insert({
+        client_id: input.clientId,
         amount: amountDec.toNumber(),
+        unallocated_amount: allocationResult.unallocatedCredit,
         currency: input.currency || 'MAD',
         method: input.paymentMethod || 'bank_transfer',
         bank_account_id: input.bankAccountId ? String(input.bankAccountId) : null,
@@ -117,6 +119,28 @@ export async function processFIFOPayment(
     }
 
     const paymentId = paymentRecord.id;
+
+    // 3.1 Handle Overpayment: create client_credit_balances record if unallocatedCredit > 0
+    let creditBalanceId: number | undefined;
+    if (allocationResult.unallocatedCredit > 0) {
+      const { data: creditBalance, error: creditError } = await supabase
+        .from('client_credit_balances')
+        .insert({
+          client_id: input.clientId,
+          payment_id: paymentId,
+          amount: allocationResult.unallocatedCredit,
+          remaining_amount: allocationResult.unallocatedCredit,
+          currency: input.currency || 'MAD',
+          status: 'active',
+          notes: `رصيد دائن فائض ناتج عن دفعة العميل #${input.clientId} (مرجع: ${input.reference || `PAY-${paymentId}`})`,
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (!creditError && creditBalance) {
+        creditBalanceId = creditBalance.id;
+      }
+    }
 
     // 4. Record allocations in payment_invoice_allocations table
     if (allocationResult.allocations.length > 0) {
@@ -156,6 +180,7 @@ export async function processFIFOPayment(
       amount: number;
       type: 'gain' | 'loss' | 'neutral';
       id?: number;
+      treasuryTransactionId?: number;
     }> = [];
 
     if (input.settlementRate) {
@@ -175,11 +200,34 @@ export async function processFIFOPayment(
           });
 
           if (forexRes.recorded) {
+            // Dual Entry into treasury_transactions for realized forex gain or loss
+            let fxTreasuryTxId: number | undefined;
+            const fxType = forexRes.type === 'gain' ? 'forex_gain' : 'forex_loss';
+            const { data: fxTx } = await supabase
+              .from('treasury_transactions')
+              .insert({
+                type: fxType,
+                amount: forexRes.amount,
+                currency: 'MAD',
+                cash_box_id: input.cashBoxId || null,
+                bank_account_id: input.bankAccountId || null,
+                description: `قيد فروق صرف محققة (${forexRes.type === 'gain' ? 'أرباح صرف' : 'خسائر صرف'}) لسداد الفاتورة #${alloc.invoiceNumber} (${alloc.allocatedAmount} EUR بسعر ${input.settlementRate} MAD/EUR)`,
+                reference: `FX-${forexRes.type.toUpperCase()}-${alloc.invoiceId}-${paymentId}`,
+                reconciliation_status: 'cleared',
+              })
+              .select('id')
+              .maybeSingle();
+
+            if (fxTx) {
+              fxTreasuryTxId = fxTx.id;
+            }
+
             recordedForexEntries.push({
               invoiceId: alloc.invoiceId,
               amount: forexRes.amount,
               type: forexRes.type,
               id: forexRes.id,
+              treasuryTransactionId: fxTreasuryTxId,
             });
             alloc.forexEntry = {
               id: forexRes.id,
@@ -265,6 +313,8 @@ export async function processFIFOPayment(
           totalAllocated: allocationResult.totalAllocated,
           unallocatedCredit: allocationResult.unallocatedCredit,
           affectedInvoicesCount: allocationResult.affectedInvoicesCount,
+          creditBalanceId,
+          creditNotePayload: allocationResult.creditNotePayload,
           allocations: allocationResult.allocations,
           forexEntries: recordedForexEntries,
         },
@@ -279,6 +329,8 @@ export async function processFIFOPayment(
       totalAllocated: allocationResult.totalAllocated,
       unallocatedCredit: allocationResult.unallocatedCredit,
       affectedInvoicesCount: allocationResult.affectedInvoicesCount,
+      creditBalanceId,
+      creditNotePayload: allocationResult.creditNotePayload,
       allocations: allocationResult.allocations,
       forexEntries: recordedForexEntries,
       treasuryTransactionId: treasuryTxId,

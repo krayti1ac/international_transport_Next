@@ -109,3 +109,126 @@ export async function processClientFifoPaymentAction(
     return { success: false, error: message };
   }
 }
+
+export async function getClientCreditBalanceAction(clientId: number) {
+  try {
+    const supabase = await createSupabaseClient();
+    const { data: credits, error } = await supabase
+      .from('client_credit_balances')
+      .select('*')
+      .eq('client_id', clientId)
+      .in('status', ['active', 'partially_used']);
+
+    if (error) throw error;
+
+    let totalRemaining = new Decimal(0);
+    const validCredits = credits || [];
+    for (const c of validCredits) {
+      totalRemaining = totalRemaining.plus(new Decimal(c.remaining_amount || 0));
+    }
+
+    return {
+      success: true,
+      totalCredit: parseFloat(totalRemaining.toFixed(2)),
+      creditRecords: validCredits,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'فشل جلب الرصيد الدائن للعميل';
+    return { success: false, totalCredit: 0, error: message };
+  }
+}
+
+export async function applyClientCreditBalanceAction(clientId: number, amountToUse?: number) {
+  try {
+    const supabase = await createSupabaseClient();
+
+    // 1. Fetch available credit
+    const { data: credits, error: creditError } = await supabase
+      .from('client_credit_balances')
+      .select('*')
+      .eq('client_id', clientId)
+      .in('status', ['active', 'partially_used'])
+      .order('created_at', { ascending: true });
+
+    if (creditError) throw creditError;
+    if (!credits || credits.length === 0) {
+      return { success: false, error: 'لا يوجد رصيد دائن متاح لهذا العميل' };
+    }
+
+    let totalAvailable = new Decimal(0);
+    for (const c of credits) {
+      totalAvailable = totalAvailable.plus(new Decimal(c.remaining_amount || 0));
+    }
+
+    if (totalAvailable.isZero()) {
+      return { success: false, error: 'الرصيد الدائن المتاح يساوي صفراً' };
+    }
+
+    const requestedAmount = amountToUse ? new Decimal(amountToUse) : totalAvailable;
+    const effectiveAmount = Decimal.min(requestedAmount, totalAvailable);
+
+    if (effectiveAmount.lessThanOrEqualTo(0)) {
+      return { success: false, error: 'المبلغ المطلوب استهلاكه غير صالح' };
+    }
+
+    // 2. Run FIFO payment using internal credit
+    const fifoResult = await processFIFOPayment(supabase, {
+      clientId,
+      amount: effectiveAmount.toNumber(),
+      currency: credits[0]?.currency || 'MAD',
+      paymentMethod: 'internal_credit',
+      reference: `CREDIT-CONSUMPTION-${Date.now()}`,
+      notes: `سداد فواتير عبر استهلاك الرصيد الدائن للعميل #${clientId}`,
+    });
+
+    if (!fifoResult.success) {
+      return { success: false, error: fifoResult.error || 'فشل سداد الفواتير بالرصيد الدائن' };
+    }
+
+    // 3. Deduct consumed amount from credit records
+    let toDeduct = new Decimal(fifoResult.totalAllocated);
+    for (const c of credits) {
+      if (toDeduct.isZero()) break;
+      const currentRemaining = new Decimal(c.remaining_amount || 0);
+      if (currentRemaining.isZero()) continue;
+
+      if (toDeduct.greaterThanOrEqualTo(currentRemaining)) {
+        toDeduct = toDeduct.minus(currentRemaining);
+        await supabase
+          .from('client_credit_balances')
+          .update({
+            remaining_amount: 0,
+            status: 'exhausted',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', c.id);
+      } else {
+        const updatedRemaining = currentRemaining.minus(toDeduct);
+        toDeduct = new Decimal(0);
+        await supabase
+          .from('client_credit_balances')
+          .update({
+            remaining_amount: updatedRemaining.toNumber(),
+            status: 'partially_used',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', c.id);
+      }
+    }
+
+    revalidatePath('/clients');
+    revalidatePath(`/clients/${clientId}`);
+    revalidatePath('/invoices');
+    revalidatePath('/treasury');
+
+    return {
+      success: true,
+      totalConsumed: fifoResult.totalAllocated,
+      remainingUnusedCredit: effectiveAmount.minus(new Decimal(fifoResult.totalAllocated)).toNumber(),
+      fifoResult,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'فشل تطبيق الرصيد الدائن للعميل';
+    return { success: false, error: message };
+  }
+}

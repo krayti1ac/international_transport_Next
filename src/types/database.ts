@@ -328,7 +328,9 @@ export interface Invoice {
 export interface Payment {
   id: number;
   company_id?: number | null;
+  client_id?: number | null;
   amount: number;
+  unallocated_amount?: number;
   method: string;
   status: string;
   created_at: string;
@@ -338,6 +340,20 @@ export interface Payment {
   notify_client: boolean;
   preferred_notification_method?: string;
   currency: string;
+}
+
+export interface ClientCreditBalance {
+  id: number;
+  company_id?: number | null;
+  client_id: number;
+  payment_id?: number | null;
+  amount: number;
+  remaining_amount: number;
+  currency: string;
+  status: 'active' | 'partially_used' | 'exhausted';
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PaymentInvoiceAllocation {

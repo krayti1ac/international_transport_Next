@@ -548,6 +548,221 @@ describe('FIFO Payment Allocation & Realized Forex Engine', () => {
       expect(preview.allocations[0].remainingDue).toBe(300);
       expect(preview.allocations[0].newStatus).toBe('partially_paid');
     });
+
+    it('should generate unallocatedCredit and creditNotePayload on overpayment in calculateFIFOAllocation', () => {
+      const invoices: FIFOInvoiceInput[] = [
+        {
+          id: 1,
+          invoice_number: 'INV-1',
+          total_amount: 3000,
+          paid_amount: 0,
+          status: 'unpaid',
+          issue_date: '2026-04-01',
+          currency: 'MAD',
+        },
+      ];
+
+      const result = calculateFIFOAllocation(invoices, 5000);
+      expect(result.totalAllocated).toBe(3000);
+      expect(result.unallocatedCredit).toBe(2000);
+      expect(result.creditNotePayload).toBeDefined();
+      expect(result.creditNotePayload?.amount).toBe(2000);
+      expect(result.creditNotePayload?.currency).toBe('MAD');
+    });
+
+    it('should record unallocated credit in payments and client_credit_balances on overpayment in processFIFOPayment', async () => {
+      const mockInvoices = [
+        {
+          id: 50,
+          invoice_number: 'INV-50',
+          total_amount: 4000,
+          paid_amount: 0,
+          status: 'unpaid',
+          issue_date: '2026-05-01',
+          currency: 'MAD',
+        },
+      ];
+
+      const insertedPayment = { id: 888 };
+      const insertedCreditBalance = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: 777 }, error: null }),
+        }),
+      });
+      const insertedPaymentMock = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: insertedPayment, error: null }),
+        }),
+      });
+      const insertedTreasury = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: 999 }, error: null }),
+        }),
+      });
+
+      const mockSupabase = {
+        from: vi.fn((table: string) => {
+          switch (table) {
+            case 'invoices':
+              return {
+                select: vi.fn().mockReturnValue({
+                  or: vi.fn().mockReturnValue({
+                    in: vi.fn().mockReturnValue({
+                      order: vi.fn().mockReturnValue({
+                        order: vi.fn().mockResolvedValue({ data: mockInvoices, error: null }),
+                      }),
+                    }),
+                  }),
+                }),
+                update: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockResolvedValue({ error: null }),
+                }),
+              };
+            case 'payments':
+              return {
+                insert: insertedPaymentMock,
+              };
+            case 'client_credit_balances':
+              return {
+                insert: insertedCreditBalance,
+              };
+            case 'payment_invoice_allocations':
+              return {
+                insert: vi.fn().mockResolvedValue({ error: null }),
+              };
+            case 'treasury_transactions':
+              return {
+                insert: insertedTreasury,
+              };
+            default:
+              return {};
+          }
+        }),
+      } as any;
+
+      const result = await processFIFOPayment(mockSupabase, {
+        clientId: 12,
+        amount: 6000, // 4000 due + 2000 overpayment
+        currency: 'MAD',
+        paymentMethod: 'bank_transfer',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.totalAllocated).toBe(4000);
+      expect(result.unallocatedCredit).toBe(2000);
+      expect(result.creditBalanceId).toBe(777);
+
+      // Verify payments table got unallocated_amount: 2000
+      expect(insertedPaymentMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_id: 12,
+          amount: 6000,
+          unallocated_amount: 2000,
+        })
+      );
+
+      // Verify client_credit_balances got created
+      expect(insertedCreditBalance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_id: 12,
+          payment_id: 888,
+          amount: 2000,
+          remaining_amount: 2000,
+          status: 'active',
+        })
+      );
+    });
+
+    it('should record dual treasury transaction for forex loss when settlement rate is lower', async () => {
+      const mockInvoices = [
+        {
+          id: 60,
+          invoice_number: 'INV-EUR-LOSS',
+          total_amount: 1000,
+          paid_amount: 0,
+          status: 'unpaid',
+          issue_date: '2026-06-01',
+          currency: 'EUR',
+          exchange_rate: 10.90,
+        },
+      ];
+
+      const insertedPayment = { id: 991 };
+      const insertedTreasury = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: 555 }, error: null }),
+        }),
+      });
+
+      const mockSupabase = {
+        from: vi.fn((table: string) => {
+          switch (table) {
+            case 'invoices':
+              return {
+                select: vi.fn().mockReturnValue({
+                  or: vi.fn().mockReturnValue({
+                    in: vi.fn().mockReturnValue({
+                      order: vi.fn().mockReturnValue({
+                        order: vi.fn().mockResolvedValue({ data: mockInvoices, error: null }),
+                      }),
+                    }),
+                  }),
+                }),
+                update: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockResolvedValue({ error: null }),
+                }),
+              };
+            case 'payments':
+              return {
+                insert: vi.fn().mockReturnValue({
+                  select: vi.fn().mockReturnValue({
+                    single: vi.fn().mockResolvedValue({ data: insertedPayment, error: null }),
+                  }),
+                }),
+              };
+            case 'payment_invoice_allocations':
+              return {
+                insert: vi.fn().mockResolvedValue({ error: null }),
+              };
+            case 'treasury_transactions':
+              return {
+                insert: insertedTreasury,
+              };
+            case 'forex_gain_loss_entries':
+              return {
+                insert: vi.fn().mockReturnValue({
+                  select: vi.fn().mockReturnValue({
+                    single: vi.fn().mockResolvedValue({ data: { id: 333 }, error: null }),
+                  }),
+                }),
+              };
+            default:
+              return {};
+          }
+        }),
+      } as any;
+
+      const result = await processFIFOPayment(mockSupabase, {
+        clientId: 20,
+        amount: 1000,
+        currency: 'EUR',
+        paymentMethod: 'bank_transfer',
+        settlementRate: 10.70, // Loss: 1000 * (10.70 - 10.90) = -200 MAD
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.forexEntries?.[0].type).toBe('loss');
+      expect(result.forexEntries?.[0].amount).toBe(200);
+
+      // Verify dual entry in treasury_transactions for forex_loss
+      expect(insertedTreasury).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'forex_loss',
+          amount: 200,
+          currency: 'MAD',
+        })
+      );
+    });
   });
 });
 
