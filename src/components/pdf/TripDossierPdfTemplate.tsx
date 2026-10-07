@@ -596,13 +596,7 @@ export function TripDossierPdfTemplate({ data: d }: TripDossierPdfTemplateProps)
               </label>
               <p>
                 {t('رقم التصريح الجمركي (MRN):', 'Déclaration Douane (MRN) :', 'Declaración Aduanera (MRN) :')}{' '}
-                <strong style={{ fontFamily: 'monospace', color: '#1e3a8a' }}>
-                  {d.trip.cmr_export_number ? `MRN-MA-${d.trip.cmr_export_number}` : `MRN-MA-${d.trip.id.toString().padStart(6, '0')}-DUM`}
-                </strong>
-              </p>
-              <p className="sub">
-                {t('أختام الرصاص الجمركي (Scellés):', 'Scellés Douaniers Officiels :', 'Precintos Aduaneros Oficiales :')}{' '}
-                <strong style={{ fontFamily: 'monospace' }}>MA-DOUANE-{d.trip.id.toString().padStart(6, '0')}</strong>
+                {d.trip.cmr_export_number || d.trip.cmr_number || 'N/A'}
               </p>
               <p className="sub">
                 CMR {t('ذهاب:', 'Aller :', 'Ida :')}{' '}
@@ -613,9 +607,9 @@ export function TripDossierPdfTemplate({ data: d }: TripDossierPdfTemplateProps)
               </p>
               <p className="sub" style={{ color: '#059669', fontSize: '10px' }}>
                 {t(
-                  '✓ وثيقة النقل e-CMR موثقة ومطابقة لتصاريح PortNet / IRU TIR-EPD المعتمدة',
-                  '✓ Document e-CMR authentifié et conforme aux préavis PortNet / TIR-EPD',
-                  '✓ Documento e-CMR autenticado y conforme a preavisos PortNet / TIR-EPD'
+                  '✓ وثيقة النقل e-CMR موثقة ومربوطة رقمياً',
+                  '✓ Document e-CMR authentifié et lié numériquement',
+                  '✓ Documento e-CMR autenticado y vinculado digitalmente'
                 )}
               </p>
             </div>

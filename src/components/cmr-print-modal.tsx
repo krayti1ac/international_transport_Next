@@ -3,22 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
-import {
-  Printer,
-  X,
-  PlaneTakeoff,
-  PlaneLanding,
-  ExternalLink,
-  FileText,
-  ShieldCheck,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
+import { Printer, X, PlaneTakeoff, PlaneLanding, ExternalLink, FileText } from 'lucide-react';
 import type { TripOrder, Client, Driver, Truck, Trailer } from '@/types/database';
 import { generateCMRQrCodeBase64, buildCMRVerificationUrl } from '@/lib/cmr-qr';
 import { useLanguage } from '@/components/language-provider';
 import { CmrQrCode } from '@/components/cmr-qr-code';
-import { getTripCustomsData } from '@/features/customs/services/customs-gateway.actions';
 
 interface CMRModalProps {
   isOpen: boolean;
@@ -30,17 +19,6 @@ interface CMRModalProps {
   truck?: Truck;
   trailer?: Trailer;
   defaultType?: 'export' | 'import';
-}
-
-interface CustomsSummary {
-  mrnNumber: string;
-  sealNumber: string;
-  bookingRef: string;
-  ferryCompany: string;
-  departureOffice: string;
-  entryOffice: string;
-  gateway: string;
-  status: string;
 }
 
 export function CMRPrintModal({
@@ -55,8 +33,6 @@ export function CMRPrintModal({
   defaultType = 'export',
 }: CMRModalProps) {
   const [cmrType, setCmrType] = useState<'export' | 'import'>(defaultType);
-  const [hidePrice, setHidePrice] = useState(false);
-  const [customsData, setCustomsData] = useState<CustomsSummary | null>(null);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [qrCodeBase64, setQrCodeBase64] = useState<string>('');
   const { t, dir, locale } = useLanguage();
@@ -72,24 +48,6 @@ export function CMRPrintModal({
   useEffect(() => {
     if (isOpen && trip?.id) {
       generateCMRQrCodeBase64(trackingUrl).then(setQrCodeBase64);
-
-      // Asynchronously fetch active customs clearance details
-      getTripCustomsData(trip.id)
-        .then((res) => {
-          if (res.success && res.portNet) {
-            setCustomsData({
-              mrnNumber: res.portNet.mrnNumber,
-              sealNumber: res.portNet.customsSealNumber,
-              bookingRef: res.portNet.bookingReference,
-              ferryCompany: res.portNet.ferryCompany,
-              departureOffice: res.portNet.portOfDeparture,
-              entryOffice: res.portNet.portOfArrival,
-              gateway: 'PortNet (Tanger Med)',
-              status: res.readiness?.isReadyForPortNet ? 'VALIDÉ' : 'DÉCLARÉ',
-            });
-          }
-        })
-        .catch(() => {});
     }
   }, [isOpen, trip?.id, trackingUrl]);
 
@@ -101,35 +59,17 @@ export function CMRPrintModal({
 
   const isExport = cmrType === 'export';
   const cmrDocNumber = isExport
-    ? trip.cmr_export_number || trip.cmr_number || `CMR-EXP-${trip.id.toString().padStart(5, '0')}`
-    : trip.cmr_import_number || `CMR-IMP-${trip.id.toString().padStart(5, '0')}`;
+    ? (trip.cmr_export_number || trip.cmr_number || `CMR-EXP-${trip.id.toString().padStart(5, '0')}`)
+    : (trip.cmr_import_number || `CMR-IMP-${trip.id.toString().padStart(5, '0')}`);
 
-  const activeClient = isExport ? client : clientImport || client;
-  const activeRoute = isExport ? trip.route_export || trip.route : trip.route_import || trip.route;
-  const activeUnloadingDate = isExport
-    ? trip.unloading_date_export || trip.departure_date
-    : trip.unloading_date_import || trip.loading_date_import || trip.departure_date;
-  const activeFerry = isExport
-    ? customsData?.ferryCompany || trip.ferry_company || 'Tanger Med / Algeciras'
-    : trip.ferry_company_import || 'Algeciras / Tanger Med';
-  const activeLocalizador = isExport
-    ? customsData?.bookingRef || trip.ferry_localizador
-    : trip.ferry_localizador_import;
-  const activeGoods = isExport
-    ? trip.goods_description_export || 'General Freight Cargo'
-    : trip.goods_description_import || 'Industrial Goods & Supplies';
+  const activeClient = isExport ? client : (clientImport || client);
+  const activeRoute = isExport ? (trip.route_export || trip.route) : (trip.route_import || trip.route);
+  const activeUnloadingDate = isExport ? (trip.unloading_date_export || trip.departure_date) : (trip.unloading_date_import || trip.loading_date_import || trip.departure_date);
+  const activeFerry = isExport ? (trip.ferry_company || 'Tanger Med / Algeciras') : (trip.ferry_company_import || 'Algeciras / Tanger Med');
+  const activeLocalizador = isExport ? trip.ferry_localizador : trip.ferry_localizador_import;
+  const activeGoods = isExport ? (trip.goods_description_export || 'General Freight Cargo') : (trip.goods_description_import || 'Industrial Goods & Supplies');
   const activeWeight = isExport ? trip.weight_export : trip.weight_import;
-  const activePrice = isExport ? trip.price_export || trip.price : trip.price_import || 0;
-
-  // Official Customs references
-  const mrnDisplay =
-    customsData?.mrnNumber ||
-    (trip.cmr_export_number
-      ? `MRN-MA-${trip.cmr_export_number}`
-      : `MRN-MA-${trip.id.toString().padStart(6, '0')}-DUM`);
-  const sealDisplay =
-    customsData?.sealNumber || `MA-DOUANE-${trip.id.toString().padStart(6, '0')}`;
-  const localizadorDisplay = activeLocalizador || 'LOC-TM-PENDING';
+  const activePrice = isExport ? (trip.price_export || trip.price) : (trip.price_import || 0);
 
   return (
     <div
@@ -165,27 +105,6 @@ export function CMRPrintModal({
               </button>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setHidePrice(!hidePrice)}
-              className={`text-xs gap-1.5 font-bold ${
-                hidePrice
-                  ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-              title={t(
-                'إخفاء السعر في النسخة المطبوعة لسرية الشحن الجمركي',
-                'Masquer le montant fret pour confidentialité douanière',
-                'Ocultar el precio para confidencialidad aduanera'
-              )}
-            >
-              {hidePrice ? <EyeOff className="w-3.5 h-3.5 text-amber-600" /> : <Eye className="w-3.5 h-3.5" />}
-              {hidePrice
-                ? t('السعر: مخفي (سري)', 'Prix: Masqué', 'Precio: Oculto')
-                : t('السعر: معلن', 'Prix: Déclaré', 'Precio: Declarado')}
-            </Button>
-
             <Button onClick={handlePrint} className={`flex items-center gap-2 ${dir === 'rtl' ? 'mr-2' : 'ml-2'}`}>
               <Printer className="w-4 h-4" />
               {t('طباعة / تصدير PDF', 'Imprimer / Exporter PDF', 'Imprimir / Exportar PDF')}
@@ -218,7 +137,6 @@ export function CMRPrintModal({
         {/* Printable Area */}
         <div className="p-6 overflow-y-auto print:p-0 print:overflow-visible" ref={printAreaRef} data-print-p-0 data-print-overflow-visible>
           <div className="border-2 border-slate-900 p-4 text-xs leading-relaxed font-sans" dir="ltr">
-            {/* Header */}
             <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -227,23 +145,19 @@ export function CMRPrintModal({
                     {isExport ? 'EXPORT / ALLER' : 'IMPORT / RETOUR'}
                   </span>
                 </div>
-                <p className="text-sm font-bold text-slate-700">LETTRE DE VOITURE INTERNATIONALE (e-CMR)</p>
+                <p className="text-sm font-bold text-slate-700">LETTRE DE VOITURE INTERNATIONALE (CMR)</p>
               </div>
               
               <div className="flex items-center gap-3">
                 <CmrQrCode tripId={trip.id} size={76} />
                 <div className="text-right">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase">CMR Document N°</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase">CMR Document N°</p>
                   <p className="text-base font-mono font-black text-slate-900">{cmrDocNumber}</p>
-                  <p className="text-[10px] text-slate-700 font-mono font-bold mt-0.5">
-                    MRN: <span className="text-indigo-700">{mrnDisplay}</span>
-                  </p>
-                  <p className="text-[9px] text-slate-500 font-mono">SEAL: {sealDisplay}</p>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">TRIP REF: #{trip.id}</p>
                 </div>
               </div>
             </div>
 
-            {/* Boxes 1 & 2: Sender & Consignee */}
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div className="border border-slate-800 p-2 min-h-[90px]">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">1. Sender / Expéditeur</span>
@@ -251,7 +165,7 @@ export function CMRPrintModal({
                   <>
                     <p className="font-bold mt-1">TRANS BODANON INTERNATIONAL LOGISTICS</p>
                     <p className="text-slate-600">Headquarters - Tanger Med, Morocco</p>
-                    <p className="text-slate-600">ICE: 001928374650001 | contact@transbodanon.com</p>
+                    <p className="text-slate-600">contact@transbodanon.com</p>
                   </>
                 ) : (
                   <>
@@ -268,7 +182,7 @@ export function CMRPrintModal({
                   <>
                     <p className="font-bold mt-1">{activeClient?.name || 'European Consignee'}</p>
                     <p className="text-slate-600">{activeClient?.address || activeClient?.city || 'Delivery Address'}</p>
-                    <p className="text-slate-600">ICE: {activeClient?.ice || 'N/A'}</p>
+                    <p className="text-slate-600">ICE / VAT: {activeClient?.ice || 'N/A'}</p>
                   </>
                 ) : (
                   <>
@@ -280,7 +194,6 @@ export function CMRPrintModal({
               </div>
             </div>
 
-            {/* Boxes 3 & 4: Places of Delivery & Taking Over */}
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div className="border border-slate-800 p-2">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">3. Place of Delivery / Lieu de livraison</span>
@@ -290,29 +203,25 @@ export function CMRPrintModal({
 
               <div className="border border-slate-800 p-2">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">4. Place & Date / Prise en charge</span>
-                <p className="font-semibold mt-1">Date: {isExport ? trip.departure_date : trip.loading_date_import || trip.departure_date}</p>
+                <p className="font-semibold mt-1">Date: {isExport ? trip.departure_date : (trip.loading_date_import || trip.departure_date)}</p>
                 <p className="text-slate-600">Transit Hub: {activeFerry}</p>
               </div>
             </div>
 
-            {/* Boxes 5 & 6: Carrier, Equipment & Ferry */}
             <div className="grid grid-cols-3 gap-2 mb-2">
               <div className="border border-slate-800 p-2 col-span-2">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">5. Carrier / Transporteur & Driver</span>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <div>
                     <p><span className="font-medium">Driver:</span> {driver?.name || 'Assigned Driver'}</p>
-                    <p><span className="font-medium">Passport/CIN:</span> {(driver as any)?.passport_number || driver?.cin || driver?.license || 'N/A'}</p>
+                    <p><span className="font-medium">License:</span> {driver?.license || 'N/A'}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-xs">Tractor:</span>
+                      <span className="font-medium text-xs">Truck Plate:</span>
                       <MatriculeBadge plate={truck?.plate_number} variant="print" />
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="font-medium text-xs">Trailer:</span>
-                      <span className="font-mono font-bold">{trailer?.plate_number || 'REM-STANDARD'}</span>
-                    </div>
+                    <p className="mt-0.5"><span className="font-medium">Model:</span> {truck?.model || 'Heavy Cargo'}</p>
                   </div>
                 </div>
               </div>
@@ -320,53 +229,19 @@ export function CMRPrintModal({
               <div className="border border-slate-800 p-2 col-span-1">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">6. Ferry / Transit Maritime</span>
                 <p className="font-semibold mt-1">{activeFerry}</p>
-                <p className="text-slate-800 font-mono font-bold">Localizador: {localizadorDisplay}</p>
+                <p className="text-slate-600">Localizador: {activeLocalizador || 'N/A'}</p>
               </div>
             </div>
 
-            {/* Official Box 18 & 19: Customs Clearance, Seals & Regulatory Gateway */}
-            <div className="border-2 border-slate-800 p-2.5 mb-2 bg-slate-50/70">
-              <div className="flex items-center justify-between border-b border-slate-300 pb-1 mb-1.5">
-                <span className="font-bold text-[10px] text-slate-800 uppercase flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 inline-block" />
-                  18-19. Customs Clearance, Official Seals & Port Transit (PortNet / IRU TIR-EPD)
-                </span>
-                <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  {customsData?.gateway ? `${customsData.gateway} • ${customsData.status}` : 'PORTNET PASS PORTUAIRE • CERTIFIÉ'}
-                </span>
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-[11px]">
-                <div>
-                  <span className="font-bold text-[9px] text-slate-500 uppercase block">Movement Ref (MRN / DUM):</span>
-                  <span className="font-mono font-bold text-slate-900 block truncate">{mrnDisplay}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-[9px] text-slate-500 uppercase block">Customs Seal (Scellé N°):</span>
-                  <span className="font-mono font-bold text-slate-900 block truncate">{sealDisplay}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-[9px] text-slate-500 uppercase block">Ferry Booking (Localizador):</span>
-                  <span className="font-mono font-bold text-indigo-700 block truncate">{localizadorDisplay}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-[9px] text-slate-500 uppercase block">Customs Corridor / Port:</span>
-                  <span className="font-semibold text-slate-800 block truncate">
-                    {isExport ? 'MA003100 Tanger Med ➔ ES001100' : 'ES001100 ➔ MA003100 Tanger Med'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Box 7: Goods Description & Weights */}
-            <div className="border border-slate-800 p-3 mb-2 min-h-[95px]">
+            <div className="border border-slate-800 p-3 mb-2 min-h-[110px]">
               <span className="font-bold text-[10px] text-slate-500 uppercase block">7. Goods / Marchandises transportées</span>
               <table className="w-full text-left mt-2 border-collapse">
                 <thead>
                   <tr className="border-b border-slate-300 text-slate-600">
                     <th className="pb-1">Nature of Cargo</th>
                     <th className="pb-1">Trip Leg</th>
-                    <th className="pb-1">Gross Weight</th>
-                    <th className="pb-1">Declared Value</th>
+                    <th className="pb-1">Weight</th>
+                    <th className="pb-1">Declared Price</th>
                     <th className="pb-1">Status</th>
                   </tr>
                 </thead>
@@ -374,23 +249,14 @@ export function CMRPrintModal({
                   <tr className="font-medium">
                     <td className="py-2">{activeGoods}</td>
                     <td className="py-2 uppercase font-bold text-slate-700">{isExport ? 'Outbound (Aller)' : 'Inbound (Retour)'}</td>
-                    <td className="py-2 font-mono font-bold">{activeWeight ? `${activeWeight} Tons` : 'Standard'}</td>
-                    <td className="py-2 font-mono">
-                      {hidePrice ? (
-                        <span className="text-[10px] text-slate-500 italic font-normal">
-                          Non Déclaré (Exemplaire Réglementaire)
-                        </span>
-                      ) : (
-                        `${activePrice.toLocaleString()} ${trip.price_type || 'MAD'}`
-                      )}
-                    </td>
+                    <td className="py-2">{activeWeight ? `${activeWeight} Tons` : 'Standard'}</td>
+                    <td className="py-2">{activePrice.toLocaleString()} {trip.price_type || 'MAD'}</td>
                     <td className="py-2 capitalize">{trip.status}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* Boxes 20-22: Signatures & Stamps */}
             <div className="grid grid-cols-3 gap-2 border border-slate-800 p-2 min-h-[110px]">
               <div className="border-r border-slate-300 pr-2">
                 <span className="font-bold text-[10px] text-slate-500 uppercase block">Sender Signature & Stamp</span>

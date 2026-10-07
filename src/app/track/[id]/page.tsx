@@ -49,12 +49,6 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
   const [deliverySignature, setDeliverySignature] = useState<DeliverySignature | null>(null);
   const [locations, setLocations] = useState<Map<number, TruckLocation[]>>(new Map());
   const [etaInfo, setEtaInfo] = useState<EtaResult | null>(null);
-  const [customsData, setCustomsData] = useState<{
-    mrnNumber?: string;
-    gateway?: string;
-    status?: string;
-    submittedAt?: string;
-  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingPod, setLoadingPod] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -86,8 +80,8 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
 
         setTrip(tripData);
 
-        // Concurrently fetch truck, client, historical locations, POD signature, and customs clearance
-        const [truckRes, clientRes, locsRes, podRes, customsRes] = await Promise.all([
+        // Concurrently fetch truck, client, historical locations, and POD signature
+        const [truckRes, clientRes, locsRes, podRes] = await Promise.all([
           tripData.truck_id
             ? supabase.from('trucks').select('*').eq('id', tripData.truck_id).single()
             : Promise.resolve({ data: null }),
@@ -107,32 +101,11 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
             .select('*')
             .eq('trip_order_id', tripId)
             .maybeSingle(),
-          (async () => {
-            try {
-              return await supabase
-                .from('customs_submissions')
-                .select('mrn_number, gateway, status, submitted_at')
-                .eq('trip_id', tripId)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            } catch {
-              return { data: null };
-            }
-          })(),
         ]);
 
         if (truckRes.data) setTruck(truckRes.data as Truck);
         if (clientRes.data) setClient(clientRes.data as unknown as Client);
         if (podRes.data) setDeliverySignature(podRes.data as DeliverySignature);
-        if (customsRes?.data) {
-          setCustomsData({
-            mrnNumber: customsRes.data.mrn_number || undefined,
-            gateway: customsRes.data.gateway === 'portnet' ? 'PortNet (Tanger Med)' : 'IRU TIR-EPD',
-            status: customsRes.data.status,
-            submittedAt: customsRes.data.submitted_at,
-          });
-        }
 
         if (tripData.truck_id && locsRes.data) {
           const locMap = new Map<number, TruckLocation[]>();
@@ -406,45 +379,6 @@ export default function PublicClientTrackingPage({ params }: { params: Promise<{
           temperature={latestLoc?.frigo_temperature}
           cargoDescription={trip.goods_description_export}
         />
-
-        {/* Customs & Port Transit Gate Pass Strip (100% Free of Sensitive Financials) */}
-        <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 shadow-2xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-600 text-white">
-                    {customsData?.gateway || t('معبر طنجة المتوسط الجمركي', 'Transit Tanger Med', 'Tránsito Tánger Med')}
-                  </span>
-                  <span className="text-xs font-mono font-bold text-foreground">
-                    MRN: <span className="text-emerald-700 dark:text-emerald-300">{customsData?.mrnNumber || (trip.cmr_export_number ? `MRN-MA-${trip.cmr_export_number}` : `MRN-MA-${trip.id}-DUM`)}</span>
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t(
-                    'تصريح المرور الجمركي المسبق معتمد ومطابق لأختام الشحن الدولية (e-CMR & TIR)',
-                    'Préavis douanier validé et conforme aux scellés officiels (e-CMR & TIR)',
-                    'Preaviso aduanero validado y conforme con precintos oficiales (e-CMR & TIR)'
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto text-xs font-mono flex-wrap">
-              <span className="px-2.5 py-1 rounded-lg bg-background border border-border text-foreground font-semibold">
-                🔒 {t('الختم:', 'Scellé :', 'Precinto :')} <span className="text-primary font-bold">MA-DOUANE-{trip.id.toString().padStart(6, '0')}</span>
-              </span>
-              {trip.ferry_localizador && (
-                <span className="px-2.5 py-1 rounded-lg bg-background border border-border text-indigo-600 dark:text-indigo-400 font-bold">
-                  🎫 {trip.ferry_localizador}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* 3. Operational Specs Strip (Completely Free of Sensitive Financials) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

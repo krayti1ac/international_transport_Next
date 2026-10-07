@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
+import { autoGenerateInvoiceForTrip } from '@/features/invoices/services/auto-invoicing.service';
 
 export async function submitProofOfDelivery(input: {
   tripOrderId: number;
@@ -120,6 +121,11 @@ export async function submitProofOfDelivery(input: {
       signatureUrl,
       cmrUrl,
     }).catch((notifyErr) => console.warn('Notification trigger error:', notifyErr));
+
+    // Automated Invoicing Engine Hook upon Proof of Delivery
+    autoGenerateInvoiceForTrip(input.tripOrderId, { triggerEvent: 'delivered' }).catch((invErr) =>
+      console.warn('[Auto-Invoicing Hook] POD invoice generation warning:', invErr)
+    );
 
     return { success: true, signatureUrl, cmrUrl };
   } catch (error) {
