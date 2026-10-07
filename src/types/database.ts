@@ -981,3 +981,33 @@ export interface BookingRequest {
   updated_at: string;
 }
 
+export type CustomsGatewayType = 'portnet' | 'tir_epd' | 'badr';
+export type CustomsSubmissionDbStatus =
+  | 'draft'
+  | 'submitting'
+  | 'submitted'
+  | 'accepted'
+  | 'rejected'
+  | 'pending'
+  | 'failed';
+
+export interface CustomsSubmission {
+  id: number;
+  company_id?: number | null;
+  trip_id: number;
+  gateway: CustomsGatewayType;
+  idempotency_key: string;
+  reference_number: string;
+  mrn_number?: string | null;
+  barcode_url?: string | null;
+  status: CustomsSubmissionDbStatus;
+  payload_xml?: string | null;
+  response_payload?: unknown | null;
+  error_message?: string | null;
+  mode: 'sandbox' | 'production';
+  submitted_at: string;
+  accepted_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+

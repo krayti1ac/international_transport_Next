@@ -227,57 +227,17 @@ export async function pushDirectCustomsApiDeclaration(
   targetGateway: 'portnet' | 'tir_epd' = 'portnet'
 ) {
   try {
-    const supabase = await createClient();
-    const { data: trip } = await supabase
-      .from('trip_orders')
-      .select(`
-        *,
-        truck:trucks(id, plate_number),
-        trailer:trailers(id, plate_number),
-        driver:drivers(id, name, passport_number, cin),
-        client:clients!trip_orders_client_id_fkey(id, name, ice),
-        client_import:clients!trip_orders_client_import_id_fkey(id, name, ice)
-      `)
-      .eq('id', tripId)
-      .maybeSingle();
-
-    const {
-      submitToPortNetApi,
-      submitToTirEpdApi,
-      buildTirEpdPayloadFromTrip,
-    } = await import('./customs-api-adapter.service');
-
-    let response;
-
-    if (targetGateway === 'portnet') {
-      const payloadRes = await exportTripToPortNetPayload(tripId);
-      if (!payloadRes.success || !payloadRes.data) {
-        throw new Error(payloadRes.error || 'تعذر تجهيز بيانات الشحنة لـ PortNet');
-      }
-      response = await submitToPortNetApi(payloadRes.data);
-    } else {
-      const tirPayload = buildTirEpdPayloadFromTrip(trip || { id: tripId });
-      response = await submitToTirEpdApi(tirPayload);
-    }
-
-    // Record audit log
-    await recordAuditLog({
-      entityType: 'customs_declaration',
-      entityId: tripId,
-      actionType: 'customs_push',
-      reason: `إرسال تصريح جمركي مباشر عبر API إلى ${targetGateway.toUpperCase()} (${response.mode}) - النتيجة: ${response.status}`,
-      newData: {
-        gateway: targetGateway,
-        mode: response.mode,
-        referenceNumber: response.referenceNumber,
-        customsRegistrationNumber: response.customsRegistrationNumber,
-        barcode: response.barcode,
-      },
-    });
+    const { submitCustomsDeclaration } = await import('./customs-submission.service');
+    const result = await submitCustomsDeclaration(tripId, targetGateway);
 
     return {
-      success: response.success,
-      data: response,
+      success: result.success,
+      data: {
+        ...result,
+        customsRegistrationNumber: result.mrnNumber,
+        barcode: result.barcodeUrl,
+      },
+      error: result.error,
     };
   } catch (err: unknown) {
     const errorMsg =

@@ -57,5 +57,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20261008_phase1_security_device_authorizations.sql` — Phase 1: Security Hardening, Device Binding Authorizations View, Multi-Tenant JWT Claims Isolation, and Enhanced RLS Enforcement (`device_authorizations` view, `current_company_id`, RLS policies).
 - `supabase/migrations/20261009_african_trade_corridor_expansion.sql` — African Overland Trade Corridor Expansion (Mauritania, Senegal, Guerguerat Geofence, Driver African Visas, and Multi-Corridor Architecture).
 - `supabase/migrations/20261011_client_portal_and_booking_requests.sql` — Client Portal & Self-Service Booking System for Exporters (`booking_requests` table, RLS policies, `users.client_id`).
+- `supabase/migrations/202610120001_create_driver_push_subscriptions.sql` — Web Push Notification Subscriptions for Drivers & Fleet Managers (`driver_push_subscriptions` table).
+- `supabase/migrations/202610130001_fifo_overpayment_and_credit_balances.sql` — FIFO Overpayment & Client Credit Balances Engine (`client_credit_balances` table, `payments.unallocated_amount`).
+- `supabase/migrations/202610140001_customs_submissions.sql` — Phase 5 / Epic 5: International Customs & Port Gateways (`customs_submissions` table, PortNet & IRU TIR-EPD, Idempotency & MRN tracking).
 
 
