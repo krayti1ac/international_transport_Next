@@ -52,3 +52,4 @@ CREATE POLICY "staff_manage_customs_submissions" ON public.customs_submissions
             )
         )
     );
+

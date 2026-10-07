@@ -139,3 +139,4 @@ export interface CustomsSubmissionRecord {
   created_at: string;
   updated_at: string;
 }
+
