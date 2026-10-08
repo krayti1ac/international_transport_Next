@@ -118,3 +118,4 @@ export interface SmartAutoReconcileResult {
   totalForexImpact: string;
   error?: string;
 }
+
