@@ -167,3 +167,4 @@ export interface VerificationResult {
   biometricStamp?: BiometricEpodStamp;
   newCounter?: number;
 }
+

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ReeferColdChainMatrix } from './ReeferColdChainMatrix';
 import { IncidentCenterDrawer } from './IncidentCenterDrawer';
+import { LogisticsCopilotCard } from '@/features/predictive/components/LogisticsCopilotCard';
 import {
   getMissionControlDataAction,
   dispatchIncidentEmergencyAlertAction,
@@ -32,6 +33,7 @@ import {
   Send,
   Loader2,
   X,
+  Bot,
 } from 'lucide-react';
 
 const MissionControlRadarMap = dynamic(
@@ -63,7 +65,7 @@ export function MissionControlView() {
   const [corridorFilter, setCorridorFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [tileTheme, setTileTheme] = useState<'dark' | 'satellite' | 'streets'>('dark');
-  const [rightPanelTab, setRightPanelTab] = useState<'reefers' | 'incidents'>('reefers');
+  const [rightPanelTab, setRightPanelTab] = useState<'copilot' | 'reefers' | 'incidents'>('copilot');
 
   // Emergency Modal State
   const [emergencyAsset, setEmergencyAsset] = useState<TelematicsTelemetry | null>(null);
@@ -403,15 +405,27 @@ export function MissionControlView() {
           {/* Panel Selector Tabs */}
           <div className="flex rounded-xl bg-muted/60 p-1 border border-border/60">
             <button
+              onClick={() => setRightPanelTab('copilot')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                rightPanelTab === 'copilot'
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5 text-indigo-500" />
+              <span>{t('المساعد الذكي', 'IA Copilot', 'Copiloto IA')}</span>
+            </button>
+
+            <button
               onClick={() => setRightPanelTab('reefers')}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                 rightPanelTab === 'reefers'
                   ? 'bg-card text-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Snowflake className="w-3.5 h-3.5 text-cyan-500" />
-              <span>{t('مصفوفة المبردات', 'Matrice Frigo')}</span>
+              <span>{t('مصفوفة المبردات', 'Matrice Frigo', 'Matriz Frigorífica')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-mono">
                 {filteredTelemetry.length}
               </span>
@@ -419,14 +433,14 @@ export function MissionControlView() {
 
             <button
               onClick={() => setRightPanelTab('incidents')}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                 rightPanelTab === 'incidents'
                   ? 'bg-card text-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
-              <span>{t('مركز الإنذارات الميدانية', 'Centre d’Alertes')}</span>
+              <span>{t('الإنذارات', 'Alertes', 'Alertas')}</span>
               {data && data.activeAlerts.length > 0 && (
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-mono animate-pulse">
                   {data.activeAlerts.length}
@@ -436,7 +450,14 @@ export function MissionControlView() {
           </div>
 
           {/* Panel Content */}
-          {rightPanelTab === 'reefers' ? (
+          {rightPanelTab === 'copilot' ? (
+            <LogisticsCopilotCard
+              onSelectTrip={(tripId) => {
+                const match = filteredTelemetry.find((t) => t.tripId === tripId);
+                if (match) setSelectedAsset(match);
+              }}
+            />
+          ) : rightPanelTab === 'reefers' ? (
             <ReeferColdChainMatrix
               telemetryList={filteredTelemetry}
               selectedAsset={selectedAsset}

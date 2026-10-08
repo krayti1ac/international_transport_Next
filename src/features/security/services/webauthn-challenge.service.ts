@@ -326,3 +326,4 @@ export function verifyDriverBiometricAssertion(params: {
     biometricStamp,
   };
 }
+

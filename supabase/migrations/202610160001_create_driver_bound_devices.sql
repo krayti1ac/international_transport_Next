@@ -125,3 +125,4 @@ CREATE POLICY "Drivers can read and use their own challenges"
   );
 
 COMMIT;
+
