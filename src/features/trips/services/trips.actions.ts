@@ -7,6 +7,7 @@ import { validateTripTransition } from './trip-state-machine';
 import { computeTruckTireWear } from '@/features/predictive/services/fleet-predictive.service';
 import { recordAuditLog } from '@/lib/audit.server';
 import { revalidatePath } from 'next/cache';
+import { autoGenerateInvoiceForTrip } from '@/features/invoices/services/auto-invoicing.service';
 import type { TripOrder, Driver, Truck, Trailer, DeliverySignature } from '@/types/database';
 
 export async function createTripOrder(data: Partial<TripOrder>) {
@@ -122,7 +123,15 @@ export async function updateTripStatus(tripId: number, newStatus: string) {
       console.warn('Status notification trigger error:', err)
     );
 
-    // 6. تسجيل حركة التدقيق الأمني
+    // 6. الربط المؤتمت مع محرك الفوترة الذكية (Automated Invoicing Engine Hook)
+    if (newStatus === 'customs_export' || newStatus === 'delivered' || newStatus === 'completed') {
+      const trigger = (newStatus === 'customs_export' ? 'customs_export' : 'delivered') as 'customs_export' | 'delivered';
+      autoGenerateInvoiceForTrip(tripId, { triggerEvent: trigger }).catch((invErr) =>
+        console.warn('[Auto-Invoicing Hook] Background invoice generation warning:', invErr)
+      );
+    }
+
+    // 7. تسجيل حركة التدقيق الأمني
     await recordAuditLog({
       entityType: 'trip_orders',
       entityId: tripId,
