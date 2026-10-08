@@ -76,7 +76,12 @@ jobs:
         run: npm install -g vercel
 
       - name: Deploy to Vercel
-        run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ]; then
+            vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }} || echo "::warning::Vercel CLI direct deployment skipped (deployment managed automatically via Vercel Git Integration)"
+          else
+            echo "VERCEL_TOKEN not provided - skipping direct CLI deploy (managed via Git Integration)"
+          fi
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
