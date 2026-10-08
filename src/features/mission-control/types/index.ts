@@ -1,4 +1,5 @@
 import type { InternationalCorridor } from '@/features/analytics/types/corridor.types';
+import type { ParsedFrigoIoTData } from '@/features/tracking/types/frigo-iot.types';
 
 export type CargoThermalProfile =
   | 'frozen_fish'
@@ -95,6 +96,7 @@ export interface TelematicsTelemetry {
   reeferEngineHours: number;
   reeferSdiScore: number; // 0 - 100
   reeferStatus: 'optimal' | 'service_due' | 'high_risk';
+  frigoIoT?: ParsedFrigoIoTData;
   // Geofence
   currentZoneId?: string;
   currentZoneName?: string;

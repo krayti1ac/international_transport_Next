@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { calculateDistance } from '@/lib/geofence';
 import { STRATEGIC_PORT_ZONES, type StrategicPortZone } from '@/features/tracking/services/port-geofence.constants';
 import { computeReeferHealth } from '@/features/predictive/services/fleet-predictive.service';
+import { parseFrigoTelemetryPacket } from '@/features/tracking/services/frigo-telematics-parser.service';
 import type { Truck, Trailer, TripOrder, Driver, TruckLocation } from '@/types/database';
 import type { RawTripOrderWithRelations } from '@/features/analytics/services/corridor-comparison.service';
 import {
@@ -258,6 +259,27 @@ export function buildSimulatedTelemetryList(
       ? computeReeferHealth(trailer, trip ? [trip as RawTripOrderWithRelations] : [], idx === 3 ? 2 : 0)
       : { healthScore: 92, status: 'optimal' as const, engineHours: 480 };
 
+    const reeferBrand = (trailer?.model || '').toLowerCase().includes('carrier') ? 'carrier' : 'thermo_king';
+    const frigoIoT = parseFrigoTelemetryPacket({
+      truckId: truck.id,
+      truckPlate: truck.plate_number,
+      trailerPlate: trailer?.plate_number || 'REM-1001-MA',
+      unitBrand: reeferBrand,
+      model: trailer?.model || 'Carrier Vector 1550 Multitemp',
+      currentTemp,
+      targetTemp,
+      ambientTemp: 26.5 + (idx * 2),
+      suctionPressureBar: idx === 3 ? 0.72 : 1.95,
+      dischargePressureBar: idx === 3 ? 8.9 : 16.5,
+      defrostActive: idx === 1,
+      defrostDurationMin: idx === 1 ? 38 : 0,
+      backupBatteryVdc: idx === 2 ? 11.5 : 12.6,
+      operatingMode: 'continuous',
+      doorOpen,
+      alarmCodes: idx === 3 ? ['AL_01'] : idx === 1 ? ['AL_64'] : [],
+      engineHours: reeferHealth.engineHours,
+    });
+
     return {
       truckId: truck.id,
       truckPlate: truck.plate_number,
@@ -288,8 +310,9 @@ export function buildSimulatedTelemetryList(
       doorOpen,
       doorBreachRisk,
       reeferEngineHours: reeferHealth.engineHours,
-      reeferSdiScore: reeferHealth.healthScore,
-      reeferStatus: reeferHealth.status,
+      reeferSdiScore: frigoIoT.sdiScore,
+      reeferStatus: frigoIoT.sdiStatus === 'critical' ? 'high_risk' : frigoIoT.sdiStatus === 'degraded' ? 'service_due' : 'optimal',
+      frigoIoT,
       currentZoneId: waypoint.zoneId,
       currentZoneName: waypoint.name,
     };
@@ -382,6 +405,18 @@ export async function fetchMissionControlData(): Promise<MissionControlDashboard
           ? computeReeferHealth(trailer, trip ? [trip as RawTripOrderWithRelations] : [], tempStatus === 'critical_drift' ? 1 : 0)
           : { healthScore: 90, status: 'optimal' as const, engineHours: 450 };
 
+        const liveFrigoIoT = parseFrigoTelemetryPacket({
+          truckId: truck.id,
+          truckPlate: truck.plate_number,
+          trailerPlate: trailer?.plate_number,
+          unitBrand: (trailer?.model || '').toLowerCase().includes('carrier') ? 'carrier' : 'thermo_king',
+          model: trailer?.model || 'Carrier Vector 1550',
+          currentTemp,
+          targetTemp,
+          doorOpen,
+          engineHours: reeferHealth.engineHours,
+        });
+
         return {
           truckId: truck.id,
           truckPlate: truck.plate_number,
@@ -412,8 +447,9 @@ export async function fetchMissionControlData(): Promise<MissionControlDashboard
           doorOpen,
           doorBreachRisk,
           reeferEngineHours: reeferHealth.engineHours,
-          reeferSdiScore: reeferHealth.healthScore,
-          reeferStatus: reeferHealth.status,
+          reeferSdiScore: liveFrigoIoT.sdiScore,
+          reeferStatus: liveFrigoIoT.sdiStatus === 'critical' ? 'high_risk' : liveFrigoIoT.sdiStatus === 'degraded' ? 'service_due' : 'optimal',
+          frigoIoT: liveFrigoIoT,
           currentZoneId: geofenceZone?.id,
           currentZoneName: geofenceZone?.name,
         } as TelematicsTelemetry;

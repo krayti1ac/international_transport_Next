@@ -723,3 +723,4 @@ export function CorridorPnlDashboardView({ initialData }: CorridorPnlDashboardVi
     </div>
   );
 }
+

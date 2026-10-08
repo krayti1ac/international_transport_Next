@@ -1,10 +1,12 @@
 'use client';
 
+import React, { useState } from 'react';
 import { useLanguage } from '@/components/language-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CARGO_THERMAL_PROFILES, type TelematicsTelemetry } from '../types';
+import { ReeferTelemetryCard } from '@/features/tracking/components/ReeferTelemetryCard';
 import {
   Snowflake,
   ShieldAlert,
@@ -17,6 +19,9 @@ import {
   AlertTriangle,
   Flame,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Wrench,
 } from 'lucide-react';
 
 interface ReeferColdChainMatrixProps {
@@ -33,6 +38,7 @@ export function ReeferColdChainMatrix({
   onTriggerEmergency,
 }: ReeferColdChainMatrixProps) {
   const { t, dir } = useLanguage();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   return (
     <div className="space-y-4" dir={dir}>
@@ -188,6 +194,27 @@ export function ReeferColdChainMatrix({
                   </span>
 
                   <div className="flex gap-1.5 shrink-0">
+                    {asset.frigoIoT && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[10px] px-2 gap-1 text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950"
+                        title={t('تشخيص تيليماتكس التبريد', 'Diagnostics Frigo IoT', 'Diagnóstico Frigo IoT')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedId(expandedId === asset.truckId ? null : asset.truckId);
+                        }}
+                      >
+                        <Wrench className="w-3 h-3" />
+                        <span>{t('تيليماتكس', 'IoT', 'IoT')}</span>
+                        {expandedId === asset.truckId ? (
+                          <ChevronUp className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )}
+                      </Button>
+                    )}
+
                     {asset.driverPhone && (
                       <Button
                         size="icon"
@@ -217,6 +244,13 @@ export function ReeferColdChainMatrix({
                     </Button>
                   </div>
                 </div>
+
+                {/* Expanded Frigo IoT Telematics Diagnostics Card */}
+                {(expandedId === asset.truckId || isSelected) && asset.frigoIoT && (
+                  <div className="pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <ReeferTelemetryCard iotData={asset.frigoIoT} compact />
+                  </div>
+                )}
               </CardContent>
             </Card>
           );

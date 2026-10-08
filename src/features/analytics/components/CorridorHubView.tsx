@@ -59,3 +59,4 @@ export function CorridorHubView({ pnlData, fuelData }: CorridorHubViewProps) {
     </div>
   );
 }
+

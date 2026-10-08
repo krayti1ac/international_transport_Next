@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { findMatchingZone, calculateDistance } from '@/lib/geofence';
 import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
 import { evaluateColdChainTemperatureDrift } from '@/features/predictive/services/cold-chain-monitor.service';
+import { parseFrigoTelemetryPacket } from '@/features/tracking/services/frigo-telematics-parser.service';
+import type { ParsedFrigoIoTData } from '@/features/tracking/types/frigo-iot.types';
 
 interface RawGPSPayload {
   plate_number?: string;
@@ -18,6 +20,20 @@ interface RawGPSPayload {
   heading?: number;
   course?: number;
   accuracy?: number;
+  // Frigo IoT & Telematics Attributes
+  suction_pressure?: number;
+  discharge_pressure?: number;
+  defrost?: boolean;
+  defrost_duration?: number;
+  defrost_coil_temp?: number;
+  battery_v?: number;
+  reefer_mode?: string;
+  unit_brand?: string;
+  model?: string;
+  target_temp?: number;
+  ambient_temp?: number;
+  alarm_codes?: string[] | string;
+  door_open?: boolean;
   device?: {
     id?: number;
     name?: string;
@@ -51,6 +67,7 @@ export interface NormalizedGPSData {
   frigoTemperature?: number | null;
   timestampMs: number;
   address?: string;
+  frigoIoT?: ParsedFrigoIoTData;
 }
 
 /**
@@ -88,6 +105,52 @@ export function normalizeGPSPayload(item: RawGPSPayload): NormalizedGPSData {
     timestampMs = typeof item.timestamp === 'number' ? item.timestamp : new Date(item.timestamp).getTime();
   }
 
+  // استخراج وتحليل حزم تيليماتكس مقطورة التبريد الموسعة (Carrier / Thermo King)
+  const rawSuction = typeof attrs.suction_pressure === 'number' ? attrs.suction_pressure : item.suction_pressure;
+  const rawDischarge = typeof attrs.discharge_pressure === 'number' ? attrs.discharge_pressure : item.discharge_pressure;
+  const rawDefrost = typeof attrs.defrost === 'boolean' ? attrs.defrost : item.defrost;
+  const rawDefrostDur = typeof attrs.defrost_duration === 'number' ? attrs.defrost_duration : item.defrost_duration;
+  const rawDefrostCoil = typeof attrs.defrost_coil_temp === 'number' ? attrs.defrost_coil_temp : item.defrost_coil_temp;
+  const rawBatteryV = typeof attrs.battery_v === 'number' ? attrs.battery_v : (typeof attrs.batteryVdc === 'number' ? attrs.batteryVdc : item.battery_v);
+  const rawReeferMode = (attrs.reefer_mode || attrs.operatingMode || item.reefer_mode) as string | undefined;
+  const rawUnitBrand = (attrs.unit_brand || attrs.brand || item.unit_brand) as string | undefined;
+  const rawModel = (attrs.model || item.model) as string | undefined;
+  const rawTargetTemp = typeof attrs.target_temp === 'number' ? attrs.target_temp : item.target_temp;
+  const rawAmbientTemp = typeof attrs.ambient_temp === 'number' ? attrs.ambient_temp : item.ambient_temp;
+  const rawAlarms = (attrs.alarm_codes || attrs.alarms || item.alarm_codes) as string[] | string | undefined;
+  const rawDoor = typeof attrs.door_open === 'boolean' ? attrs.door_open : (typeof attrs.door === 'boolean' ? attrs.door : item.door_open);
+
+  const hasFrigoIoT =
+    frigoTemperature !== null ||
+    rawSuction !== undefined ||
+    rawDischarge !== undefined ||
+    rawDefrost !== undefined ||
+    rawBatteryV !== undefined ||
+    rawAlarms !== undefined;
+
+  let frigoIoT: ParsedFrigoIoTData | undefined = undefined;
+  if (hasFrigoIoT) {
+    frigoIoT = parseFrigoTelemetryPacket({
+      truckId: item.truck_id,
+      truckPlate: item.plate_number || dev.name,
+      unitBrand: rawUnitBrand,
+      model: rawModel,
+      currentTemp: frigoTemperature !== null ? frigoTemperature : undefined,
+      targetTemp: rawTargetTemp,
+      ambientTemp: rawAmbientTemp,
+      suctionPressureBar: rawSuction,
+      dischargePressureBar: rawDischarge,
+      defrostActive: rawDefrost,
+      defrostDurationMin: rawDefrostDur,
+      defrostCoilTemp: rawDefrostCoil,
+      backupBatteryVdc: rawBatteryV,
+      operatingMode: rawReeferMode,
+      alarmCodes: rawAlarms,
+      doorOpen: rawDoor,
+      timestamp: timestampMs,
+    });
+  }
+
   return {
     truckId: item.truck_id,
     plateNumber: item.plate_number || dev.name,
@@ -102,6 +165,7 @@ export function normalizeGPSPayload(item: RawGPSPayload): NormalizedGPSData {
     frigoTemperature,
     timestampMs,
     address: item.address,
+    frigoIoT,
   };
 }
 
@@ -174,7 +238,7 @@ export async function POST(req: NextRequest) {
         })
       : await createClient();
 
-    const results: { success: boolean; truckId?: number; error?: string }[] = [];
+    const results: { success: boolean; truckId?: number; error?: string; frigoIoT?: ParsedFrigoIoTData }[] = [];
 
     for (const rawItem of rawData) {
       const norm = normalizeGPSPayload(rawItem);
@@ -291,7 +355,35 @@ export async function POST(req: NextRequest) {
         }).catch((driftErr) => console.warn('Cold chain drift evaluation error:', driftErr));
       }
 
-      results.push({ success: true, truckId });
+      // 7. معالجة مؤشرات وتنبيهات أجهزة Frigo IoT المتقدمة (Carrier / Thermo King)
+      if (norm.frigoIoT && norm.frigoIoT.anomalies.length > 0) {
+        const criticalAnomalies = norm.frigoIoT.anomalies.filter((a) => a.severity === 'critical');
+        if (criticalAnomalies.length > 0) {
+          try {
+            const { recordAuditLog } = await import('@/lib/audit.server');
+            await recordAuditLog({
+              entityType: 'cold_chain',
+              entityId: String(truckId),
+              actionType: 'security_alert',
+              reason: `إنذار حرج في دارة تبريد الشاحنة #${truckId} (${criticalAnomalies.map((a) => a.titleAr).join(' - ')})`,
+              newData: {
+                truckId,
+                sdiScore: norm.frigoIoT.sdiScore,
+                anomalies: criticalAnomalies,
+                pressures: {
+                  suction: norm.frigoIoT.suctionPressureBar,
+                  discharge: norm.frigoIoT.dischargePressureBar,
+                  ratio: norm.frigoIoT.compressionRatio,
+                },
+              },
+            });
+          } catch {
+            // Non-blocking
+          }
+        }
+      }
+
+      results.push({ success: true, truckId, frigoIoT: norm.frigoIoT });
     }
 
     const successCount = results.filter((r) => r.success).length;

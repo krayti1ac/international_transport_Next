@@ -105,3 +105,4 @@ export interface CorridorPnlFilter {
   truckId?: number;
   minCpkVariance?: number;
 }
+
