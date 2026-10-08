@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
       .from('delivery_signatures')
       .select('*')
       .eq('trip_order_id', tripOrderId)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (deliveryError) {
