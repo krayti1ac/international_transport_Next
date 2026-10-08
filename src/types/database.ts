@@ -263,6 +263,12 @@ export interface TripOrder {
   origin_branch_id?: number | null;
   destination_branch_id?: number | null;
   corridor_type?: 'european_maritime' | 'african_overland' | 'domestic';
+  customs_status?: string | null;
+  customs_mrn?: string | null;
+  customs_declaration_number?: string | null;
+  customs_channel?: 'GREEN' | 'ORANGE' | 'RED' | string | null;
+  customs_bae_number?: string | null;
+  customs_bae_date?: string | null;
 }
 
 export interface Trip {

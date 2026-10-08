@@ -23,7 +23,6 @@ import {
   Building2,
   FolderCog,
   TrendingUp,
-  Sparkles,
   Activity,
   Compass,
   Radio,
@@ -108,6 +107,14 @@ export const navigationGroups: SidebarGroup[] = [
         href: '/mission-control',
         icon: <Radio className="w-4 h-4 text-cyan-400" />,
         roles: ['admin', 'secretary', 'fleet_manager'],
+      },
+      {
+        title: 'الربط الجمركي والموانئ',
+        titleFr: 'Douane & PortNet (mTLS)',
+        titleEs: 'Aduana y PortNet (mTLS)',
+        href: '/customs',
+        icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />,
+        roles: ['admin', 'secretary', 'accountant', 'fleet_manager'],
       },
       {
         title: 'مخططات الرحلات',
