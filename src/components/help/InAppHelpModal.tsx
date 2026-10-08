@@ -100,6 +100,35 @@ const ROUTE_HELP_MAP: Record<string, ContextualHelp> = {
       ],
     },
   },
+  '/mission-control': {
+    title: {
+      ar: 'غرفة العمليات المركزية ورادار المبردات TIR',
+      fr: 'Mission Control & Radar Frigorifique TIR',
+      es: 'Centro de Control y Radar Frigorífico TIR',
+    },
+    description: {
+      ar: 'المتابعة الميدانية اللحظية لمواقع الشاحنات، حساسات درجات حرارة الحاويات، والسياج الجمركي.',
+      fr: 'Surveillance télématique en temps réel, capteurs thermiques des remorques et géorepérage portuaire.',
+      es: 'Monitoreo telemático en tiempo real, sensores térmicos de remolques y geocercas portuarias.',
+    },
+    tips: {
+      ar: [
+        'انقر على أي شاحنة في الخريطة أو المصفوفة لمشاهدة الانحراف الحراري المباشر وحالة حساس الباب.',
+        'يمكن بث إنذار طوارئ فوري عبر WhatsApp للسائق وغرفة العمليات عند رصد أي خطر.',
+        'تضيء الدوائر السماوية عند دخول الشاحنات نطاق الموانئ الاستراتيجية (طنجة المتوسط، الكركارات).',
+      ],
+      fr: [
+        'Cliquez sur un camion pour inspecter l écart thermique en direct et le capteur de porte.',
+        'Diffusez une alerte d urgence instantanée par WhatsApp au chauffeur et à la régie en un clic.',
+        'Les cercles cyan s activent dès l entrée dans le périmètre portuaire (Tanger Med, Guerguerat).',
+      ],
+      es: [
+        'Haga clic en cualquier camión para ver la desviación térmica y el sensor de apertura de puertas.',
+        'Emita alertas de emergencia instantáneas por WhatsApp al conductor y centro de control con un clic.',
+        'Los círculos cian se iluminan al entrar a zonas portuarias estratégicas (Tánger Med, Guerguerat).',
+      ],
+    },
+  },
   '/predictive-analytics': {
     title: {
       ar: 'التحليلات التنبؤية للأسطول والتدفقات النقدية',

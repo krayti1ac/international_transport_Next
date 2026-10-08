@@ -26,6 +26,7 @@ import {
   Sparkles,
   Activity,
   Compass,
+  Radio,
 } from 'lucide-react';
 
 export const navigationGroups: SidebarGroup[] = [
@@ -98,6 +99,14 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'Seguimiento de camiones',
         href: '/truck-tracking',
         icon: <Truck className="w-4 h-4" />,
+        roles: ['admin', 'secretary', 'fleet_manager'],
+      },
+      {
+        title: 'غرفة العمليات والرادار TIR',
+        titleFr: 'Mission Control & Radar TIR',
+        titleEs: 'Centro de Control y Radar TIR',
+        href: '/mission-control',
+        icon: <Radio className="w-4 h-4 text-cyan-400" />,
         roles: ['admin', 'secretary', 'fleet_manager'],
       },
       {

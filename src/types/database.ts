@@ -710,6 +710,10 @@ export interface TruckLocation {
   trip_id?: number;
   ignition?: boolean;
   frigo_temperature?: number | null;
+  temperature?: number | null;
+  door_open?: boolean;
+  fuel_level?: number | null;
+  battery_level?: number | null;
   device_id?: number;
 }
 

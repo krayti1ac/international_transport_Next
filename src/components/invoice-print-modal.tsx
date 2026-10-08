@@ -113,15 +113,10 @@ export function InvoicePrintModal({ isOpen, onClose, invoice, client }: InvoiceM
                 <span className="text-slate-600">{t('المبلغ الصافي HT:', 'Montant Net HT :')}</span>
                 <span className="font-mono">{ht.toFixed(2)} {currencyStr}</span>
               </div>
-              {invoice.tva_rate && Number(invoice.tva_rate) > 0 ? (
+              {invoice.tva_rate && (
                 <div className="flex justify-between">
                   <span className="text-slate-600">{t('ضريبة القيمة المضافة TVA', 'TVA')} ({invoice.tva_rate}%):</span>
                   <span className="font-mono">{tva.toFixed(2)} {currencyStr}</span>
-                </div>
-              ) : (
-                <div className="flex justify-between text-xs text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
-                  <span>{t('الوضع الضريبي:', 'Régime Fiscal :')}</span>
-                  <span className="font-medium">{t('إعفاء من TVA (مادة 92-I-10° CGI)', 'Exonération TVA (Art. 92 CGI)')}</span>
                 </div>
               )}
               <div className="flex justify-between border-t border-slate-300 pt-2 font-bold text-base text-primary">
@@ -130,20 +125,6 @@ export function InvoicePrintModal({ isOpen, onClose, invoice, client }: InvoiceM
               </div>
             </div>
           </div>
-
-          {invoice.payment_request_ref && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700 mb-4 flex items-center justify-between">
-              <div>
-                <span className="font-bold">{t('المرجع الجمركي والنظامي:', 'Référence Douane & Réglementaire :')} </span>
-                <span className="font-mono font-semibold text-slate-900">{invoice.payment_request_ref}</span>
-              </div>
-              {invoice.input_mode === 'auto_customs' && (
-                <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
-                  {t('فوترة مؤتمتة بعد التخليص', 'Auto-Facturé après Dédouanement')}
-                </span>
-              )}
-            </div>
-          )}
 
           {invoice.bank_info_text && (
             <div className="p-3 bg-blue-50 border border-blue-100 rounded text-xs text-blue-900 mb-6">
