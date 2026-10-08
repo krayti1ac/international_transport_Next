@@ -12,6 +12,19 @@ import {
   removeDriverTaskOffline,
   clearDriverTasksQueue,
   processDriverTasksOfflineQueue,
+  saveCheckpointToOfflineQueue,
+  getCheckpointsOfflineQueue,
+  getCheckpointsQueueCount,
+  removeCheckpointOffline,
+  clearCheckpointsQueue,
+  processCheckpointsOfflineQueue,
+  cacheDriverTripsOffline,
+  getCachedDriverTripsOffline,
+  getCachedDriverTripById,
+  updateCachedDriverTripStatus,
+  clearCachedDriverTrips,
+  cacheDriverDocumentOffline,
+  getCachedDriverDocumentOffline,
   getTotalOfflineQueueCount,
   base64ToBlob,
 } from '@/lib/offline-sync';
@@ -80,10 +93,19 @@ class MockIDBStore {
   }
 
   put(item: any) {
-    this.data.set(item.id, item);
+    const key = item.id !== undefined ? item.id : item.key;
+    this.data.set(key, item);
     const req = new MockIDBRequest();
     setTimeout(() => {
-      req.triggerSuccess(item.id);
+      req.triggerSuccess(key);
+    }, 0);
+    return req;
+  }
+
+  get(key: any) {
+    const req = new MockIDBRequest();
+    setTimeout(() => {
+      req.triggerSuccess(this.data.get(key) || null);
     }, 0);
     return req;
   }
@@ -516,6 +538,160 @@ describe('Driver Offline e-POD & Roaming Guard (IndexedDB & Image Compressor)', 
       const file = new File(['dummy-content'], 'test.txt', { type: 'text/plain' });
       const result = await compressImage(file);
       expect(result).toBe(file);
+    });
+  });
+
+  describe('4. Strategic Desert & Border Checkpoints Queue (African & European Corridors)', () => {
+    beforeEach(async () => {
+      await clearCheckpointsQueue();
+    });
+
+    it('persists a desert checkpoint (Guerguerat Customs) to IndexedDB with coordinates and telemetry', async () => {
+      const cp = await saveCheckpointToOfflineQueue({
+        trip_id: 801,
+        checkpoint_type: 'guerguerat_customs_entry',
+        checkpoint_label: 'معبر الكركارات المغربي',
+        latitude: 21.4326,
+        longitude: -16.9621,
+        odometer_km: 185400,
+        fuel_level_percent: 85,
+        reefer_temperature: -22.5,
+        idempotency_key: 'cp_guerguerat_801',
+      });
+
+      expect(cp.id).toBeDefined();
+      expect(cp.trip_id).toBe(801);
+      expect(cp.checkpoint_type).toBe('guerguerat_customs_entry');
+      expect(cp.latitude).toBe(21.4326);
+      expect(cp.reefer_temperature).toBe(-22.5);
+
+      const queue = await getCheckpointsOfflineQueue();
+      expect(queue).toHaveLength(1);
+      expect(queue[0].checkpoint_type).toBe('guerguerat_customs_entry');
+
+      const count = await getCheckpointsQueueCount();
+      expect(count).toBe(1);
+    });
+
+    it('prevents duplicate checkpoint insertion using idempotency key', async () => {
+      await saveCheckpointToOfflineQueue({
+        trip_id: 802,
+        checkpoint_type: 'mauritania_pk55_entry',
+        checkpoint_label: 'جمارك الكلم 55 موريتانيا',
+        idempotency_key: 'unique_pk55_802',
+      });
+
+      // Attempt duplicate insertion
+      await saveCheckpointToOfflineQueue({
+        trip_id: 802,
+        checkpoint_type: 'mauritania_pk55_entry',
+        checkpoint_label: 'جمارك الكلم 55 موريتانيا',
+        idempotency_key: 'unique_pk55_802',
+      });
+
+      const queue = await getCheckpointsOfflineQueue();
+      expect(queue).toHaveLength(1);
+    });
+
+    it('removes single checkpoint by id and clears queue', async () => {
+      const cp = await saveCheckpointToOfflineQueue({
+        trip_id: 803,
+        checkpoint_type: 'rosso_ferry_crossing',
+        checkpoint_label: 'عبارة روصو',
+        idempotency_key: 'rosso_803',
+      });
+
+      await removeCheckpointOffline(cp.id);
+      const countAfterRemove = await getCheckpointsQueueCount();
+      expect(countAfterRemove).toBe(0);
+    });
+
+    it('processes offline checkpoints queue and deletes synced items', async () => {
+      await saveCheckpointToOfflineQueue({
+        trip_id: 804,
+        checkpoint_type: 'tanger_med_port_gate',
+        checkpoint_label: 'بوابة ميناء طنجة المتوسط',
+        latitude: 35.888,
+        longitude: -5.502,
+        idempotency_key: 'tm_port_804',
+      });
+
+      const res = await processCheckpointsOfflineQueue();
+      expect(res.successCount).toBe(1);
+      expect(res.failCount).toBe(0);
+
+      const remaining = await getCheckpointsQueueCount();
+      expect(remaining).toBe(0);
+    });
+  });
+
+  describe('5. Offline Trip Caching & Document Wallet for Zero-Coverage Desert Lines', () => {
+    beforeEach(async () => {
+      await clearCachedDriverTrips();
+    });
+
+    it('caches trip orders in IndexedDB and retrieves them when offline', async () => {
+      const mockTrips = [
+        {
+          id: 901,
+          route: 'Agadir ➔ Guerguerat ➔ Nouakchott ➔ Dakar',
+          corridor_type: 'african_overland',
+          cmr_number: 'CMR-AFR-901',
+          departure_date: '2026-10-10',
+          status: 'in_transit',
+        },
+        {
+          id: 902,
+          route: 'Tanger Med ➔ Algeciras ➔ Madrid',
+          corridor_type: 'european_maritime',
+          cmr_number: 'CMR-EUR-902',
+          departure_date: '2026-10-12',
+          status: 'pending',
+        },
+      ];
+
+      await cacheDriverTripsOffline(mockTrips);
+
+      const cached = await getCachedDriverTripsOffline();
+      expect(cached).toHaveLength(2);
+
+      const trip901 = await getCachedDriverTripById(901);
+      expect(trip901).toBeDefined();
+      expect(trip901?.route).toBe('Agadir ➔ Guerguerat ➔ Nouakchott ➔ Dakar');
+
+      // Update cached status offline
+      await updateCachedDriverTripStatus(901, 'delivered');
+      const updatedTrip = await getCachedDriverTripById(901);
+      expect(updatedTrip?.status).toBe('delivered');
+    });
+
+    it('caches and retrieves driver credentials and documents for offline border checks', async () => {
+      const mockCredentials = {
+        name: 'كريم البوداني',
+        cin: 'JC123456',
+        african_visa_number: 'AFR-VISA-2026-889',
+        african_visa_expiry: '2026-12-31',
+        schengen_visa_expiry: '2026-11-30',
+        truck_plate: '12345-A-1',
+      };
+
+      await cacheDriverDocumentOffline('active_driver_credentials', mockCredentials);
+
+      const retrieved = await getCachedDriverDocumentOffline('active_driver_credentials');
+      expect(retrieved).toEqual(mockCredentials);
+      expect(retrieved?.african_visa_number).toBe('AFR-VISA-2026-889');
+    });
+
+    it('accurately reflects total offline queue count including checkpoints', async () => {
+      await saveCheckpointToOfflineQueue({
+        trip_id: 999,
+        checkpoint_type: 'dakar_delivery_hub',
+        checkpoint_label: 'وصول داكار',
+        idempotency_key: 'dakar_999',
+      });
+
+      const total = await getTotalOfflineQueueCount();
+      expect(total).toBeGreaterThanOrEqual(1);
     });
   });
 });

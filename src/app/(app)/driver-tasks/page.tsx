@@ -13,6 +13,13 @@ import Decimal from 'decimal.js';
 import { calculateDriverSafetyScore, type DriverSafetyBreakdown } from '@/features/drivers/services/driver-safety-score.actions';
 import { DriverSafetyScoreCard } from '@/features/drivers/components/DriverSafetyScoreCard';
 import { PushSubscriptionManager } from '@/features/push/components/PushSubscriptionManager';
+import {
+  cacheDriverTripsOffline,
+  getCachedDriverTripsOffline,
+  cacheDriverDocumentOffline,
+  getCachedDriverDocumentOffline,
+} from '@/lib/offline-sync';
+import { DriverTacticalOfflineBar } from '@/features/drivers/components/DriverTacticalOfflineBar';
 
 export default function DriverTasksPage() {
   const { t, dir } = useLanguage();
@@ -71,10 +78,19 @@ export default function DriverTasksPage() {
           advancesData = fallbackAdv.data || [];
         }
 
-        setTrips(tripsRes.data || []);
+        const loadedTrips = tripsRes.data || [];
+        setTrips(loadedTrips);
         setAdvances(advancesData);
         if (safetyScore) {
           setSafetyData(safetyScore);
+        }
+
+        // Cache trips and driver profile for desert offline usage
+        if (loadedTrips.length > 0) {
+          cacheDriverTripsOffline(loadedTrips).catch(console.error);
+        }
+        if (driverData) {
+          cacheDriverDocumentOffline('active_driver_profile', driverData).catch(console.error);
         }
 
         channel = supabase
@@ -118,12 +134,33 @@ export default function DriverTasksPage() {
           )
           .subscribe();
       } catch (error: any) {
+        // Fallback to offline cached trips & driver profile in desert conditions
+        const cachedTrips = await getCachedDriverTripsOffline();
+        const cachedDriver = await getCachedDriverDocumentOffline('active_driver_profile');
+        if (cachedTrips.length > 0) {
+          setTrips(cachedTrips);
+        }
+        if (cachedDriver) {
+          setDriver(cachedDriver);
+        }
+
         const message = error?.message || (error instanceof Error ? error.message : t('حدث خطأ غير متوقع', 'Une erreur inattendue est survenue'));
-        toast({
-          title: t('خطأ', 'Erreur'),
-          description: message,
-          variant: 'destructive',
-        });
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          toast({
+            title: t('وضع عدم الاتصال بالصحراء 🏜️', 'Mode Hors-Ligne Désert 🏜️', 'Modo Offline Desierto 🏜️'),
+            description: t(
+              'تم تحميل بيانات رحلاتك المحفوظة محلياً بنجاح.',
+              'Données des voyages chargées depuis le stockage local.',
+              'Viajes cargados desde la memoria local.'
+            ),
+          });
+        } else {
+          toast({
+            title: t('خطأ', 'Erreur'),
+            description: message,
+            variant: 'destructive',
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -157,7 +194,13 @@ export default function DriverTasksPage() {
   };
 
   return (
-    <div className="space-y-6" dir={dir}>
+    <div className="space-y-4" dir={dir}>
+      {/* Tactical Mobile Offline Bar */}
+      <DriverTacticalOfflineBar
+        driver={driver}
+        activeTrip={trips[0] || null}
+      />
+
       <div>
         <h1 className="text-2xl font-bold font-amiri text-foreground">
           {t('مهامي وجدول الرحلات', 'Mes Missions & Planning Chauffeur')}

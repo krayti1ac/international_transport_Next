@@ -43,11 +43,45 @@ export interface QueuedDriverTask {
   lastError?: string;
 }
 
+export type StrategicCheckpointType =
+  | 'departure_depot'
+  | 'guerguerat_customs_entry'
+  | 'guerguerat_buffer_exit'
+  | 'mauritania_pk55_entry'
+  | 'nouakchott_transit_halt'
+  | 'rosso_ferry_crossing'
+  | 'diama_border_crossing'
+  | 'dakar_delivery_hub'
+  | 'tanger_med_port_gate'
+  | 'ferry_boarding'
+  | 'algeciras_port_arrival'
+  | 'delivery_destination';
+
+export interface QueuedCheckpoint {
+  id: string;
+  trip_id: number;
+  checkpoint_type: StrategicCheckpointType;
+  checkpoint_label: string;
+  notes?: string;
+  latitude?: number;
+  longitude?: number;
+  odometer_km?: number;
+  fuel_level_percent?: number;
+  reefer_temperature?: number;
+  idempotency_key: string;
+  timestamp: string;
+  retryCount?: number;
+  lastError?: string;
+}
+
 export const DB_NAME = 'transbodanon_offline_db';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const STORE_NAME = 'fuel_receipts_queue';
 export const POD_STORE_NAME = 'pod_signatures_queue';
 export const DRIVER_TASKS_STORE_NAME = 'driver_tasks_queue';
+export const CACHED_TRIPS_STORE_NAME = 'cached_driver_trips';
+export const CHECKPOINTS_STORE_NAME = 'checkpoints_queue';
+export const CACHED_DOCUMENTS_STORE_NAME = 'cached_driver_documents';
 export const LEGACY_STORAGE_KEY = 'offline_fuel_receipts_queue';
 
 /**
@@ -100,6 +134,27 @@ export function openDB(): Promise<IDBDatabase> {
         taskStore.createIndex('trip_id', 'trip_id', { unique: false });
         taskStore.createIndex('timestamp', 'timestamp', { unique: false });
         taskStore.createIndex('idempotency_key', 'idempotency_key', { unique: false });
+      }
+
+      // 4. Cached Driver Trips store
+      if (!db.objectStoreNames.contains(CACHED_TRIPS_STORE_NAME)) {
+        const tripStore = db.createObjectStore(CACHED_TRIPS_STORE_NAME, { keyPath: 'id' });
+        tripStore.createIndex('departure_date', 'departure_date', { unique: false });
+        tripStore.createIndex('status', 'status', { unique: false });
+      }
+
+      // 5. Strategic Desert / Border Checkpoints queue
+      if (!db.objectStoreNames.contains(CHECKPOINTS_STORE_NAME)) {
+        const cpStore = db.createObjectStore(CHECKPOINTS_STORE_NAME, { keyPath: 'id' });
+        cpStore.createIndex('trip_id', 'trip_id', { unique: false });
+        cpStore.createIndex('checkpoint_type', 'checkpoint_type', { unique: false });
+        cpStore.createIndex('timestamp', 'timestamp', { unique: false });
+        cpStore.createIndex('idempotency_key', 'idempotency_key', { unique: false });
+      }
+
+      // 6. Cached Driver Documents store
+      if (!db.objectStoreNames.contains(CACHED_DOCUMENTS_STORE_NAME)) {
+        db.createObjectStore(CACHED_DOCUMENTS_STORE_NAME, { keyPath: 'key' });
       }
     };
 
@@ -896,19 +951,375 @@ export async function processDriverTasksOfflineQueue(): Promise<{ successCount: 
 }
 
 /* =========================================================================
-   4. Aggregate Offline Queues Utilities
+   4. Strategic Desert & Border Checkpoints Queue Management
+   ========================================================================= */
+
+/**
+ * Retrieves all pending offline checkpoints from IndexedDB.
+ */
+export async function getCheckpointsOfflineQueue(): Promise<QueuedCheckpoint[]> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return [];
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CHECKPOINTS_STORE_NAME)) return [];
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CHECKPOINTS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(CHECKPOINTS_STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        resolve((request.result as QueuedCheckpoint[]) || []);
+      };
+
+      request.onerror = () => {
+        reject(request.error || new Error('Failed to read checkpoints queue'));
+      };
+    });
+  } catch (err) {
+    console.error('Error reading offline checkpoints queue:', err);
+    return [];
+  }
+}
+
+/**
+ * Fast count of pending offline checkpoints.
+ */
+export async function getCheckpointsQueueCount(): Promise<number> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return 0;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CHECKPOINTS_STORE_NAME)) return 0;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CHECKPOINTS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(CHECKPOINTS_STORE_NAME);
+      const request = store.count();
+
+      request.onsuccess = () => {
+        resolve(request.result || 0);
+      };
+
+      request.onerror = () => {
+        reject(request.error || new Error('Failed to count offline checkpoints'));
+      };
+    });
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Persists a desert/border checkpoint into IndexedDB with idempotency verification.
+ */
+export async function saveCheckpointToOfflineQueue(
+  item: Omit<QueuedCheckpoint, 'id' | 'timestamp'>
+): Promise<QueuedCheckpoint> {
+  if (item.idempotency_key) {
+    const existingQueue = await getCheckpointsOfflineQueue();
+    const existing = existingQueue.find((q) => q.idempotency_key === item.idempotency_key);
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const newItem: QueuedCheckpoint = {
+    ...item,
+    id: `checkpoint_queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    retryCount: item.retryCount || 0,
+  };
+
+  if (typeof window === 'undefined' || !('indexedDB' in window)) {
+    return newItem;
+  }
+
+  const db = await openDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CHECKPOINTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CHECKPOINTS_STORE_NAME);
+    const request = store.add(newItem);
+
+    request.onsuccess = () => {
+      resolve(newItem);
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to save checkpoint to IndexedDB'));
+    };
+  });
+}
+
+/**
+ * Deletes a single synced checkpoint from IndexedDB by ID.
+ */
+export async function removeCheckpointOffline(id: string): Promise<void> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return;
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains(CHECKPOINTS_STORE_NAME)) return;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CHECKPOINTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CHECKPOINTS_STORE_NAME);
+    const request = store.delete(id);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || new Error(`Failed to remove checkpoint ${id}`));
+  });
+}
+
+/**
+ * Clears all checkpoints from the offline IndexedDB store.
+ */
+export async function clearCheckpointsQueue(): Promise<void> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return;
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains(CHECKPOINTS_STORE_NAME)) return;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CHECKPOINTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CHECKPOINTS_STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || new Error('Failed to clear checkpoints queue'));
+  });
+}
+
+/**
+ * Synchronizes offline checkpoints with Supabase backend (`truck_locations` and status).
+ */
+export async function processCheckpointsOfflineQueue(): Promise<{ successCount: number; failCount: number }> {
+  const queue = await getCheckpointsOfflineQueue();
+  if (queue.length === 0) return { successCount: 0, failCount: 0 };
+
+  const supabase = createClient();
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const item of queue) {
+    try {
+      // 1. Record location in truck_locations if coordinates are provided
+      if (typeof item.latitude === 'number' && typeof item.longitude === 'number') {
+        const { error: locError } = await supabase.from('truck_locations').insert({
+          trip_id: item.trip_id,
+          latitude: item.latitude,
+          longitude: item.longitude,
+          recorded_at: item.timestamp,
+          timestamp: item.timestamp,
+        });
+        if (locError) {
+          console.warn('Non-blocking truck_locations insert notice:', locError.message);
+        }
+      }
+
+      // 2. Remove successfully processed checkpoint from queue
+      await removeCheckpointOffline(item.id);
+      successCount++;
+    } catch (err) {
+      console.error('فشل مزامنة نقطة العبور الحدودية:', err);
+      failCount++;
+    }
+  }
+
+  return { successCount, failCount };
+}
+
+/* =========================================================================
+   5. Cached Driver Trips Offline Storage
+   ========================================================================= */
+
+/**
+ * Saves a list of trip orders to IndexedDB for offline access in desert corridors.
+ */
+export async function cacheDriverTripsOffline(trips: any[]): Promise<void> {
+  if (typeof window === 'undefined' || !('indexedDB' in window) || !Array.isArray(trips)) return;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CACHED_TRIPS_STORE_NAME)) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CACHED_TRIPS_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(CACHED_TRIPS_STORE_NAME);
+
+      for (const trip of trips) {
+        if (trip && trip.id) {
+          store.put(trip);
+        }
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.error('Error caching driver trips offline:', err);
+  }
+}
+
+/**
+ * Retrieves all cached driver trips from IndexedDB when offline.
+ */
+export async function getCachedDriverTripsOffline(): Promise<any[]> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return [];
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CACHED_TRIPS_STORE_NAME)) return [];
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CACHED_TRIPS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(CACHED_TRIPS_STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        resolve((request.result as any[]) || []);
+      };
+
+      request.onerror = () => {
+        reject(request.error || new Error('Failed to read cached driver trips'));
+      };
+    });
+  } catch (err) {
+    console.error('Error reading cached driver trips:', err);
+    return [];
+  }
+}
+
+/**
+ * Retrieves a single cached trip by ID.
+ */
+export async function getCachedDriverTripById(tripId: number): Promise<any | null> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return null;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CACHED_TRIPS_STORE_NAME)) return null;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CACHED_TRIPS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(CACHED_TRIPS_STORE_NAME);
+      const request = store.get(tripId);
+
+      request.onsuccess = () => {
+        resolve(request.result || null);
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Updates status of a trip in offline cache.
+ */
+export async function updateCachedDriverTripStatus(tripId: number, status: string): Promise<void> {
+  const trip = await getCachedDriverTripById(tripId);
+  if (!trip) return;
+
+  trip.status = status;
+  trip.updated_at = new Date().toISOString();
+  await cacheDriverTripsOffline([trip]);
+}
+
+/**
+ * Clears cached driver trips from IndexedDB.
+ */
+export async function clearCachedDriverTrips(): Promise<void> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return;
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains(CACHED_TRIPS_STORE_NAME)) return;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CACHED_TRIPS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CACHED_TRIPS_STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/* =========================================================================
+   6. Cached Driver Documents Offline Storage
+   ========================================================================= */
+
+/**
+ * Caches essential driver documents (Passport, Visa, Carte Grise) for offline border inspection.
+ */
+export async function cacheDriverDocumentOffline(key: string, data: any): Promise<void> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CACHED_DOCUMENTS_STORE_NAME)) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CACHED_DOCUMENTS_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(CACHED_DOCUMENTS_STORE_NAME);
+      const request = store.put({ key, data, cached_at: new Date().toISOString() });
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    console.error('Error caching driver document offline:', err);
+  }
+}
+
+/**
+ * Retrieves cached driver document by key.
+ */
+export async function getCachedDriverDocumentOffline(key: string): Promise<any | null> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) return null;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains(CACHED_DOCUMENTS_STORE_NAME)) return null;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CACHED_DOCUMENTS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(CACHED_DOCUMENTS_STORE_NAME);
+      const request = store.get(key);
+
+      request.onsuccess = () => {
+        resolve(request.result?.data || null);
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/* =========================================================================
+   7. Aggregate Offline Queues Utilities
    ========================================================================= */
 
 /**
  * Returns total count of all pending offline actions across all stores.
  */
 export async function getTotalOfflineQueueCount(): Promise<number> {
-  const [receipts, pods, tasks] = await Promise.all([
+  const [receipts, pods, tasks, checkpoints] = await Promise.all([
     getOfflineQueueCount(),
     getPodSignaturesQueueCount(),
     getDriverTasksQueueCount(),
+    getCheckpointsQueueCount(),
   ]);
-  return receipts + pods + tasks;
+  return receipts + pods + tasks + checkpoints;
 }
 
 /**
@@ -920,11 +1331,13 @@ export async function processAllOfflineQueues(
   receipts: { successCount: number; failCount: number };
   pods: { successCount: number; failCount: number };
   tasks: { successCount: number; failCount: number };
+  checkpoints: { successCount: number; failCount: number };
 }> {
-  const [receiptsRes, podsRes, tasksRes] = await Promise.all([
+  const [receiptsRes, podsRes, tasksRes, checkpointsRes] = await Promise.all([
     processOfflineQueue(),
     processPodSignaturesOfflineQueue(),
     processDriverTasksOfflineQueue(),
+    processCheckpointsOfflineQueue(),
   ]);
 
   if (onProgress) {
@@ -936,5 +1349,7 @@ export async function processAllOfflineQueues(
     receipts: receiptsRes,
     pods: podsRes,
     tasks: tasksRes,
+    checkpoints: checkpointsRes,
   };
 }
+

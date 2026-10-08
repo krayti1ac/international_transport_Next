@@ -23,6 +23,12 @@ import {
 } from 'lucide-react';
 import { DriverDeliveryScreen } from '@/features/trips/components/DriverDeliveryScreen';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
+import {
+  cacheDriverTripsOffline,
+  getCachedDriverTripsOffline,
+  getCachedDriverTripById,
+} from '@/lib/offline-sync';
+import { DriverTacticalOfflineBar } from '@/features/drivers/components/DriverTacticalOfflineBar';
 
 function getStatusBadge(status: string, t: (ar: string, fr: string) => string) {
   switch (status) {
@@ -105,15 +111,24 @@ function DriverDeliveryContent() {
         if (cancelled) return;
         if (error) throw error;
         setTrip(data);
+        if (data) {
+          cacheDriverTripsOffline([data]).catch(console.error);
+        }
         try {
           localStorage.setItem(`cached_trip_${id}`, JSON.stringify(data));
         } catch {}
       } catch (error) {
         if (cancelled) return;
-        // Try fallback to offline cached trip
+        // Try fallback to offline cached trip in IndexedDB v2 first, then localStorage
         const id = parseInt(tripId, 10);
         if (!isNaN(id)) {
           try {
+            const indexedTrip = await getCachedDriverTripById(id);
+            if (indexedTrip) {
+              setTrip(indexedTrip);
+              setTripError(null);
+              return;
+            }
             const cachedTrip = localStorage.getItem(`cached_trip_${id}`);
             if (cachedTrip) {
               setTrip(JSON.parse(cachedTrip));
@@ -183,9 +198,13 @@ function DriverDeliveryContent() {
         if (cancelled) return;
 
         if (tripsRes.error) throw tripsRes.error;
-        setTripsList(tripsRes.data || []);
+        const loadedTrips = tripsRes.data || [];
+        setTripsList(loadedTrips);
+        if (loadedTrips.length > 0) {
+          cacheDriverTripsOffline(loadedTrips).catch(console.error);
+        }
         try {
-          localStorage.setItem('cached_driver_delivery_trips', JSON.stringify(tripsRes.data || []));
+          localStorage.setItem('cached_driver_delivery_trips', JSON.stringify(loadedTrips));
         } catch {}
 
         if (driversRes.data) {
@@ -211,8 +230,13 @@ function DriverDeliveryContent() {
         }
       } catch (error) {
         if (cancelled) return;
-        // Offline fallback for trips list
+        // Offline fallback for trips list: Check IndexedDB v2 first
         try {
+          const indexedTrips = await getCachedDriverTripsOffline();
+          if (indexedTrips && indexedTrips.length > 0) {
+            setTripsList(indexedTrips);
+            return;
+          }
           const cachedTrips = localStorage.getItem('cached_driver_delivery_trips');
           const cachedDrivers = localStorage.getItem('cached_driver_delivery_drivers');
           const cachedTrucks = localStorage.getItem('cached_driver_delivery_trucks');
@@ -301,6 +325,8 @@ function DriverDeliveryContent() {
   if (trip) {
     return (
       <div className="space-y-4" dir={dir}>
+        <DriverTacticalOfflineBar activeTrip={trip} />
+
         <div className="flex items-center justify-between bg-card p-3 rounded-lg border shadow-sm">
           <Button
             variant="ghost"
@@ -334,6 +360,8 @@ function DriverDeliveryContent() {
   // 4. Trip Selection Screen (when no tripId)
   return (
     <div className="space-y-6" dir={dir}>
+      <DriverTacticalOfflineBar />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
         <div>
