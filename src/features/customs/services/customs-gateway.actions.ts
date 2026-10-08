@@ -136,4 +136,14 @@ export async function getTripCustomsData(tripId: number): Promise<{
   }
 }
 
-
+/**
+ * Server Action: Submit customs declaration directly to PortNet or TIR-EPD with idempotency
+ */
+export async function submitDirectCustomsDeclaration(
+  tripId: number,
+  gateway: 'portnet' | 'tir_epd' = 'portnet',
+  options?: { mode?: 'sandbox' | 'production'; force?: boolean }
+) {
+  const { submitCustomsDeclaration } = await import('./customs-submission.service');
+  return await submitCustomsDeclaration(tripId, gateway, options);
+}

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { dispatchTripLifecycleNotifications } from './notification-dispatcher';
 import { autoGenerateInvoiceForTrip } from '@/features/invoices/services/auto-invoicing.service';
+import { generateDeliverySignatureHash } from '@/lib/signature-crypto';
 
 export async function submitProofOfDelivery(input: {
   tripOrderId: number;
@@ -13,7 +14,13 @@ export async function submitProofOfDelivery(input: {
   latitude?: number;
   longitude?: number;
   leg: 'export' | 'import';
-}): Promise<{ success: boolean; signatureUrl?: string; cmrUrl?: string; error?: string }> {
+}): Promise<{
+  success: boolean;
+  signatureUrl?: string;
+  cmrUrl?: string;
+  integrityHash?: string;
+  error?: string;
+}> {
   const supabase = await createClient();
 
   try {
@@ -72,16 +79,37 @@ export async function submitProofOfDelivery(input: {
       }
     }
 
+    const deliveredAt = new Date().toISOString();
+
+    // Generate cryptographic HMAC-SHA256 integrity seal
+    const integrityHash = generateDeliverySignatureHash({
+      tripOrderId: input.tripOrderId,
+      recipientName: input.recipientName,
+      signedAt: deliveredAt,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      signatureUrl,
+    });
+
     const { error: insertError } = await supabase
       .from('delivery_signatures')
       .insert({
         trip_order_id: input.tripOrderId,
         signature_image_url: signatureUrl,
+        signature_url: signatureUrl,
         receipt_image_url: cmrUrl,
+        cmr_image_url: cmrUrl,
         recipient_name: input.recipientName,
-        delivered_at: new Date().toISOString(),
+        signed_by: input.recipientName,
+        delivered_at: deliveredAt,
+        signed_at: deliveredAt,
         latitude: input.latitude,
         longitude: input.longitude,
+        notes: JSON.stringify({
+          integrityHash,
+          algorithm: 'SHA256-HMAC',
+          signedAt: deliveredAt,
+        }),
       });
 
     if (insertError) throw insertError;
@@ -115,7 +143,7 @@ export async function submitProofOfDelivery(input: {
 
     dispatchTripLifecycleNotifications(input.tripOrderId, 'delivery_completed', {
       recipientName: input.recipientName,
-      signedAt: new Date().toISOString(),
+      signedAt: deliveredAt,
       latitude: input.latitude,
       longitude: input.longitude,
       signatureUrl,
@@ -127,7 +155,7 @@ export async function submitProofOfDelivery(input: {
       console.warn('[Auto-Invoicing Hook] POD invoice generation warning:', invErr)
     );
 
-    return { success: true, signatureUrl, cmrUrl };
+    return { success: true, signatureUrl, cmrUrl, integrityHash };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'حدث خطأ غير متوقع أثناء حفظ إثبات التسليم' };
   }

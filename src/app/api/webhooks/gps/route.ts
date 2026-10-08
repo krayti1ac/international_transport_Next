@@ -123,6 +123,33 @@ export function isWebhookAuthorized(
   );
 }
 
+// Sliding deduplication cache for recent GPS telemetry pings (5-minute TTL)
+const recentGpsPingsCache = new Map<string, number>();
+const DEDUPLICATION_WINDOW_MS = 5 * 60 * 1000;
+
+export function isGpsPingDuplicate(truckId: number, timestampMs: number, lat: number, lng: number): boolean {
+  const key = `${truckId}_${Math.floor(timestampMs / 1000)}_${lat.toFixed(5)}_${lng.toFixed(5)}`;
+  const now = Date.now();
+
+  if (recentGpsPingsCache.size > 2000) {
+    for (const [k, time] of recentGpsPingsCache.entries()) {
+      if (now - time > DEDUPLICATION_WINDOW_MS) {
+        recentGpsPingsCache.delete(k);
+      }
+    }
+  }
+
+  if (recentGpsPingsCache.has(key)) {
+    return true;
+  }
+  recentGpsPingsCache.set(key, now);
+  return false;
+}
+
+export function resetGpsDeduplicationCache(): void {
+  recentGpsPingsCache.clear();
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. فحص التوثيق الأمني المرن
@@ -192,6 +219,12 @@ export async function POST(req: NextRequest) {
 
       if (!truckId) {
         results.push({ success: false, error: 'No associated truck found for device' });
+        continue;
+      }
+
+      // Deduplicate rapid duplicate GPS pings to preserve database throughput
+      if (isGpsPingDuplicate(truckId, norm.timestampMs, norm.latitude, norm.longitude)) {
+        results.push({ success: true, truckId });
         continue;
       }
 

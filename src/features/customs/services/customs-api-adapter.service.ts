@@ -131,6 +131,20 @@ export async function submitToPortNetApi(
     const apiKey = customConfig?.apiKey || process.env.PORTNET_API_KEY || '';
     const clientId = customConfig?.clientId || process.env.PORTNET_CLIENT_ID || '';
 
+    if (!apiKey && !clientId && !customConfig?.apiUrl) {
+      return {
+        success: false,
+        gateway: 'portnet',
+        mode: 'production',
+        referenceNumber: refNum,
+        status: 'rejected',
+        messageAr: 'مفاتيح الربط الحي مع بوابة PortNet غير مهيأة في بيئة الإنتاج (PORTNET_API_KEY / PORTNET_CLIENT_ID)',
+        messageFr: 'Clés API PortNet manquantes en environnement de production (PORTNET_API_KEY / PORTNET_CLIENT_ID)',
+        timestamp,
+        error: 'Missing PortNet API credentials: PORTNET_API_KEY or PORTNET_CLIENT_ID not configured',
+      };
+    }
+
     const res = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -221,6 +235,20 @@ export async function submitToTirEpdApi(
     const apiUrl = customConfig?.apiUrl || process.env.TIR_EPD_API_URL || 'https://api.tirepd.iru.org/v1/declarations';
     const clientId = customConfig?.clientId || process.env.TIR_EPD_CLIENT_ID || '';
     const clientSecret = customConfig?.clientSecret || process.env.TIR_EPD_CLIENT_SECRET || '';
+
+    if (!clientId && !clientSecret && !customConfig?.apiUrl) {
+      return {
+        success: false,
+        gateway: 'tir_epd',
+        mode: 'production',
+        referenceNumber: refNum,
+        status: 'rejected',
+        messageAr: 'مفاتيح الربط الحي مع منصة TIR-EPD الدولية غير مهيأة في بيئة الإنتاج (TIR_EPD_CLIENT_ID / TIR_EPD_CLIENT_SECRET)',
+        messageFr: 'Identifiants TIR-EPD manquants en environnement de production (TIR_EPD_CLIENT_ID / TIR_EPD_CLIENT_SECRET)',
+        timestamp,
+        error: 'Missing IRU TIR-EPD credentials: TIR_EPD_CLIENT_ID or TIR_EPD_CLIENT_SECRET not configured',
+      };
+    }
 
     const res = await fetch(apiUrl, {
       method: 'POST',

@@ -182,6 +182,14 @@ describe('Client Tracking Portal & e-POD Telematics Verification', () => {
       const isValid = verifyDeliverySignatureIntegrity(tamperedPayload, hash, secret);
       expect(isValid).toBe(false);
     });
+
+    it('generates deterministic SHA-256 hex integrity seal (64 chars)', () => {
+      const seal1 = generateDeliverySignatureHash(validPayload);
+      const seal2 = generateDeliverySignatureHash(validPayload);
+      expect(seal1).toBe(seal2);
+      expect(seal1.length).toBe(64);
+      expect(verifyDeliverySignatureIntegrity(validPayload, seal1)).toBe(true);
+    });
   });
 
   describe('4. Strict Zero Financial Data Leakage Policy', () => {

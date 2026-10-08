@@ -6,11 +6,17 @@ import {
   resetAlertCooldown,
   ALERT_COOLDOWN_MS,
 } from '@/features/tracking/services/port-geofence.actions';
-import { normalizeGPSPayload, isWebhookAuthorized } from '@/app/api/webhooks/gps/route';
+import {
+  normalizeGPSPayload,
+  isWebhookAuthorized,
+  isGpsPingDuplicate,
+  resetGpsDeduplicationCache,
+} from '@/app/api/webhooks/gps/route';
 
 describe('Traccar GPS Ingestion & Automated Port/Border Geofencing Engine', () => {
   beforeEach(() => {
     resetAlertCooldown();
+    resetGpsDeduplicationCache();
   });
 
   describe('1. Traccar GPS Payload Normalization', () => {
@@ -214,4 +220,26 @@ describe('Traccar GPS Ingestion & Automated Port/Border Geofencing Engine', () =
       expect(isWebhookAuthorized(wrongReq, SECRET)).toBe(false);
     });
   });
+
+  describe('5. Telematics Sliding Deduplication Guard', () => {
+    it('allows initial GPS ping and filters out identical rapid duplicates', () => {
+      const truckId = 42;
+      const now = Date.now();
+      const lat = 35.8883;
+      const lng = -5.5033;
+
+      // First ping: not a duplicate
+      expect(isGpsPingDuplicate(truckId, now, lat, lng)).toBe(false);
+
+      // Immediate identical retry: flagged as duplicate
+      expect(isGpsPingDuplicate(truckId, now, lat, lng)).toBe(true);
+
+      // Same truck with new position: not a duplicate
+      expect(isGpsPingDuplicate(truckId, now + 10000, lat + 0.005, lng - 0.002)).toBe(false);
+
+      // Different truck at same coordinates: not a duplicate
+      expect(isGpsPingDuplicate(99, now, lat, lng)).toBe(false);
+    });
+  });
 });
+
