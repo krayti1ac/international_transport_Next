@@ -101,3 +101,4 @@ export interface ConsolidatedCustomsDossier {
   qrVerificationHash: string;
   updatedAt: string;
 }
+
