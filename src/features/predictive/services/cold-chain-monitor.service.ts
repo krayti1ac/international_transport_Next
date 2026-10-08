@@ -1,4 +1,3 @@
-'use server';
 
 import Decimal from 'decimal.js';
 import { recordAuditLog } from '@/lib/audit.server';

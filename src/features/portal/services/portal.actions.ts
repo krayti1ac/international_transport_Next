@@ -19,7 +19,7 @@ import type {
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
-export const memoryBookingsStore = new Map<number, BookingRequest>();
+const memoryBookingsStore = new Map<number, BookingRequest>();
 
 const bookingInputSchema = z.object({
   routeFrom: z.string().min(2, 'مدينة الانطلاق مطلوبة'),
@@ -714,6 +714,10 @@ export async function approveAndDispatchBooking(input: {
   }
 }
 
-export { createBookingRequestAction as createBookingRequest };
+export async function createBookingRequest(
+  input: CreateBookingInput
+): Promise<CreateBookingResult> {
+  return createBookingRequestAction(input);
+}
 
 

@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { createBookingRequestAction } from '../services/portal.actions';
+import { createBookingRequest } from '../services/portal.actions';
 import type { BookingRequest, Client } from '@/types/database';
 import type { CreateBookingInput } from '../types';
 
@@ -121,7 +121,7 @@ export function BookingRequestModal({
         specialInstructions: specialInstructions.trim() || null,
       };
 
-      const res = await createBookingRequestAction(payload);
+      const res = await createBookingRequest(payload);
       if (res.success && res.booking) {
         setSuccessBooking(res.booking);
         onBookingCreated(res.booking);

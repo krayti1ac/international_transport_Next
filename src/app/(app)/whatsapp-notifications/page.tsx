@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { MessageSquare, Send, Phone, Zap } from 'lucide-react';
-import { formatPhoneNumber } from '@/lib/whatsapp';
+import { formatPhoneNumber } from '@/lib/phone-utils';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
 
