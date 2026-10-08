@@ -34,7 +34,9 @@ import {
   Copy,
   Layers,
   Building2,
+  FileCheck2,
 } from 'lucide-react';
+import { PhytosanitaryDossierTab } from './PhytosanitaryDossierTab';
 import {
   getCustomsDeskDataAction,
   submitBadrDumAction,
@@ -66,6 +68,7 @@ export function CustomsComplianceDeskView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [corridorFilter, setCorridorFilter] = useState<'ALL' | 'MARITIME' | 'OVERLAND'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CLEARED' | 'PENDING' | 'INSPECTION'>('ALL');
+  const [activeDeskTab, setActiveDeskTab] = useState<'edi_submissions' | 'phyto_dossiers'>('edi_submissions');
 
   // Submitting state tracker for individual trips
   const [submittingTripId, setSubmittingTripId] = useState<{ id: number; action: 'dum' | 'manifest' } | null>(null);
@@ -309,8 +312,39 @@ export function CustomsComplianceDeskView() {
         </div>
       </div>
 
-      {/* 2. Top Bento Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1.5 View Switcher: BADR/PortNet EDI vs ONSSA Phytosanitary Dossiers */}
+      <div className="flex rounded-xl bg-muted/60 p-1 border border-border/60 max-w-lg">
+        <button
+          onClick={() => setActiveDeskTab('edi_submissions')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+            activeDeskTab === 'edi_submissions'
+              ? 'bg-card text-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <span>{t('منظومة BADR & PortNet mTLS', 'Passerelle BADR & PortNet', 'Pasarela BADR y PortNet')}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDeskTab('phyto_dossiers')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+            activeDeskTab === 'phyto_dossiers'
+              ? 'bg-card text-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <FileCheck2 className="w-4 h-4 text-primary" />
+          <span>{t('الملف الصحي والمطابقة (ONSSA)', 'Dossier ONSSA & Phyto', 'Expediente ONSSA y Fito')}</span>
+        </button>
+      </div>
+
+      {activeDeskTab === 'phyto_dossiers' ? (
+        <PhytosanitaryDossierTab />
+      ) : (
+        <>
+          {/* 2. Top Bento Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Certificate Health Card */}
         <Card className="border-border/60 shadow-sm bg-card hover:border-primary/40 transition-colors">
           <CardHeader className="pb-2">
@@ -683,6 +717,8 @@ export function CustomsComplianceDeskView() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* 5. XML-DSig Signature Inspection Modal */}
       <Dialog open={!!inspectedXmlTrip} onOpenChange={(open) => !open && setInspectedXmlTrip(null)}>

@@ -106,3 +106,4 @@ export interface ApplyCopilotMitigationPayload {
   actionType: CopilotActionType;
   notes?: string;
 }
+

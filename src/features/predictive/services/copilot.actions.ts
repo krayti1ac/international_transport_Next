@@ -279,3 +279,4 @@ export async function applyCopilotMitigationAction(
     return { success: false, error: message };
   }
 }
+
