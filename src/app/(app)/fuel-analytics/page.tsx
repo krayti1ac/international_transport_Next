@@ -16,16 +16,18 @@ import {
   Radio,
   ShieldCheck,
   Zap,
+  CreditCard,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '@/components/language-provider';
 import { CanBusTelematicsMonitor } from '@/features/fleet/components/CanBusTelematicsMonitor';
+import { FuelReconciliationDashboardView } from '@/features/fleet/components/FuelReconciliationDashboardView';
 
 export default function FleetFuelAnalyticsPage() {
   const { t, dir } = useLanguage();
   const { data: trucks = [], isLoading } = useTrucks();
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'analytics' | 'telematics' | 'fraud_radar'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'telematics' | 'fraud_radar' | 'card_reconciliation'>('analytics');
 
   const filteredTrucks = useMemo(() => {
     return trucks.filter(
@@ -90,10 +92,24 @@ export default function FleetFuelAnalyticsPage() {
             <ShieldCheck className="w-3.5 h-3.5 inline-block me-1.5 text-blue-500" />
             {t('رادار مكافحة الاحتيال', 'Radar Anti-Fraude')}
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('card_reconciliation')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              activeTab === 'card_reconciliation'
+                ? 'bg-background text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5 inline-block me-1.5 text-amber-500" />
+            {t('مطابقة البطاقات الرقمية', 'Cartes Numériques', 'Tarjetas Digitales')}
+          </button>
         </div>
       </div>
 
-      {activeTab === 'telematics' ? (
+      {activeTab === 'card_reconciliation' ? (
+        <FuelReconciliationDashboardView />
+      ) : activeTab === 'telematics' ? (
         <CanBusTelematicsMonitor />
       ) : activeTab === 'fraud_radar' ? (
         <div className="space-y-5">
