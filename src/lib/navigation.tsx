@@ -168,6 +168,15 @@ export const navigationGroups: SidebarGroup[] = [
         roles: ['admin', 'secretary', 'fleet_manager'],
       },
       {
+        title: 'بورصة الاستئجار والنقل بالباطن',
+        titleFr: 'Bourse d\'Affrètement',
+        titleEs: 'Bolsa de Fletamento',
+        href: '/charter',
+        icon: <Users className="w-4 h-4 text-amber-500" />,
+        roles: ['admin', 'secretary', 'fleet_manager'],
+      },
+
+      {
         title: 'محركات الوقود',
         titleFr: 'Carburant',
         titleEs: 'Combustible y consumo',
