@@ -530,3 +530,4 @@ export function MissionControlView() {
     </div>
   );
 }
+

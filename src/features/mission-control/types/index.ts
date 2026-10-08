@@ -150,3 +150,4 @@ export interface MissionControlDashboardData {
   telemetryList: TelematicsTelemetry[];
   activeAlerts: IncidentAlert[];
 }
+
