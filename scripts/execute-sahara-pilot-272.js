@@ -56,18 +56,46 @@ async function runSaharaSimulation() {
   console.log('🚀 EXECUTION: SAHARA OVERLAND & ZERO-NET PILOT (TRIP #272)');
   console.log('========================================================================\n');
 
+  // 0. Ensure Geofence Zones Exist
+  let { data: zoneGuerguerat } = await supabase.from('geofence_zones').select('*').ilike('name', '%Guerguerat%').maybeSingle();
+  if (!zoneGuerguerat) {
+    const { data: createdZone } = await supabase.from('geofence_zones').insert({
+      name: 'معبر الكركارات الحدودي (El Guerguerat Border Checkpoint)',
+      latitude: 21.3656,
+      longitude: -16.9583,
+      radius_km: 5.0,
+      zone_type: 'border',
+      is_active: true,
+    }).select().single();
+    zoneGuerguerat = createdZone;
+  }
+
+  let { data: zoneRosso } = await supabase.from('geofence_zones').select('*').ilike('name', '%Rosso%').maybeSingle();
+  if (!zoneRosso) {
+    const { data: createdZone } = await supabase.from('geofence_zones').insert({
+      name: 'محطة عبارة روصو النهرية (Rosso Ferry Terminal)',
+      latitude: 16.5133,
+      longitude: -15.8083,
+      radius_km: 3.0,
+      zone_type: 'customs',
+      is_active: true,
+    }).select().single();
+    zoneRosso = createdZone;
+  }
+
   // 1. Log Checkpoint 1: El Guerguerat Border
   console.log('📍 [المحطة 1] تسجيل نقطة عبور معبر الكركارات المغربي:');
   const timestampGuerguerat = new Date('2026-10-26T14:30:00Z').toISOString();
   const { data: alert1, error: a1Err } = await supabase.from('geofence_alerts').insert({
     truck_id: 62,
-    zone_id: 1, // Strategic border zone
+    zone_id: zoneGuerguerat?.id || 1,
     event_type: 'enter',
     latitude: 21.3656,
     longitude: -16.9583,
     timestamp: timestampGuerguerat,
     notified: true,
   }).select();
+  if (a1Err) console.warn('Alert 1 insert notice:', a1Err.message);
   console.log(`  ✓ تم توثيق عبور الكركارات (Lat: 21.3656, Lon: -16.9583) | Odometer: 128,450 km | Reefer: -19.0°C`);
 
   // 2. Log Checkpoint 2: Rosso Ferry Terminal
@@ -75,13 +103,14 @@ async function runSaharaSimulation() {
   const timestampRosso = new Date('2026-10-27T11:15:00Z').toISOString();
   const { data: alert2, error: a2Err } = await supabase.from('geofence_alerts').insert({
     truck_id: 62,
-    zone_id: 2,
+    zone_id: zoneRosso?.id || 2,
     event_type: 'enter',
     latitude: 16.5133,
     longitude: -15.8083,
     timestamp: timestampRosso,
     notified: true,
   }).select();
+  if (a2Err) console.warn('Alert 2 insert notice:', a2Err.message);
   console.log(`  ✓ تم توثيق عبور عبارة روصو (Lat: 16.5133, Lon: -15.8083) | Odometer: 129,680 km | Reefer: -18.8°C`);
 
   // 3. Electronic Delivery (e-POD) in Dakar

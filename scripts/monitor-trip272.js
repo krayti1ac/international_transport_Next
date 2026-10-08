@@ -57,12 +57,18 @@ async function main() {
     }
   }
 
-  const { data: trip } = await supabase.from('trip_orders').select('id, status, cmr_number, route, updated_at').eq('id', 272).single();
+  const { data: trip } = await supabase.from('trip_orders').select('id, status, cmr_number, route, truck_id, updated_at').eq('id', 272).single();
   const { data: sigs } = await supabase.from('delivery_signatures').select('*').eq('trip_order_id', 272);
   const { data: invoices } = await supabase.from('invoices').select('id, invoice_number, total_amount, tva_rate, status').eq('trip_order_id', 272);
 
+  const { data: zones } = await supabase.from('geofence_zones').select('id, name').limit(5);
+  const { data: alerts } = await supabase.from('geofence_alerts').select('*').limit(5);
+
   console.log('--- TRIP 272 CURRENT STATUS ---');
   console.log('Trip Status:', trip?.status, '| Last update:', trip?.updated_at);
+  console.log('Trip Truck ID:', trip?.truck_id);
+  console.log('Available Geofence Zones:', zones);
+  console.log('Geofence Alerts in DB:', alerts);
   console.log('Signatures Count:', sigs?.length || 0);
   if (sigs && sigs.length > 0) {
     console.log('Latest Signature:', sigs[sigs.length - 1]);
