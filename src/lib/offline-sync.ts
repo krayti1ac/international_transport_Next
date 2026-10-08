@@ -1310,20 +1310,22 @@ export async function getCachedDriverDocumentOffline(key: string): Promise<any |
    ========================================================================= */
 
 /**
- * Returns total count of all pending offline actions across all stores.
+ * Returns total count of all pending offline actions across all stores (including autonomous GPS breadcrumbs).
  */
 export async function getTotalOfflineQueueCount(): Promise<number> {
-  const [receipts, pods, tasks, checkpoints] = await Promise.all([
+  const { getPendingBreadcrumbsCount } = await import('./offline/driver-geo-db');
+  const [receipts, pods, tasks, checkpoints, geoBreadcrumbs] = await Promise.all([
     getOfflineQueueCount(),
     getPodSignaturesQueueCount(),
     getDriverTasksQueueCount(),
     getCheckpointsQueueCount(),
+    getPendingBreadcrumbsCount().catch(() => 0),
   ]);
-  return receipts + pods + tasks + checkpoints;
+  return receipts + pods + tasks + checkpoints + geoBreadcrumbs;
 }
 
 /**
- * Triggers complete synchronization across all offline queues.
+ * Triggers complete synchronization across all offline queues (receipts, PODs, tasks, checkpoints, and GPS breadcrumbs).
  */
 export async function processAllOfflineQueues(
   onProgress?: (totalRemaining: number) => void
@@ -1332,12 +1334,15 @@ export async function processAllOfflineQueues(
   pods: { successCount: number; failCount: number };
   tasks: { successCount: number; failCount: number };
   checkpoints: { successCount: number; failCount: number };
+  geoBreadcrumbs?: { totalSynced: number; totalFailed: number; remaining: number };
 }> {
-  const [receiptsRes, podsRes, tasksRes, checkpointsRes] = await Promise.all([
+  const { flushOfflineGeoBreadcrumbs } = await import('./offline/driver-geo-sync');
+  const [receiptsRes, podsRes, tasksRes, checkpointsRes, geoRes] = await Promise.all([
     processOfflineQueue(),
     processPodSignaturesOfflineQueue(),
     processDriverTasksOfflineQueue(),
     processCheckpointsOfflineQueue(),
+    flushOfflineGeoBreadcrumbs().catch(() => ({ totalSynced: 0, totalFailed: 0, remaining: 0 })),
   ]);
 
   if (onProgress) {
@@ -1350,6 +1355,8 @@ export async function processAllOfflineQueues(
     pods: podsRes,
     tasks: tasksRes,
     checkpoints: checkpointsRes,
+    geoBreadcrumbs: geoRes,
   };
 }
+
 

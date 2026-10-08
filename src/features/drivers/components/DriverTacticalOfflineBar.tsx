@@ -17,9 +17,14 @@ import {
   MapPin,
   FileText,
   Radio,
+  Navigation,
+  BatteryCharging,
+  Battery,
 } from 'lucide-react';
 import { DriverCheckpointModal } from './DriverCheckpointModal';
 import { DriverOfflineDocumentWallet } from './DriverOfflineDocumentWallet';
+import { autonomousGeoTracker } from '@/features/tracking/services/autonomous-geo-tracker.service';
+import type { AutonomousTrackerStatus } from '@/features/tracking/types/offline-geolocation.types';
 import type { Driver, TripOrder } from '@/types/database';
 
 interface DriverTacticalOfflineBarProps {
@@ -44,6 +49,7 @@ export function DriverTacticalOfflineBar({
   const [isRoaming, setIsRoaming] = useState<boolean>(false);
   const [isCheckpointOpen, setIsCheckpointOpen] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
+  const [geoStatus, setGeoStatus] = useState<AutonomousTrackerStatus | null>(null);
 
   const refreshCount = useCallback(async () => {
     try {
@@ -53,6 +59,25 @@ export function DriverTacticalOfflineBar({
       setQueueCount(0);
     }
   }, []);
+
+  // Autonomous GPS Tracking lifecycle
+  useEffect(() => {
+    if (activeTrip?.id) {
+      autonomousGeoTracker.startTracking(activeTrip.id, {
+        truckId: activeTrip.truck_id,
+        driverId: driver?.id,
+      });
+
+      const unsubscribe = autonomousGeoTracker.subscribe((status) => {
+        setGeoStatus(status);
+        refreshCount();
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [activeTrip?.id, activeTrip?.truck_id, driver?.id, refreshCount]);
 
   useEffect(() => {
     refreshCount();
@@ -100,11 +125,13 @@ export function DriverTacticalOfflineBar({
     setSyncing(true);
     try {
       const res = await processAllOfflineQueues();
+      const geoCount = res.geoBreadcrumbs?.totalSynced || 0;
       const totalSuccess =
         res.receipts.successCount +
         res.pods.successCount +
         res.tasks.successCount +
-        res.checkpoints.successCount;
+        res.checkpoints.successCount +
+        geoCount;
 
       await refreshCount();
 
@@ -112,8 +139,8 @@ export function DriverTacticalOfflineBar({
         toast({
           title: t('✅ تمت المزامنة بنجاح', '✅ Synchronisation réussie', '✅ Sincronización exitosa'),
           description: t(
-            `تم رفع ${totalSuccess} عنصر (وصولات، توقيعات، نقاط عبور) إلى الخادم المركزي.`,
-            `${totalSuccess} élément(s) (reçus, POD, checkpoints) synchronisés avec succès.`,
+            `تم رفع ${totalSuccess} عنصر (مسارات GPS، وصولات، توقيعات، نقاط عبور) إلى الخادم المركزي.`,
+            `${totalSuccess} élément(s) (traces GPS, reçus, POD, checkpoints) synchronisés avec succès.`,
             `${totalSuccess} elemento(s) sincronizados con éxito.`
           ),
         });
@@ -178,6 +205,29 @@ export function DriverTacticalOfflineBar({
               >
                 <ShieldAlert className="w-3 h-3 text-blue-400" />
                 <span>{t('حماية التجوال (Roaming Guard)', 'Roaming Guard', 'Roaming Guard')}</span>
+              </div>
+            )}
+
+            {/* Autonomous GPS Tracker Status */}
+            {geoStatus?.isActive && (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                title={t(
+                  'تتبع المسار الصحراوي الذاتي نشط مع توفير البطارية',
+                  'Traçage GPS désertique autonome actif avec économiseur de batterie',
+                  'Rastreo GPS desértico autónomo activo'
+                )}
+              >
+                <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+                <span>
+                  {t('تتبع نشط', 'GPS Actif', 'GPS Activo')}
+                  {geoStatus.pendingQueueCount > 0 ? ` (${geoStatus.pendingQueueCount})` : ''}
+                </span>
+                {geoStatus.batteryLevel !== undefined && (
+                  <span className="flex items-center text-[10px] text-cyan-200/80 ps-1 border-s border-cyan-500/30">
+                    {geoStatus.batteryLevel}%
+                  </span>
+                )}
               </div>
             )}
           </div>
