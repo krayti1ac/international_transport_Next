@@ -31,13 +31,16 @@ import {
   Share2,
   RefreshCw,
   Send,
-  Loader2
+  Loader2,
+  ShieldCheck
 } from 'lucide-react';
 import { InvoicePrintModal } from '@/components/invoice-print-modal';
 import { InvoiceFormModal } from '@/components/invoice-form-modal';
 import { FIFOPaymentModal } from '@/components/fifo-payment-modal';
 import { PaymentRequestModal } from '@/components/payment-request-modal';
 import { AccountingExportModal } from '@/features/accounting/components/AccountingExportModal';
+import { EInvoiceDgiModal } from '@/features/invoices/components/EInvoiceDgiModal';
+import { DgiComplianceBadge } from '@/features/invoices/components/DgiComplianceBadge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import {
   DEFAULT_CLIENTS,
@@ -88,6 +91,8 @@ function InvoicesPageContent() {
   const [isFIFOPaymentOpen, setIsFIFOPaymentOpen] = useState(false);
   const [isPaymentRequestOpen, setIsPaymentRequestOpen] = useState(false);
   const [isAccountingExportOpen, setIsAccountingExportOpen] = useState(false);
+  const [isEInvoiceModalOpen, setIsEInvoiceModalOpen] = useState(false);
+  const [dgiModalInvoice, setDgiModalInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<Invoice | null>(null);
   const [fifoClientId, setFifoClientId] = useState<number | ''>('');
@@ -389,6 +394,20 @@ function InvoicesPageContent() {
             {t('تصدير قيود ERP (Sage / Odoo)', 'Export ERP (Sage / Odoo)')}
           </Button>
 
+          {/* DGI Sovereign E-Invoicing Button */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              const target = filteredInvoices[0] || invoices[0] || null;
+              setDgiModalInvoice(target);
+              setIsEInvoiceModalOpen(true);
+            }}
+            className="border-emerald-600/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            {t('الفوترة الإلكترونية DGI', 'E-Facturation DGI', 'Facturación DGI')}
+          </Button>
+
           {/* Create Invoice Button */}
           <Button
             onClick={() => {
@@ -641,6 +660,19 @@ function InvoicesPageContent() {
                         <Button
                           variant="outline"
                           size="icon"
+                          className="h-7 w-7 rounded-lg text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/30"
+                          title={t('الفوترة الإلكترونية DGI والختم الرقمي', 'Facture Électronique DGI & Scellé', 'Factura DGI & Sello')}
+                          onClick={() => {
+                            setDgiModalInvoice(invoice);
+                            setIsEInvoiceModalOpen(true);
+                          }}
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
                           className="h-7 w-7 rounded-lg"
                           title={t('تعديل الفاتورة', 'Modifier la facture')}
                           onClick={() => {
@@ -779,6 +811,21 @@ function InvoicesPageContent() {
                           >
                             <Receipt className={`w-3.5 h-3.5 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
                             {t('طلب دفع', 'Demande')}
+                          </Button>
+
+                          {/* E-Facturation DGI List Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs rounded-xl h-8 px-2.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
+                            onClick={() => {
+                              setDgiModalInvoice(invoice);
+                              setIsEInvoiceModalOpen(true);
+                            }}
+                            title={t('الفوترة الإلكترونية DGI', 'E-Facturation DGI', 'Facturación DGI')}
+                          >
+                            <ShieldCheck className={`w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                            {t('DGI', 'DGI')}
                           </Button>
 
                           <Button
@@ -1009,6 +1056,15 @@ function InvoicesPageContent() {
       <AccountingExportModal
         isOpen={isAccountingExportOpen}
         onClose={() => setIsAccountingExportOpen(false)}
+      />
+
+      {/* 6. DGI Sovereign E-Invoicing & Compliance Modal */}
+      <EInvoiceDgiModal
+        isOpen={isEInvoiceModalOpen}
+        onClose={() => setIsEInvoiceModalOpen(false)}
+        invoice={dgiModalInvoice}
+        client={clients.find((c) => c.id === Number(dgiModalInvoice?.client_id))}
+        trip={trips.find((tr) => tr.id === dgiModalInvoice?.trip_order_id)}
       />
     </div>
   );

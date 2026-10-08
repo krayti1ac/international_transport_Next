@@ -34,3 +34,5 @@ export interface AutoInvoiceResult {
   notificationSent?: boolean;
   details?: TripInvoiceBreakdown;
 }
+
+export * from './einvoice.types';
