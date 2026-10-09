@@ -97,3 +97,4 @@ CREATE POLICY "fuel_theft_delete_policy" ON public.fuel_theft_incidents
             SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'super_admin'
         )
     );
+

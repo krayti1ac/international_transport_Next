@@ -141,3 +141,4 @@ for (const [lang, data, filePath] of [["ar", arData, arPath], ["fr", frData, frP
 }
 
 console.log("Successfully synchronized fuelFraud i18n keys across AR, FR, and ES!");
+

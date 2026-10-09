@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/forex';
 import type { DriverSettlementStatement } from '../types/fiscal-settlements.types';
 import { getDriverClearanceExportAction } from '../services/financial-export.actions';
+import { sendDriverClearanceWhatsAppAction } from '@/features/whatsapp/services/financial-whatsapp.actions';
 import {
   FileText,
   Printer,
@@ -28,6 +29,7 @@ import {
   Receipt,
   Download,
   Loader2,
+  Send,
 } from 'lucide-react';
 
 interface DriverClearanceModalProps {
@@ -63,6 +65,33 @@ export function DriverClearanceModal({
       }
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = React.useState(false);
+  const [whatsAppSuccess, setWhatsAppSuccess] = React.useState<string | null>(null);
+
+  const handleSendWhatsApp = async () => {
+    if (!statement) return;
+    setIsSendingWhatsApp(true);
+    try {
+      const res = await sendDriverClearanceWhatsAppAction({
+        statementId: statement.id,
+        phone: statement.driver?.phone,
+        lang: locale === 'es' ? 'es' : locale === 'fr' ? 'fr' : 'ar',
+      });
+      if (res.success) {
+        setWhatsAppSuccess(
+          locale === 'ar'
+            ? 'تم الإرسال عبر WhatsApp بنجاح ✓'
+            : locale === 'es'
+            ? 'Enviado por WhatsApp ✓'
+            : 'Envoyé par WhatsApp ✓'
+        );
+        setTimeout(() => setWhatsAppSuccess(null), 4000);
+      }
+    } finally {
+      setIsSendingWhatsApp(false);
     }
   };
 
@@ -367,6 +396,23 @@ export function DriverClearanceModal({
             {t('المصادقة الإلكترونية محفوظة في سجلات التدقيق', 'Archivage sécurisé dans le journal d\'audit', 'Registro seguro en auditoría')}
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSendWhatsApp}
+              disabled={isSendingWhatsApp}
+              className="gap-2 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-400 font-semibold"
+            >
+              {isSendingWhatsApp ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              <span>
+                {whatsAppSuccess ||
+                  t('إرسال عبر WhatsApp', 'Envoyer via WhatsApp', 'Enviar por WhatsApp')}
+              </span>
+            </Button>
             <Button
               variant="default"
               size="sm"

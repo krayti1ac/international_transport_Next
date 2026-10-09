@@ -22,6 +22,8 @@ import {
   Layers,
   ChevronRight,
   ExternalLink,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +57,7 @@ import {
   confirmIncidentDeductionAction,
   resolveIncidentJustificationAction,
 } from '../services/fuel-fraud.actions';
+import { sendFuelTheftAlertWhatsAppAction } from '@/features/whatsapp/services/financial-whatsapp.actions';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -86,6 +89,27 @@ export function FuelFraudMonitorView({
   const [isDeductOpen, setIsDeductOpen] = useState<boolean>(false);
   const [isJustifyOpen, setIsJustifyOpen] = useState<boolean>(false);
   const [actionNotes, setActionNotes] = useState<string>('');
+
+  const [alertingIncidentId, setAlertingIncidentId] = useState<string | null>(null);
+  const [alertSuccessId, setAlertSuccessId] = useState<string | null>(null);
+
+  const handleSendWhatsAppAlert = async (incident: FuelTheftIncidentRecord) => {
+    setAlertingIncidentId(incident.id);
+    try {
+      const res = await sendFuelTheftAlertWhatsAppAction({
+        incidentId: incident.id,
+        recipientPhone: incident.driver?.phone,
+        lang: locale === 'es' ? 'es' : locale === 'fr' ? 'fr' : 'ar',
+        forceBypassCooldown: true,
+      });
+      if (res.success) {
+        setAlertSuccessId(incident.id);
+        setTimeout(() => setAlertSuccessId(null), 4000);
+      }
+    } finally {
+      setAlertingIncidentId(null);
+    }
+  };
 
   // 1. Filtered incidents
   const filteredIncidents = incidents.filter((inc) => {
@@ -640,6 +664,22 @@ export function FuelFraudMonitorView({
                               {t('viewDetails')}
                             </Button>
 
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-400 font-medium"
+                              disabled={alertingIncidentId === incident.id}
+                              onClick={() => handleSendWhatsAppAlert(incident)}
+                              title={isRtl ? 'إرسال إنذار فوري عبر WhatsApp' : 'Alerter via WhatsApp'}
+                            >
+                              {alertingIncidentId === incident.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Send className="w-3.5 h-3.5 me-1" />
+                              )}
+                              <span>{alertSuccessId === incident.id ? '✓' : 'WhatsApp'}</span>
+                            </Button>
+
                             {incident.status === 'detected' && (
                               <>
                                 <Button
@@ -757,7 +797,31 @@ export function FuelFraudMonitorView({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {selectedIncident && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-400 font-semibold"
+                disabled={alertingIncidentId === selectedIncident.id}
+                onClick={() => handleSendWhatsAppAlert(selectedIncident)}
+              >
+                {alertingIncidentId === selectedIncident.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                <span>
+                  {alertSuccessId === selectedIncident.id
+                    ? isRtl
+                      ? 'تم إرسال الإنذار عبر WhatsApp ✓'
+                      : 'Alerte WhatsApp envoyée ✓'
+                    : isRtl
+                    ? 'إرسال إنذار فوري عبر WhatsApp'
+                    : 'Alerter le chauffeur via WhatsApp'}
+                </span>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setIsDetailOpen(false)}>
               إغلاق
             </Button>
