@@ -1576,6 +1576,35 @@
       "currencyXOF": "فرنك سيفا غرب إفريقيا (XOF)",
       "africanVisa": "تأشيرة موريتانيا وغرب إفريقيا",
       "africanBunkeringAdvice": "تزود بالكامل بمحطات الداخلة أو معبر الكركارات قبل العبور لموريتانيا لتأمين الوقود عبر المقاطع الصحراوية"
+    },
+    "onlinePayments": {
+      "title": "بوابات الدفع الإلكتروني المباشرة",
+      "generateLink": "توليد رابط سداد إلكتروني",
+      "cmiMaroc": "مركز النقديات المغربي (CMI)",
+      "stripeGlobal": "بوابة سترايب العالمية (Stripe)",
+      "bankTransfer": "تحويل بنكي مباشر (RIB)",
+      "linkActive": "رابط سداد مفعّل",
+      "linkPaid": "تم السداد بنجاح",
+      "linkExpired": "رابط منتهي الصلاحية",
+      "copyLink": "نسخ الرابط",
+      "shareWhatsApp": "مشاركة عبر واتساب",
+      "securePayment": "سداد آمن ومشفر",
+      "voucherTitle": "وصل السداد الإلكتروني المعتمد"
+    },
+    "recurringInvoices": {
+      "title": "الفواتير الدورية المجدولة",
+      "newSchedule": "جدولة عقد فوترة جديد",
+      "frequencyWeekly": "أسبوعي",
+      "frequencyBiweekly": "كل أسبوعين",
+      "frequencyMonthly": "شهري",
+      "frequencyQuarterly": "ربع سنوي",
+      "frequencyAnnually": "سنوي",
+      "cyclesCompleted": "الدورات المنجزة",
+      "nextIssueDate": "تاريخ الإصدار القادم",
+      "processDueNow": "تشغيل الفواتير المستحقة",
+      "autoLinkEnabled": "توليد روابط الدفع تلقائياً",
+      "autoWhatsAppEnabled": "إرسال الإشعارات عبر واتساب",
+      "autoEmailEnabled": "إرسال الفواتير عبر البريد"
     }
   }
 }

@@ -41,6 +41,12 @@ import { PaymentRequestModal } from '@/components/payment-request-modal';
 import { AccountingExportModal } from '@/features/accounting/components/AccountingExportModal';
 import { EInvoiceDgiModal } from '@/features/invoices/components/EInvoiceDgiModal';
 import { DgiComplianceBadge } from '@/features/invoices/components/DgiComplianceBadge';
+import { GeneratePaymentLinkModal } from '@/features/payments/components/GeneratePaymentLinkModal';
+import { RecurringInvoiceModal } from '@/features/payments/components/RecurringInvoiceModal';
+import { RecurringSchedulesList } from '@/features/payments/components/RecurringSchedulesList';
+import { fetchRecurringSchedulesAction } from '@/features/payments/services/payments.actions';
+import type { RecurringInvoiceSchedule } from '@/features/payments/types/recurring-invoice.types';
+import { CreditCard, Repeat } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import {
   DEFAULT_CLIENTS,
@@ -80,7 +86,7 @@ function InvoicesPageContent() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(statusParam || 'all');
-  const [activeTab, setActiveTab] = useState<'invoices' | 'payment_notifications'>(
+  const [activeTab, setActiveTab] = useState<'invoices' | 'payment_notifications' | 'recurring_schedules'>(
     tabParam === 'payment_notifications' ? 'payment_notifications' : 'invoices'
   );
   const [cardLayout, setCardLayout] = useCardViewMode('invoices', 'grid');
@@ -96,6 +102,22 @@ function InvoicesPageContent() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<Invoice | null>(null);
   const [fifoClientId, setFifoClientId] = useState<number | ''>('');
+
+  // Payment Link & Recurring Invoices State
+  const [isPaymentLinkModalOpen, setIsPaymentLinkModalOpen] = useState(false);
+  const [paymentLinkInvoice, setPaymentLinkInvoice] = useState<Invoice | null>(null);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
+  const [recurringSchedules, setRecurringSchedules] = useState<RecurringInvoiceSchedule[]>([]);
+  const [, setLoadingRecurring] = useState(false);
+
+  const loadRecurringSchedules = useCallback(async () => {
+    setLoadingRecurring(true);
+    const res = await fetchRecurringSchedulesAction();
+    if (res.success) {
+      setRecurringSchedules(res.schedules);
+    }
+    setLoadingRecurring(false);
+  }, []);
 
   // Reminders
   const [reminders, setReminders] = useState<OverdueInvoiceReminder[]>([]);
@@ -159,6 +181,9 @@ function InvoicesPageContent() {
 
     if (tabParam === 'payment_notifications') {
       setActiveTab('payment_notifications');
+    } else if (tabParam === 'recurring') {
+      setActiveTab('recurring_schedules');
+      loadRecurringSchedules();
     } else if (!tabParam) {
       setActiveTab('invoices');
     }
@@ -408,6 +433,16 @@ function InvoicesPageContent() {
             {t('الفوترة الإلكترونية DGI', 'E-Facturation DGI', 'Facturación DGI')}
           </Button>
 
+          {/* Recurring Invoices Button */}
+          <Button
+            variant="outline"
+            onClick={() => setIsRecurringModalOpen(true)}
+            className="border-indigo-600/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 text-xs sm:text-sm rounded-xl h-10 px-3.5 font-semibold shadow-2xs gap-1.5"
+          >
+            <Repeat className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            {t('فوترة دورية للعقود', 'Facturation Récurrente', 'Facturación Recurrente')}
+          </Button>
+
           {/* Create Invoice Button */}
           <Button
             onClick={() => {
@@ -453,6 +488,26 @@ function InvoicesPageContent() {
             {overdueCount > 0 && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono animate-pulse">
                 {overdueCount} {t('متأخرة', 'en retard')}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('recurring_schedules');
+              loadRecurringSchedules();
+            }}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === 'recurring_schedules'
+                ? 'bg-primary text-primary-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            }`}
+          >
+            <Repeat className="w-4 h-4" />
+            {t('عقود الفوترة الدورية', 'Facturation Récurrente', 'Contratos Recurrentes')}
+            {recurringSchedules.length > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 font-mono">
+                {recurringSchedules.length}
               </span>
             )}
           </button>
@@ -673,6 +728,19 @@ function InvoicesPageContent() {
                         <Button
                           variant="outline"
                           size="icon"
+                          className="h-7 w-7 rounded-lg text-blue-600 hover:bg-blue-500/10 border-blue-500/30"
+                          title={t('رابط سداد إلكتروني (Stripe/CMI)', 'Lien de paiement (Stripe/CMI)', 'Enlace de pago (Stripe/CMI)')}
+                          onClick={() => {
+                            setPaymentLinkInvoice(invoice);
+                            setIsPaymentLinkModalOpen(true);
+                          }}
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
                           className="h-7 w-7 rounded-lg"
                           title={t('تعديل الفاتورة', 'Modifier la facture')}
                           onClick={() => {
@@ -831,6 +899,20 @@ function InvoicesPageContent() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="text-xs rounded-xl h-8 px-2.5 bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20 hover:bg-blue-500/20"
+                            onClick={() => {
+                              setPaymentLinkInvoice(invoice);
+                              setIsPaymentLinkModalOpen(true);
+                            }}
+                            title={t('رابط سداد إلكتروني (Stripe/CMI)', 'Lien de paiement (Stripe/CMI)', 'Enlace de pago (Stripe/CMI)')}
+                          >
+                            <CreditCard className={`w-3.5 h-3.5 text-blue-600 dark:text-blue-400 ${dir === 'rtl' ? 'ml-1' : 'mr-1'}`} />
+                            {t('دفع رقمي', 'Paiement', 'Pago')}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
                             className="text-xs rounded-xl h-8 px-2.5"
                             onClick={() => setActiveInvoice(invoice)}
                             title={t('معاينة وطباعة الفاتورة', 'Aperçu et impression', 'Preview & Print Invoice')}
@@ -877,6 +959,12 @@ function InvoicesPageContent() {
             </div>
           )}
         </>
+      ) : activeTab === 'recurring_schedules' ? (
+        <RecurringSchedulesList
+          schedules={recurringSchedules}
+          onAddNew={() => setIsRecurringModalOpen(true)}
+          onRefresh={loadRecurringSchedules}
+        />
       ) : (
         /* Payment Notifications & Overdue Reminders Tab */
         <div className="space-y-4">
@@ -1065,6 +1153,40 @@ function InvoicesPageContent() {
         invoice={dgiModalInvoice}
         client={clients.find((c) => c.id === Number(dgiModalInvoice?.client_id))}
         trip={trips.find((tr) => tr.id === dgiModalInvoice?.trip_order_id)}
+      />
+
+      {/* 7. Instant Digital Payment Link Modal (Stripe / CMI) */}
+      {paymentLinkInvoice && (
+        <GeneratePaymentLinkModal
+          isOpen={isPaymentLinkModalOpen}
+          onClose={() => {
+            setIsPaymentLinkModalOpen(false);
+            setPaymentLinkInvoice(null);
+          }}
+          invoice={{
+            id: paymentLinkInvoice.id,
+            invoice_number: paymentLinkInvoice.invoice_number,
+            client_id: String(paymentLinkInvoice.client_id),
+            client_name: clients.find((c) => c.id === Number(paymentLinkInvoice.client_id))?.name,
+            client_phone: clients.find((c) => c.id === Number(paymentLinkInvoice.client_id))?.phone,
+            client_email: clients.find((c) => c.id === Number(paymentLinkInvoice.client_id))?.email,
+            total_amount: paymentLinkInvoice.total_amount,
+            paid_amount: paymentLinkInvoice.paid_amount,
+            currency: paymentLinkInvoice.currency,
+          }}
+          onSuccess={() => refreshInvoices()}
+        />
+      )}
+
+      {/* 8. Automated Recurring Invoices Schedule Modal */}
+      <RecurringInvoiceModal
+        isOpen={isRecurringModalOpen}
+        onClose={() => setIsRecurringModalOpen(false)}
+        clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+        onSuccess={() => {
+          loadRecurringSchedules();
+          refreshInvoices();
+        }}
       />
     </div>
   );

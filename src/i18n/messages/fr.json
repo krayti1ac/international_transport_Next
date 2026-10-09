@@ -1576,6 +1576,35 @@
       "currencyXOF": "Franc CFA Afrique de l'Ouest (XOF)",
       "africanVisa": "Visa Mauritanie & Afrique de l'Ouest",
       "africanBunkeringAdvice": "Ravitaillement complet à Dakhla ou Guerguerat avant la frontière mauritanienne pour sécuriser le carburant dans le désert"
+    },
+    "onlinePayments": {
+      "title": "Passerelles de Paiement en Ligne",
+      "generateLink": "Générer un lien de paiement",
+      "cmiMaroc": "Centre Monétique Interbancaire (CMI)",
+      "stripeGlobal": "Passerelle Internationale Stripe",
+      "bankTransfer": "Virement bancaire direct (RIB)",
+      "linkActive": "Lien de paiement actif",
+      "linkPaid": "Paiement effectué avec succès",
+      "linkExpired": "Lien expiré",
+      "copyLink": "Copier le lien",
+      "shareWhatsApp": "Partager via WhatsApp",
+      "securePayment": "Paiement sécurisé et chiffré",
+      "voucherTitle": "Reçu de paiement électronique certifié"
+    },
+    "recurringInvoices": {
+      "title": "Facturation Récurrente Automatisée",
+      "newSchedule": "Nouveau calendrier de facturation",
+      "frequencyWeekly": "Hebdomadaire",
+      "frequencyBiweekly": "Bi-hebdomadaire",
+      "frequencyMonthly": "Mensuel",
+      "frequencyQuarterly": "Trimestriel",
+      "frequencyAnnually": "Annuel",
+      "cyclesCompleted": "Cycles achevés",
+      "nextIssueDate": "Prochaine date d'émission",
+      "processDueNow": "Traiter les échéances dues",
+      "autoLinkEnabled": "Génération auto de liens",
+      "autoWhatsAppEnabled": "Envoi des rappels WhatsApp",
+      "autoEmailEnabled": "Envoi des factures par Email"
     }
   }
 }

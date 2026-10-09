@@ -1576,6 +1576,35 @@
       "currencyXOF": "Franco CFA África Occidental (XOF)",
       "africanVisa": "Visado Mauritania y África Occidental",
       "africanBunkeringAdvice": "Reposte por completo en Dakhla o Guerguerat antes de cruzar a Mauritania para asegurar el combustible en tramos desérticos"
+    },
+    "onlinePayments": {
+      "title": "Pasarelas de Pago en Línea",
+      "generateLink": "Generar enlace de pago",
+      "cmiMaroc": "Centro Monetario Interbancario (CMI)",
+      "stripeGlobal": "Pasarela Internacional Stripe",
+      "bankTransfer": "Transferencia bancaria directa (RIB)",
+      "linkActive": "Enlace de pago activo",
+      "linkPaid": "Pago completado con éxito",
+      "linkExpired": "Enlace expirado",
+      "copyLink": "Copiar enlace",
+      "shareWhatsApp": "Compartir vía WhatsApp",
+      "securePayment": "Pago seguro y cifrado",
+      "voucherTitle": "Recibo de pago electrónico certificado"
+    },
+    "recurringInvoices": {
+      "title": "Facturación Recurrente Automatizada",
+      "newSchedule": "Nueva programación de facturación",
+      "frequencyWeekly": "Semanal",
+      "frequencyBiweekly": "Quincenal",
+      "frequencyMonthly": "Mensual",
+      "frequencyQuarterly": "Trimestral",
+      "frequencyAnnually": "Anual",
+      "cyclesCompleted": "Ciclos completados",
+      "nextIssueDate": "Próxima fecha de emisión",
+      "processDueNow": "Procesar vencimientos pendientes",
+      "autoLinkEnabled": "Generación automática de enlaces",
+      "autoWhatsAppEnabled": "Envío de recordatorios por WhatsApp",
+      "autoEmailEnabled": "Envío de facturas por Email"
     }
   }
 }
