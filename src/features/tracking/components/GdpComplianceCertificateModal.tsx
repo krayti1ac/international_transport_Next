@@ -28,6 +28,7 @@ import {
   MessageCircle,
   Send,
   Download,
+  ExternalLink,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
@@ -192,6 +193,16 @@ export function GdpComplianceCertificateModal({
               >
                 {copied ? <CheckCircle className="w-4 h-4 text-emerald-400 me-1.5" /> : <Copy className="w-4 h-4 me-1.5" />}
                 {copied ? 'تم النسخ' : 'نسخ الكود'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/verify/reefer/${certificateHash}?trip=${profile.tripId}`, '_blank')}
+                className="bg-slate-900 border-slate-700 hover:bg-slate-800 text-slate-200"
+                title="فتح بوابة التحقق العامة للمفتشين والجمارك"
+              >
+                <ExternalLink className="w-4 h-4 me-1.5 text-sky-400" />
+                بوابة التحقق العامة
               </Button>
               <Button
                 variant="default"

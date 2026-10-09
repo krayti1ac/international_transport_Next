@@ -212,7 +212,7 @@ async function resolveReeferExportContext(
     .toUpperCase();
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://tms.transbodanon.com';
-  const verificationUrl = `${appUrl}/track/${tripId}?audit=${verificationHash.substring(0, 16)}`;
+  const verificationUrl = `${appUrl}/verify/reefer/${verificationHash.substring(0, 16)}?trip=${tripId}`;
 
   const tripContext: ReeferTripExportContext = {
     tripId,
