@@ -9,11 +9,16 @@ import {
   generateReeferCertificateSchema,
   logReeferTelemetrySchema,
   upsertTripReeferProfileSchema,
+  dispatchReeferCertificateWhatsAppSchema,
+  dispatchReeferAlertWhatsAppSchema,
   type GetTripReeferAuditInput,
   type GenerateReeferCertificateInput,
   type LogReeferTelemetryInput,
   type UpsertTripReeferProfileInput,
+  type DispatchReeferCertificateWhatsAppInput,
+  type DispatchReeferAlertWhatsAppInput,
 } from '../schemas/reefer-compliance.schemas';
+import { ReeferWhatsAppDispatcherService } from './reefer-whatsapp-dispatcher.service';
 import { ColdChainGuardService } from './cold-chain-guard.service';
 import type {
   ColdChainAuditEvaluation,
@@ -420,4 +425,142 @@ export async function upsertTripReeferProfileAction(
     return { success: false, error: message };
   }
 }
+
+/**
+ * إرسال شهادة الامتثال الرسمية لسلسلة التبريد عبر WhatsApp
+ */
+export async function dispatchReeferWhatsAppCertificateAction(
+  rawInput: DispatchReeferCertificateWhatsAppInput
+): Promise<{ success: boolean; phone?: string; isSimulated?: boolean; messageId?: string; error?: string }> {
+  try {
+    const input = dispatchReeferCertificateWhatsAppSchema.parse(rawInput);
+    const auditRes = await getTripReeferAuditAction({ tripId: input.tripId });
+    if (!auditRes.success || !auditRes.data) {
+      return { success: false, error: auditRes.error || 'تعذر جلب بيانات الشحنة المبردة' };
+    }
+
+    const { profile, evaluation } = auditRes.data;
+
+    // استعلام بيانات الشاحنة وخط السير من trip_orders
+    const supabase = await createClient();
+    const { data: tripRow } = await supabase
+      .from('trip_orders')
+      .select('id, cmr_number, truck_id, origin, destination, trucks(plate_number)')
+      .eq('id', input.tripId)
+      .maybeSingle();
+
+    const truckPlate = (tripRow?.trucks as { plate_number?: string } | null)?.plate_number || '12345-A-40';
+    const cmrNumber = tripRow?.cmr_number || `CMR-MA-${input.tripId}`;
+    const route = tripRow?.origin && tripRow?.destination ? `${tripRow.origin} ➔ ${tripRow.destination}` : undefined;
+
+    const certHash = evaluation.certificateHash || ColdChainGuardService.generateCertificateHash(
+      profile,
+      evaluation.complianceStatus,
+      new Decimal(evaluation.mktTemperatureCelsius),
+      evaluation.totalExcursionMinutes,
+      evaluation.complianceScorePercent
+    );
+
+    const dispatchResult = await ReeferWhatsAppDispatcherService.dispatchGdpCertificate({
+      tripId: input.tripId,
+      phone: input.recipientPhone,
+      locale: input.locale,
+      payload: {
+        tripId: input.tripId,
+        cmrNumber,
+        route,
+        truckPlate,
+        atpClass: profile.atpClass,
+        cargoCategory: profile.cargoCategory,
+        setpointTemp: profile.setpointTemp,
+        mktTemperatureCelsius: evaluation.mktTemperatureCelsius,
+        avgSupplyTemp: evaluation.avgSupplyTemp,
+        avgReturnTemp: evaluation.avgReturnTemp,
+        totalExcursionMinutes: evaluation.totalExcursionMinutes,
+        doorBreachesCount: evaluation.doorBreachesCount,
+        complianceScorePercent: evaluation.complianceScorePercent,
+        certificateHash: certHash,
+      },
+    });
+
+    if (dispatchResult.success) {
+      await recordAuditLog({
+        entityType: 'reefer_compliance',
+        entityId: input.tripId,
+        actionType: 'whatsapp_notification',
+        reason: `تم إرسال شهادة مطابقة التبريد عبر WhatsApp إلى ${dispatchResult.phone}`,
+      });
+    }
+
+    return dispatchResult;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل إرسال شهادة التبريد عبر واتساب';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * بث إنذار طارئ لخرق درجات الحرارة أو فتح الأبواب عبر WhatsApp
+ */
+export async function dispatchReeferWhatsAppAlertAction(
+  rawInput: DispatchReeferAlertWhatsAppInput
+): Promise<{ success: boolean; phone?: string; isSimulated?: boolean; skippedCooldown?: boolean; messageId?: string; error?: string }> {
+  try {
+    const input = dispatchReeferAlertWhatsAppSchema.parse(rawInput);
+    const supabase = await createClient();
+
+    // جلب بيانات الواقعة
+    const { data: incidentRow } = await supabase
+      .from('reefer_excursion_incidents')
+      .select('*')
+      .eq('id', input.incidentId)
+      .maybeSingle();
+
+    // جلب بيانات الشحنة والسائق
+    const { data: tripRow } = await supabase
+      .from('trip_orders')
+      .select('id, truck_id, driver_id, trucks(plate_number), drivers(full_name, phone)')
+      .eq('id', input.tripId)
+      .maybeSingle();
+
+    const truckPlate = (tripRow?.trucks as { plate_number?: string } | null)?.plate_number || '12345-A-40';
+    const driverName = (tripRow?.drivers as { full_name?: string } | null)?.full_name || 'كابتن الشاحنة';
+    const driverPhone = (tripRow?.drivers as { phone?: string } | null)?.phone;
+
+    const dispatchResult = await ReeferWhatsAppDispatcherService.dispatchReeferExcursionAlert({
+      incidentId: input.incidentId,
+      phone: input.recipientPhone,
+      locale: input.locale,
+      forceBypassCooldown: input.forceBypassCooldown,
+      payload: {
+        tripId: input.tripId,
+        truckPlate,
+        driverName,
+        driverPhone,
+        incidentType: incidentRow?.incident_type || 'temp_high',
+        severity: (incidentRow?.severity as 'warning' | 'critical') || 'critical',
+        currentTemp: Number(incidentRow?.peak_deviation_temp ?? 8.5),
+        setpointTemp: 4.0,
+        peakDeviationTemp: Number(incidentRow?.peak_deviation_temp ?? 8.5),
+        durationMinutes: Number(incidentRow?.duration_minutes ?? 15),
+        timestamp: incidentRow?.started_at,
+      },
+    });
+
+    if (dispatchResult.success) {
+      await recordAuditLog({
+        entityType: 'reefer_compliance',
+        entityId: input.tripId,
+        actionType: 'security_alert',
+        reason: `تم بث إنذار خرق التبريد عبر WhatsApp إلى ${dispatchResult.phone}`,
+      });
+    }
+
+    return dispatchResult;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'فشل بث إنذار التبريد عبر واتساب';
+    return { success: false, error: message };
+  }
+}
+
 

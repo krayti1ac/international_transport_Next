@@ -38,8 +38,24 @@ export const upsertTripReeferProfileSchema = z.object({
   mktActivationEnergyKj: z.number().default(83.144),
 });
 
+export const dispatchReeferCertificateWhatsAppSchema = z.object({
+  tripId: z.union([z.string(), z.number()]),
+  recipientPhone: z.string().min(6),
+  locale: z.enum(['ar', 'fr', 'es']).optional().default('ar'),
+});
+
+export const dispatchReeferAlertWhatsAppSchema = z.object({
+  incidentId: z.string(),
+  tripId: z.union([z.string(), z.number()]),
+  recipientPhone: z.string().min(6),
+  locale: z.enum(['ar', 'fr', 'es']).optional().default('ar'),
+  forceBypassCooldown: z.boolean().optional().default(false),
+});
+
 export type GetTripReeferAuditInput = z.infer<typeof getTripReeferAuditSchema>;
 export type GenerateReeferCertificateInput = z.infer<typeof generateReeferCertificateSchema>;
 export type LogReeferTelemetryInput = z.infer<typeof logReeferTelemetrySchema>;
 export type UpsertTripReeferProfileInput = z.infer<typeof upsertTripReeferProfileSchema>;
+export type DispatchReeferCertificateWhatsAppInput = z.input<typeof dispatchReeferCertificateWhatsAppSchema>;
+export type DispatchReeferAlertWhatsAppInput = z.input<typeof dispatchReeferAlertWhatsAppSchema>;
 

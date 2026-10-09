@@ -22,6 +22,7 @@ import {
   Award,
   RefreshCw,
   PlusCircle,
+  MessageCircle,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
@@ -34,7 +35,9 @@ import { GdpComplianceCertificateModal } from './GdpComplianceCertificateModal';
 import {
   generateReeferCertificateAction,
   logReeferTelemetryAction,
+  dispatchReeferWhatsAppAlertAction,
 } from '../services/reefer-compliance.actions';
+
 
 interface ReeferColdChainAuditCardProps {
   tripId: string | number;
@@ -72,12 +75,51 @@ export function ReeferColdChainAuditCard({
   const [evaluation, setEvaluation] = useState<ColdChainAuditEvaluation>(initialEvaluation);
   const [showCertModal, setShowCertModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'logs' | 'incidents'>('overview');
+  const [sendingAlertId, setSendingAlertId] = useState<string | null>(null);
 
   const cargoPreset = REEFER_CARGO_CATALOG[profile.cargoCategory] || REEFER_CARGO_CATALOG.fresh_produce;
 
   const isCompliant = evaluation.complianceStatus === 'compliant';
   const isWarning = evaluation.complianceStatus === 'warning';
   const isBreached = evaluation.complianceStatus === 'breached';
+
+  // Handle WhatsApp Alert Dispatch
+  const handleDispatchAlert = (inc: ReeferExcursionIncident) => {
+    setSendingAlertId(inc.id);
+    startTransition(async () => {
+      const res = await dispatchReeferWhatsAppAlertAction({
+        incidentId: inc.id,
+        tripId,
+        recipientPhone: '+212694585307',
+        locale: locale === 'fr' ? 'fr' : locale === 'es' ? 'es' : 'ar',
+        forceBypassCooldown: false,
+      });
+
+      setSendingAlertId(null);
+
+      if (!res.success) {
+        toast({
+          title: 'فشل بث إنذار التبريد',
+          description: res.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (res.skippedCooldown) {
+        toast({
+          title: 'الإنذار في فترة التهدئة المؤقتة (Cooldown)',
+          description: 'تم إرسال هذا الإنذار مسبقاً خلال الـ 15 دقيقة الأخيرة لمنع تكرار الإزعاج.',
+        });
+      } else {
+        toast({
+          title: 'تم بث إنذار التبريد عبر WhatsApp بنجاح 🚨',
+          description: `المستلم: ${res.phone} ${res.isSimulated ? '(وضع التجربة الآمن 🧪)' : ''}`,
+        });
+      }
+    });
+  };
+
 
   // Handle Certificate Generation
   const handleGenerateCertificate = () => {
@@ -326,11 +368,25 @@ export function ReeferColdChainAuditCard({
                       الذروة: {inc.peakDeviationTemp}°C • المدة: {inc.durationMinutes} دقيقة
                     </span>
                   </div>
-                  <Badge variant={inc.severity === 'critical' ? 'destructive' : 'outline'} className="text-[10px]">
-                    {inc.severity === 'critical' ? 'حرج' : 'تحذير'}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant={inc.severity === 'critical' ? 'destructive' : 'outline'} className="text-[10px]">
+                      {inc.severity === 'critical' ? 'حرج' : 'تحذير'}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sendingAlertId === inc.id}
+                      onClick={() => handleDispatchAlert(inc)}
+                      className="h-6 text-[10px] px-2 bg-rose-950/40 border-rose-700/60 text-rose-300 hover:bg-rose-900/60"
+                      title="بث إنذار طوارئ عبر واتساب"
+                    >
+                      <MessageCircle className="w-3 h-3 me-1 text-rose-400" />
+                      {sendingAlertId === inc.id ? 'جاري البث...' : 'بث واتساب'}
+                    </Button>
+                  </div>
                 </div>
               ))}
+
             </div>
           </div>
         )}

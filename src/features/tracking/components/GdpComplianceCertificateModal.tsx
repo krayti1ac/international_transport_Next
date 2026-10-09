@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useLanguage } from '@/components/language-provider';
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -24,12 +25,16 @@ import {
   Lock,
   Truck,
   Award,
+  MessageCircle,
+  Send,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
   TripReeferMonitoringProfile,
 } from '../types/reefer-compliance.types';
 import { REEFER_CARGO_CATALOG } from '../types/reefer-compliance.types';
+import { dispatchReeferWhatsAppCertificateAction } from '../services/reefer-compliance.actions';
+
 
 interface GdpComplianceCertificateModalProps {
   open: boolean;
@@ -54,9 +59,15 @@ export function GdpComplianceCertificateModal({
   truckPlate = '12345-A-40',
   trailerPlate = 'REM-9921',
 }: GdpComplianceCertificateModalProps) {
-  const { t, dir } = useLanguage();
+  const { t, dir, locale } = useLanguage();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [showWhatsAppBar, setShowWhatsAppBar] = useState(false);
+  const [recipientPhone, setRecipientPhone] = useState('+212694585307');
+  const [selectedLocale, setSelectedLocale] = useState<'ar' | 'fr' | 'es'>(
+    locale === 'fr' ? 'fr' : locale === 'es' ? 'es' : 'ar'
+  );
+  const [isPendingWhatsApp, startTransitionWhatsApp] = useTransition();
 
   const cargoPreset = REEFER_CARGO_CATALOG[profile.cargoCategory] || REEFER_CARGO_CATALOG.fresh_produce;
   const certificateHash = evaluation.certificateHash || `ATP-${profile.atpClass.toUpperCase()}-${profile.tripId}-CERT`;
@@ -77,6 +88,39 @@ export function GdpComplianceCertificateModal({
     window.print();
   };
 
+  const handleSendWhatsApp = () => {
+    if (!recipientPhone.trim()) {
+      toast({
+        title: 'يرجى إدخال رقم هاتف المستلم',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    startTransitionWhatsApp(async () => {
+      const res = await dispatchReeferWhatsAppCertificateAction({
+        tripId: profile.tripId,
+        recipientPhone,
+        locale: selectedLocale,
+      });
+
+      if (!res.success) {
+        toast({
+          title: 'فشل إرسال الشهادة عبر واتساب',
+          description: res.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'تم إرسال شهادة المطابقة بنجاح عبر WhatsApp ❄️',
+        description: `المستلم: ${res.phone} ${res.isSimulated ? '(وضع التجربة الآمن 🧪)' : ''}`,
+      });
+      setShowWhatsAppBar(false);
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 bg-slate-950 text-slate-100 border-slate-800">
@@ -91,7 +135,16 @@ export function GdpComplianceCertificateModal({
                 وثيقة مطابقة المعايير الأوروبية للنقل الدولي المبرد وتدقيق الحرارة الحركية (MKT)
               </DialogDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowWhatsAppBar(!showWhatsAppBar)}
+                className="bg-emerald-950/40 border-emerald-700/60 hover:bg-emerald-900/60 text-emerald-300 font-medium"
+              >
+                <MessageCircle className="w-4 h-4 me-1.5 text-emerald-400" />
+                إرسال واتساب
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -112,7 +165,51 @@ export function GdpComplianceCertificateModal({
               </Button>
             </div>
           </div>
+
+          {/* Interactive WhatsApp Dispatch Bar */}
+          {showWhatsAppBar && (
+            <div className="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 animate-in fade-in duration-200">
+              <div className="flex-1">
+                <label className="text-[10px] text-slate-400 block mb-1">
+                  رقم هاتف المستلم (العميل المستورد أو السائق مع رمز الدولة الدولي):
+                </label>
+                <Input
+                  value={recipientPhone}
+                  onChange={(e) => setRecipientPhone(e.target.value)}
+                  placeholder="+212600000000 / +33600000000 / +34600000000"
+                  className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-mono"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="w-28">
+                <label className="text-[10px] text-slate-400 block mb-1">لغة الرسالة:</label>
+                <select
+                  value={selectedLocale}
+                  onChange={(e) => setSelectedLocale(e.target.value as 'ar' | 'fr' | 'es')}
+                  className="h-8 text-xs w-full bg-slate-950 border border-slate-700 rounded-md text-white px-2"
+                >
+                  <option value="ar">العربية (AR)</option>
+                  <option value="fr">Français (FR)</option>
+                  <option value="es">Español (ES)</option>
+                </select>
+              </div>
+
+              <div className="self-end pt-4 sm:pt-0">
+                <Button
+                  size="sm"
+                  disabled={isPendingWhatsApp}
+                  onClick={handleSendWhatsApp}
+                  className="h-8 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
+                >
+                  <Send className="w-3.5 h-3.5 me-1.5" />
+                  {isPendingWhatsApp ? 'جاري الإرسال...' : 'إرسال الآن'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogHeader>
+
 
         {/* Certificate Printable Canvas */}
         <div className="bg-white text-slate-900 p-6 sm:p-8 rounded-xl shadow-2xl border-4 border-slate-200 font-sans print:p-0 print:border-none print:shadow-none print:text-black mt-2">
