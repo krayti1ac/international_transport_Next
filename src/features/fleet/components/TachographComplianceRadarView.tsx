@@ -223,7 +223,19 @@ export function TachographComplianceRadarView({
             <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
               EU Standard (EC 561/2006)
             </Badge>
+            <Badge
+              variant="outline"
+              className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-medium flex items-center gap-1.5"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              {t(
+                'تزامن حي FMS / CAN-Bus (J1939)',
+                'Sync Direct FMS / CAN-Bus (J1939)',
+                'Sincronización Directa FMS / CAN-Bus (J1939)'
+              )}
+            </Badge>
           </div>
+
           <p className="text-sm text-muted-foreground mt-1">
             {t(
               'مراقبة فورية للقيادة المتواصلة (4.5 س)، فترات الراحة الإلزامية (45 د)، وسقوف القيادة اليومية والأسبوعية للأسطول الدولي',

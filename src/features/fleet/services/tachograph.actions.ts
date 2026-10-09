@@ -34,20 +34,41 @@ export async function logDriverActivityAction(rawInput: unknown) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      return { success: false, error: 'يجب تسجيل الدخول لتسجيل نشاط جهاز التاكوغراف' };
-    }
-
     const input = logDriverActivitySchema.parse(rawInput);
 
-    // Get user company
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('company_id')
-      .eq('id', user.id)
+    // Get user company or fallback to driver company for automated telemetry webhooks
+    let companyId: number | null = null;
+    if (user) {
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      companyId = userProfile?.company_id ?? null;
+    }
+
+
+    // 1. Fetch driver profile
+    const { data: driver } = await supabase
+      .from('drivers')
+      .select('id, name, default_truck_id, company_id')
+      .eq('id', input.driver_id)
       .maybeSingle();
 
-    const companyId = userProfile?.company_id ?? null;
+    if (!companyId && driver?.company_id) {
+      companyId = driver.company_id;
+    }
+
+    let truckPlate: string | null = null;
+    const effectiveTruckId = input.truck_id ?? driver?.default_truck_id ?? null;
+    if (effectiveTruckId) {
+      const { data: truck } = await supabase
+        .from('trucks')
+        .select('plate_number')
+        .eq('id', effectiveTruckId)
+        .maybeSingle();
+      truckPlate = truck?.plate_number ?? null;
+    }
 
     // Calculate duration in minutes if not explicitly provided
     let durationMinutes = input.duration_minutes ?? 0;
@@ -56,14 +77,14 @@ export async function logDriverActivityAction(rawInput: unknown) {
       durationMinutes = Math.max(0, Math.round(diffMs / 60000));
     }
 
-    // 1. Insert activity segment into driver_tachograph_logs
+    // 2. Insert activity segment into driver_tachograph_logs
     const { data: logEntry, error: insertError } = await supabase
       .from('driver_tachograph_logs')
       .insert({
         company_id: companyId,
         driver_id: input.driver_id,
         trip_id: input.trip_id ?? null,
-        truck_id: input.truck_id ?? null,
+        truck_id: effectiveTruckId,
         activity_type: input.activity_type,
         start_time: input.start_time,
         end_time: input.end_time ?? null,
@@ -84,22 +105,6 @@ export async function logDriverActivityAction(rawInput: unknown) {
       return { success: false, error: insertError.message || 'فشل حفظ سجل التاكوغراف' };
     }
 
-    // 2. Fetch driver profile
-    const { data: driver } = await supabase
-      .from('drivers')
-      .select('id, name, default_truck_id')
-      .eq('id', input.driver_id)
-      .maybeSingle();
-
-    let truckPlate: string | null = null;
-    if (driver?.default_truck_id) {
-      const { data: truck } = await supabase
-        .from('trucks')
-        .select('plate_number')
-        .eq('id', driver.default_truck_id)
-        .maybeSingle();
-      truckPlate = truck?.plate_number ?? null;
-    }
 
 
     // 3. Fetch recent activities for this driver (past 14 days) to evaluate compliance
@@ -215,9 +220,82 @@ export async function logDriverActivityAction(rawInput: unknown) {
   }
 }
 
+export interface RecordTachographActivityInput {
+  driverId: string | number;
+  vehicleId?: string | number;
+  activityType: import('../types/tachograph.types').TachographActivityType;
+  startedAt: string;
+  endedAt?: string;
+  durationMinutes?: number;
+  source?: string;
+  notes?: string;
+}
+
+/**
+ * Helper Server Action to record tachograph activity from automated FMS / CAN-Bus telemetry webhooks
+ */
+export async function recordTachographActivityAction(input: RecordTachographActivityInput) {
+  try {
+    const supabase = await createClient();
+    let numericDriverId =
+      typeof input.driverId === 'number' ? input.driverId : parseInt(String(input.driverId), 10);
+
+    if (isNaN(numericDriverId)) {
+      const { data: driverByCard } = await supabase
+        .from('drivers')
+        .select('id')
+        .or(`license.eq.${input.driverId},cin.eq.${input.driverId}`)
+        .maybeSingle();
+      if (driverByCard) {
+        numericDriverId = driverByCard.id;
+      } else {
+        return { success: false, error: `لم يتم العثور على السائق بالمعرف: ${input.driverId}` };
+      }
+    }
+
+    let resolvedTruckId: number | null = null;
+    if (input.vehicleId) {
+      if (typeof input.vehicleId === 'number') {
+        resolvedTruckId = input.vehicleId;
+      } else {
+        const parsedNum = parseInt(String(input.vehicleId), 10);
+        if (!isNaN(parsedNum) && String(parsedNum) === String(input.vehicleId)) {
+          resolvedTruckId = parsedNum;
+        } else {
+          const { data: truckByPlate } = await supabase
+            .from('trucks')
+            .select('id')
+            .ilike('plate_number', `%${input.vehicleId}%`)
+            .maybeSingle();
+          if (truckByPlate) {
+            resolvedTruckId = truckByPlate.id;
+          }
+        }
+      }
+    }
+
+    return await logDriverActivityAction({
+      driver_id: numericDriverId,
+      truck_id: resolvedTruckId,
+      activity_type: input.activityType,
+      start_time: input.startedAt,
+      end_time: input.endedAt || undefined,
+      duration_minutes: input.durationMinutes || 0,
+      metadata: {
+        source: input.source || 'auto_sync',
+        notes: input.notes,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error in recordTachographActivityAction:', error);
+    return { success: false, error: error.message || 'فشل تسجيل نشاط التاكوغراف الآلي' };
+  }
+}
+
 /**
  * 2. Retrieves live compliance radar snapshot for a specific driver
  */
+
 export async function getDriverComplianceRadarAction(driverId: number) {
   try {
     const supabase = await createClient();

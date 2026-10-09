@@ -1634,7 +1634,8 @@
       "startTime": "وقت البدء",
       "endTime": "وقت الانتهاء",
       "driver": "السائق",
-      "allStatuses": "كافة الحالات"
+      "allStatuses": "كافة الحالات",
+      "fmsSync": "تزامن حي FMS / CAN-Bus (J1939)"
     }
   }
 }

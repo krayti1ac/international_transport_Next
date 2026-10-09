@@ -1634,7 +1634,8 @@
       "startTime": "Hora de inicio",
       "endTime": "Hora de fin",
       "driver": "Conductor",
-      "allStatuses": "Todos los estados"
+      "allStatuses": "Todos los estados",
+      "fmsSync": "Sincronización Directa FMS / CAN-Bus (J1939)"
     }
   }
 }
