@@ -25,6 +25,8 @@ import {
   MessageCircle,
   Wifi,
   WifiOff,
+  Download,
+  Printer,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
@@ -40,6 +42,10 @@ import {
   logReeferTelemetryAction,
   dispatchReeferWhatsAppAlertAction,
 } from '../services/reefer-compliance.actions';
+import {
+  exportReeferDataColdCsvAction,
+  exportReeferDataColdPdfAction,
+} from '../services/reefer-export.actions';
 
 
 interface ReeferColdChainAuditCardProps {
@@ -199,6 +205,53 @@ export function ReeferColdChainAuditCard({
     });
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const res = await exportReeferDataColdCsvAction(
+        tripId,
+        locale === 'fr' ? 'fr' : locale === 'es' ? 'es' : 'ar'
+      );
+      if (res.success && res.fileContent) {
+        const blob = new Blob([res.fileContent], { type: res.mimeType || 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || `reefer_logs_${tripId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast({ title: 'تم تصدير سجلات التبريد بنجاح (CSV) 📊' });
+      } else {
+        toast({ title: 'فشل التصدير', description: res.error, variant: 'destructive' });
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    setIsExporting(true);
+    try {
+      const res = await exportReeferDataColdPdfAction(
+        tripId,
+        locale === 'fr' ? 'fr' : locale === 'es' ? 'es' : 'ar'
+      );
+      if (res.success && res.fileContent) {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(res.fileContent);
+          win.document.close();
+        }
+      } else {
+        toast({ title: 'فشل تصدير التقرير', description: res.error, variant: 'destructive' });
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const getCargoLabel = () => {
     switch (profile.cargoCategory) {
       case 'fresh_produce':
@@ -297,6 +350,31 @@ export function ReeferColdChainAuditCard({
                 <span>{t('reefer.stream.reconnect', 'إعادة الاتصال بالبث')}</span>
               </Badge>
             )}
+
+            {/* Export Actions */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isExporting}
+              onClick={handleExportCsv}
+              className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 text-xs"
+              title="تصدير كشف درجات الحرارة بصيغة DataCOLD CSV"
+            >
+              <Download className="w-3.5 h-3.5 me-1 text-cyan-400" />
+              CSV
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isExporting}
+              onClick={handleExportPdf}
+              className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 text-xs"
+              title="معاينة وطباعة التقرير الرسمي A4 PDF"
+            >
+              <Printer className="w-3.5 h-3.5 me-1 text-emerald-400" />
+              PDF
+            </Button>
 
             {evaluation.certificateHash ? (
               <Button

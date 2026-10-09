@@ -27,6 +27,7 @@ import {
   Award,
   MessageCircle,
   Send,
+  Download,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
@@ -34,6 +35,7 @@ import type {
 } from '../types/reefer-compliance.types';
 import { REEFER_CARGO_CATALOG } from '../types/reefer-compliance.types';
 import { dispatchReeferWhatsAppCertificateAction } from '../services/reefer-compliance.actions';
+import { exportReeferDataColdCsvAction } from '../services/reefer-export.actions';
 
 
 interface GdpComplianceCertificateModalProps {
@@ -121,6 +123,32 @@ export function GdpComplianceCertificateModal({
     });
   };
 
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+
+  const handleExportCsv = async () => {
+    setIsExportingCsv(true);
+    try {
+      const res = await exportReeferDataColdCsvAction(
+        profile.tripId,
+        locale === 'fr' ? 'fr' : locale === 'es' ? 'es' : 'ar'
+      );
+      if (res.success && res.fileContent) {
+        const blob = new Blob([res.fileContent], { type: res.mimeType || 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || `reefer_logs_${profile.tripId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast({ title: 'تم تصدير سجل درجات الحرارة (CSV) بنجاح 📊' });
+      } else {
+        toast({ title: 'فشل تصدير ملف CSV', description: res.error, variant: 'destructive' });
+      }
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 bg-slate-950 text-slate-100 border-slate-800">
@@ -144,6 +172,17 @@ export function GdpComplianceCertificateModal({
               >
                 <MessageCircle className="w-4 h-4 me-1.5 text-emerald-400" />
                 إرسال واتساب
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isExportingCsv}
+                onClick={handleExportCsv}
+                className="bg-slate-900 border-slate-700 hover:bg-slate-800 text-slate-200"
+                title="تحميل كشف DataCOLD بصيغة CSV"
+              >
+                <Download className="w-4 h-4 me-1.5 text-cyan-400" />
+                تصدير CSV
               </Button>
               <Button
                 variant="outline"
