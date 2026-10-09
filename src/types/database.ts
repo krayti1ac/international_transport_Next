@@ -1088,4 +1088,66 @@ export interface DriverComplianceSnapshot {
   updated_at: string;
 }
 
+export interface DriverSettlementStatement {
+  id: number;
+  company_id?: number | null;
+  statement_number: string;
+  driver_id: number;
+  period_start: string;
+  period_end: string;
+  status: 'draft' | 'audited' | 'approved' | 'settled' | 'cancelled';
+  base_salary_mad: number;
+  mission_bonuses_mad: number;
+  safety_bonus_mad: number;
+  gross_driver_earnings_mad: number;
+  total_advances_mad: number;
+  total_fuel_expenses_mad: number;
+  total_toll_expenses_mad: number;
+  total_ferry_expenses_mad: number;
+  total_port_customs_mad: number;
+  total_fines_mad: number;
+  total_other_expenses_mad: number;
+  total_driver_expenses_mad: number;
+  expenses_advances_balance_mad: number;
+  net_payout_mad: number;
+  trips_count: number;
+  total_distance_km: number;
+  trip_ids?: number[];
+  advance_ids?: number[];
+  toll_expense_ids?: number[];
+  fine_ids?: number[];
+  itemized_expenses?: unknown[];
+  metadata?: Record<string, unknown> | null;
+  audited_by?: string | null;
+  audited_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  settled_at?: string | null;
+  treasury_tx_id?: number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
+export interface TripFiscalClosing {
+  id: number;
+  company_id?: number | null;
+  trip_id: number;
+  fiscal_period: string;
+  revenue_mad: number;
+  fuel_cost_mad: number;
+  tolls_cost_mad: number;
+  ferry_cost_mad: number;
+  customs_ports_cost_mad: number;
+  driver_cost_mad: number;
+  other_costs_mad: number;
+  total_costs_mad: number;
+  gross_profit_mad: number;
+  profit_margin_pct: number;
+  is_closed: boolean;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}

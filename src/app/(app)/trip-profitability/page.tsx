@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TrendingUp, DollarSign, Fuel, Search, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle } from 'lucide-react';
+import Link from 'next/link';
+import { TrendingUp, DollarSign, Fuel, Search, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle, FileCheck2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
@@ -118,13 +119,22 @@ export default function TripProfitabilityPage() {
 
   return (
     <div className="space-y-6" dir={dir}>
-      <div>
-        <h1 className="text-2xl font-bold font-amiri text-foreground">
-          {t('أرباح وتحليلات الرحلات والوقود', 'Rentabilité & Analyses des Trajets')}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {t('تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة', 'Analyse du résultat net réel (P&L) et de la consommation de gasoil par trajet')}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-amiri text-foreground">
+            {t('أرباح وتحليلات الرحلات والوقود', 'Rentabilité & Analyses des Trajets')}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t('تحليل صافي الربح الفعلي (P&L) ومعدلات استهلاك الديزل لكل رحلة', 'Analyse du résultat net réel (P&L) et de la consommation de gasoil par trajet')}
+          </p>
+        </div>
+
+        <Link href="/driver-settlements">
+          <Button variant="outline" className="gap-2 text-xs font-bold shadow-xs">
+            <FileCheck2 className="w-4 h-4 text-primary" />
+            <span>{t('إغلاق الميزانية وإبراء الذمة', 'Clôture Budgétaire & Décharge', 'Cierre y Finiquitos')}</span>
+          </Button>
+        </Link>
       </div>
 
       <PeriodFilterBar onFilterChange={() => {

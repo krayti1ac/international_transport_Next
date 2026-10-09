@@ -40,6 +40,8 @@ import {
   calculateDriverSafetyScore,
   type DriverSafetyBreakdown,
 } from '@/features/drivers/services/driver-safety-score.actions';
+import { FiscalSettlementsView } from '@/features/finance/components/FiscalSettlementsView';
+import { FileCheck2 } from 'lucide-react';
 
 export default function DriverSettlementsPage() {
   const { toast } = useToast();
@@ -58,6 +60,7 @@ export default function DriverSettlementsPage() {
 
   const [isPayoutDialogOpen, setIsPayoutDialogOpen] = useState(false);
   const [processingPayout, setProcessingPayout] = useState(false);
+  const [mainMode, setMainMode] = useState<'fiscal_loop' | 'payroll_quick'>('fiscal_loop');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -242,31 +245,62 @@ export default function DriverSettlementsPage() {
 
   return (
     <div className="space-y-6 pb-12" dir="rtl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
-            <Calculator className="w-6 h-6 text-primary" />
-            تسويات الأجور وإدارة المخاطر
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            الاحتساب الآلي للأجور والعمولات واقتطاع السلف والغرامات وفقاً للفترة المحاسبية المغلقة
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      {/* View Mode Toggle: Comprehensive Fiscal Loop vs Quick Payroll */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+        <div className="flex items-center gap-2 bg-muted/60 p-1 rounded-xl">
           <Button
-            onClick={() => setIsFineModalOpen(true)}
-            className="rounded-xl gap-2 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+            variant={mainMode === 'fiscal_loop' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setMainMode('fiscal_loop')}
+            className="text-xs font-bold gap-1.5 h-8"
           >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل مخالفة</span>
+            <FileCheck2 className="w-3.5 h-3.5" />
+            <span>إغلاق الميزانية وتصفية السائقين (Décompte & P&L)</span>
           </Button>
 
-          <Button variant="outline" onClick={fetchData} disabled={loading} className="rounded-xl h-10 w-10 p-0">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <Button
+            variant={mainMode === 'payroll_quick' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setMainMode('payroll_quick')}
+            className="text-xs font-bold gap-1.5 h-8"
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>الحاسبة السريعة للأجور والمخالفات</span>
           </Button>
         </div>
+
+        {mainMode === 'payroll_quick' && (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Button
+              onClick={() => setIsFineModalOpen(true)}
+              className="rounded-xl gap-2 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs h-8 text-xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>تسجيل مخالفة</span>
+            </Button>
+
+            <Button variant="outline" onClick={fetchData} disabled={loading} className="rounded-xl h-8 w-8 p-0">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        )}
       </div>
+
+      {mainMode === 'fiscal_loop' ? (
+        <FiscalSettlementsView />
+      ) : (
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
+                <Calculator className="w-6 h-6 text-primary" />
+                تسويات الأجور وإدارة المخاطر
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                الاحتساب الآلي للأجور والعمولات واقتطاع السلف والغرامات وفقاً للفترة المحاسبية المغلقة
+              </p>
+            </div>
+          </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 border-b border-border/60">
         {drivers.map((drv) => {
@@ -457,32 +491,34 @@ export default function DriverSettlementsPage() {
         </div>
       )}
 
-      <AlertDialog open={isPayoutDialogOpen} onOpenChange={setIsPayoutDialogOpen}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد صرف التسوية المالية</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من صرف الراتب الصافي بقيمة <strong className="text-emerald-600">{formatCurrency(financialBreakdown.net, 'MAD')}</strong> للسائق {selectedDriver?.name}؟
-              <br />سيتم تسجيل الحركة في الخزينة وتصفير السلف والمخالفات المرتبطة بهذه الفترة. هذه العملية لا يمكن التراجع عنها.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:justify-start">
-            <AlertDialogAction onClick={handleConfirmPayout} className="bg-emerald-600 hover:bg-emerald-700">
-              تأكيد الصرف واعتماد القيود
-            </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <AlertDialog open={isPayoutDialogOpen} onOpenChange={setIsPayoutDialogOpen}>
+            <AlertDialogContent dir="rtl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>تأكيد صرف التسوية المالية</AlertDialogTitle>
+                <AlertDialogDescription>
+                  هل أنت متأكد من صرف الراتب الصافي بقيمة <strong className="text-emerald-600">{formatCurrency(financialBreakdown.net, 'MAD')}</strong> للسائق {selectedDriver?.name}؟
+                  <br />سيتم تسجيل الحركة في الخزينة وتصفير السلف والمخالفات المرتبطة بهذه الفترة. هذه العملية لا يمكن التراجع عنها.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="gap-2 sm:justify-start">
+                <AlertDialogAction onClick={handleConfirmPayout} className="bg-emerald-600 hover:bg-emerald-700">
+                  تأكيد الصرف واعتماد القيود
+                </AlertDialogAction>
+                <AlertDialogCancel>إلغاء</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
-      <DriverFineModal
-        isOpen={isFineModalOpen}
-        onClose={() => setIsFineModalOpen(false)}
-        onSaved={fetchData}
-        drivers={drivers}
-        trips={trips}
-        preselectedDriverId={selectedDriver?.id}
-      />
+          <DriverFineModal
+            isOpen={isFineModalOpen}
+            onClose={() => setIsFineModalOpen(false)}
+            onSaved={fetchData}
+            drivers={drivers}
+            trips={trips}
+            preselectedDriverId={selectedDriver?.id}
+          />
+        </>
+      )}
     </div>
   );
 }
