@@ -66,6 +66,7 @@ export interface ReeferTelemetryLog {
   supplyAirTemp: number;
   returnAirTemp: number;
   ambientTemp?: number;
+  evaporatorTemp?: number;
   compressorStatus: 'running' | 'cycle_sentry' | 'defrost' | 'off';
   isDefrostActive: boolean;
   doorOpenSensor: boolean;

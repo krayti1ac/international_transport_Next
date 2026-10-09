@@ -1786,6 +1786,15 @@
       "connecting": "Conectando al flujo...",
       "offline": "Transmisión desconectada",
       "reconnect": "Reconectar"
+    },
+    "oem": {
+      "title": "Pasarela Cloud directa de equipos frigoríficos",
+      "carrier": "Carrier Transicold (DataCOLD)",
+      "thermoKing": "Thermo King (TracKing)",
+      "connected": "Conectado a la Nube",
+      "alarms": "Códigos de alarma y anomalías",
+      "engineHours": "Horas de funcionamiento motor",
+      "fuelBurnRate": "Consumo de gasóleo"
     }
   }
 }

@@ -1786,6 +1786,15 @@
       "connecting": "جاري الاتصال بالبث...",
       "offline": "البث غير متصل",
       "reconnect": "إعادة الاتصال بالبث"
+    },
+    "oem": {
+      "title": "بوابة الربط السحابي المباشر لوحدات التبريد",
+      "carrier": "Carrier Transicold (DataCOLD)",
+      "thermoKing": "Thermo King (TracKing)",
+      "connected": "متصل بالسحابة",
+      "alarms": "أكواد الإنذارات والأعطال",
+      "engineHours": "ساعات تشغيل المحرك",
+      "fuelBurnRate": "معدل استهلاك الديزل"
     }
   }
 }
