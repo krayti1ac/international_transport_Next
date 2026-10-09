@@ -21,6 +21,7 @@ import {
   Fuel,
   Building2,
   Gauge,
+  CreditCard,
 } from 'lucide-react';
 
 import { FleetFormModal } from '@/components/fleet-form-modal';
@@ -291,6 +292,15 @@ export default function FleetPage() {
             >
               <Gauge className="w-4 h-4 me-1.5" />
               {t('رادار التاكوغراف EC 561', 'Radar Tachygraphe CE', 'Radar Tacógrafo CE')}
+            </Button>
+          </Link>
+          <Link href="/european-tolls">
+            <Button
+              variant="outline"
+              className="h-10 px-3.5 text-xs sm:text-sm rounded-xl border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+            >
+              <CreditCard className="w-4 h-4 me-1.5" />
+              {t('رسوم الطرق الأوروبية', 'Péages Européens', 'Peajes Europeos')}
             </Button>
           </Link>
           <Button

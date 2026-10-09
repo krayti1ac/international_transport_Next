@@ -1638,6 +1638,21 @@
       "fmsSync": "تزامن حي FMS / CAN-Bus (J1939)",
       "sendWhatsAppParkingAlert": "إرسال تنبيه واتساب مع باحة الاستراحة",
       "nearestSafeParking": "أقرب باحة استراحة آمنة معتمدة (SSTPA)"
+    },
+    "europeanTolls": {
+      "title": "محرك رسوم الطرق الأوروبية وفواتير العبور (DKV / Telepass / AS 24)",
+      "subtitle": "مطابقة بطاقات Via-T، Télépéage، Eurovignette مع مسارات الأسطول واسترداد ضريبة TVA (التوجيه 8)",
+      "totalTolls": "إجمالي رسوم الطرق",
+      "recoverableVat": "ضريبة TVA القابلة للاسترداد (UE)",
+      "matchRate": "نسبة المطابقة مع الرحلات",
+      "leakages": "تسريبات ورسوم مشبوهة",
+      "importInvoice": "استيراد فاتورة المورد",
+      "matched": "مطابق",
+      "leakage": "تسريب / مشبوه",
+      "unmatched": "غير مرتبط",
+      "eligibleVat": "مؤهل للاسترجاع",
+      "refundedVat": "مسترجع",
+      "pendingVat": "معلق"
     }
   }
 }

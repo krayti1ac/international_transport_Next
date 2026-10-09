@@ -1638,6 +1638,21 @@
       "fmsSync": "Sincronización Directa FMS / CAN-Bus (J1939)",
       "sendWhatsAppParkingAlert": "Alerta WhatsApp con Parking",
       "nearestSafeParking": "Área de estacionamiento seguro (SSTPA)"
+    },
+    "europeanTolls": {
+      "title": "Motor de Peajes Europeos y Telepeaje (DKV / Telepass / AS 24)",
+      "subtitle": "Conciliación Via-T, Télépéage, Eurovignette y Recuperación IVA UE (8ª Directiva)",
+      "totalTolls": "Total Peajes y Viñetas",
+      "recoverableVat": "IVA Recuperable (UE 8ª Dir.)",
+      "matchRate": "Tasa de Coincidencia",
+      "leakages": "Fugas y Pasos No Autorizados",
+      "importInvoice": "Importar Factura de Peaje",
+      "matched": "Conciliado",
+      "leakage": "Fuga / Sospechoso",
+      "unmatched": "No vinculado",
+      "eligibleVat": "Elegible para devolución",
+      "refundedVat": "Reembolsado",
+      "pendingVat": "Pendiente"
     }
   }
 }

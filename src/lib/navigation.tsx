@@ -201,6 +201,14 @@ export const navigationGroups: SidebarGroup[] = [
         roles: ['admin', 'secretary', 'fleet_manager'],
       },
       {
+        title: 'رسوم الطرق الأوروبية',
+        titleFr: 'Péages Européens & Vignettes',
+        titleEs: 'Peajes Europeos y Viñetas',
+        href: '/european-tolls',
+        icon: <Route className="w-4 h-4 text-blue-400" />,
+        roles: ['admin', 'secretary', 'accountant', 'fleet_manager'],
+      },
+      {
         title: 'الحوادث والمطالبات',
         titleFr: 'Incidents & Réclamations',
         titleEs: 'Incidentes y Reclamaciones',
