@@ -9,3 +9,4 @@ export const filterFuelBiSchema = z.object({
 });
 
 export type FilterFuelBiInput = z.infer<typeof filterFuelBiSchema>;
+

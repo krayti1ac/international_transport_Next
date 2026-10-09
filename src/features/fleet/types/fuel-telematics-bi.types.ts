@@ -93,3 +93,4 @@ export interface FilterFuelBiParams {
   driverId?: number;
   corridorCode?: string;
 }
+
