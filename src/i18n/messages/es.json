@@ -1944,6 +1944,24 @@
       "deltaT": "Diferencial Térmico (Delta T)",
       "leakageRate": "Tasa de Fuga Térmica",
       "action": "Acción Recomendada"
+    },
+    "multiTempCertificate": {
+      "title": "Certificado Oficial de Cumplimiento Térmico por Compartimento",
+      "subtitle": "Emisión y certificación por zona con código QR y sello criptográfico infalsificable",
+      "buttonExport": "Emitir Certificado Oficial (PDF)",
+      "batchExport": "Exportar Lote de Compartimentos (Batch PDF)",
+      "batchSuccess": "Lote de certificados generado y sellado con éxito",
+      "preview": "Vista Previa del Certificado Oficial",
+      "download": "Descargar Reporte en PDF",
+      "print": "Imprimir Documento Oficial",
+      "close": "Cerrar",
+      "generating": "Generando y sellando digitalmente...",
+      "certNumber": "Nº de Certificado de Zona",
+      "verificationHash": "Huella Criptográfica HMAC-SHA256",
+      "mktIndex": "Índice MKT del Compartimento",
+      "complianceScore": "Puntuación de Integridad y Cumplimiento",
+      "compartment": "Compartimento Objetivo",
+      "customsNotice": "Este certificado está destinado al receptor de la zona designada con historial autónomo de su evaporador."
     }
   }
 }

@@ -1944,6 +1944,24 @@
       "deltaT": "Écart de Température (Delta T)",
       "leakageRate": "Taux de Fuite Thermique",
       "action": "Action Recommandée"
+    },
+    "multiTempCertificate": {
+      "title": "Certificat d'Audit Thermique Indépendant du Compartiment",
+      "subtitle": "Émission et certification par zone avec QR code et sceau cryptographique infalsifiable",
+      "buttonExport": "Émettre le Certificat Officiel (PDF)",
+      "batchExport": "Exporter Toutes les Cloisons (Batch PDF)",
+      "batchSuccess": "Lot de certificats généré et scellé avec succès",
+      "preview": "Aperçu du Certificat Officiel",
+      "download": "Télécharger le Rapport PDF",
+      "print": "Imprimer le Document Officiel",
+      "close": "Fermer",
+      "generating": "Génération et scellement numérique en cours...",
+      "certNumber": "N° de Certificat de Zone",
+      "verificationHash": "Empreinte Cryptographique HMAC-SHA256",
+      "mktIndex": "Indice MKT du Compartiment",
+      "complianceScore": "Score d'Intégrité & Conformité",
+      "compartment": "Compartiment Ciblé",
+      "customsNotice": "Ce certificat est dédié au réceptionnaire de la zone désignée avec historique autonome de son évaporateur."
     }
   }
 }

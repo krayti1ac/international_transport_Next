@@ -16,6 +16,8 @@ import {
   Clock,
   DoorClosed,
   DoorOpen,
+  Download,
+  FileCheck2,
   Layers,
   PlusCircle,
   RefreshCw,
@@ -46,6 +48,11 @@ import {
   recordCompartmentTelemetryAction,
   resolveBulkheadAlertAction,
 } from '../services/multi-temp.actions';
+import {
+  exportCompartmentPdfReportAction,
+  exportBatchCompartmentCertificatesAction,
+} from '../services/multi-temp-certificate.actions';
+import { MultiTempCertificateModal } from './MultiTempCertificateModal';
 import type {
   CompartmentCode,
   DoorType,
@@ -70,12 +77,23 @@ export function MultiTempCompartmentMatrixView({
   currentTrailerId,
 }: MultiTempCompartmentMatrixViewProps) {
   const t = useTranslations('reefer.multiTemp');
+  const tCert = useTranslations('reefer.multiTempCertificate');
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
   const [summary, setSummary] = useState<MultiTempTrailerMatrixSummary>(initialSummary);
   const [alerts, setAlerts] = useState<ReeferCrossBulkheadAlert[]>(initialAlerts);
   const [activeTab, setActiveTab] = useState<'matrix' | 'alerts' | 'topology'>('matrix');
+
+  // Certificate Modal State
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+  const [activeCert, setActiveCert] = useState<{
+    certificateNumber?: string;
+    compartmentCode?: string;
+    htmlContent?: string;
+    verificationHash?: string;
+    verificationUrl?: string;
+  } | null>(null);
 
   // Modal Dialog & Simulation State
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
@@ -188,6 +206,66 @@ export function MultiTempCompartmentMatrixView({
     });
   };
 
+  // Handle Open Certificate
+  const handleOpenCertificate = async (compartmentId: string, compCode: string) => {
+    startTransition(async () => {
+      const res = await exportCompartmentPdfReportAction({
+        compartmentId,
+        trailerId: currentTrailerId,
+        locale: 'ar',
+      });
+      if (res.success && res.htmlContent) {
+        setActiveCert({
+          certificateNumber: res.certificateNumber,
+          compartmentCode: res.compartmentCode || compCode,
+          htmlContent: res.htmlContent,
+          verificationHash: res.verificationHash,
+          verificationUrl: res.verificationUrl,
+        });
+        setIsCertModalOpen(true);
+      } else {
+        toast({
+          title: tCert('title'),
+          description: res.error || 'فشل توليد وثيقة الشهادة',
+          variant: 'destructive',
+        });
+      }
+    });
+  };
+
+  // Handle Batch Export
+  const handleBatchExport = async () => {
+    startTransition(async () => {
+      const res = await exportBatchCompartmentCertificatesAction({
+        trailerId: currentTrailerId,
+        locale: 'ar',
+      });
+      if (res.success && res.certificates && res.certificates.length > 0) {
+        toast({
+          title: tCert('title'),
+          description: tCert('batchSuccess'),
+        });
+        const first = res.certificates[0];
+        if (first.htmlContent) {
+          setActiveCert({
+            certificateNumber: first.certificateNumber,
+            compartmentCode: first.compartmentCode,
+            htmlContent: first.htmlContent,
+            verificationHash: first.verificationHash,
+            verificationUrl: first.verificationUrl,
+          });
+          setIsCertModalOpen(true);
+        }
+      } else {
+        toast({
+          title: tCert('title'),
+          description: res.error || 'فشل تصدير حزمة الشهادات',
+          variant: 'destructive',
+        });
+      }
+    });
+  };
+
   // Preset Simulation Scenarios
   const handlePresetSimulation = (scenario: 'normal' | 'leak' | 'side_door' | 'defrost') => {
     if (scenario === 'normal') {
@@ -249,6 +327,16 @@ export function MultiTempCompartmentMatrixView({
         </div>
 
         <div className="flex items-center gap-3 relative z-10">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBatchExport}
+            disabled={isPending}
+            className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 text-xs gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {tCert('batchExport')}
+          </Button>
           <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-cyan-600 hover:bg-cyan-500 text-white gap-2 shadow-lg shadow-cyan-900/30">
@@ -770,6 +858,17 @@ export function MultiTempCompartmentMatrixView({
                       </span>
                       <span>موقع الحاجز: {comp.profile.bulkheadPositionPct}%</span>
                     </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenCertificate(comp.profile.id, comp.profile.compartmentCode)}
+                      disabled={isPending}
+                      className="w-full mt-3 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 text-xs gap-1.5"
+                    >
+                      <FileCheck2 className="w-3.5 h-3.5" />
+                      {tCert('buttonExport')}
+                    </Button>
                   </CardContent>
                 </Card>
               );
@@ -880,6 +979,17 @@ export function MultiTempCompartmentMatrixView({
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Multi-Temp Compartment Certificate Modal */}
+      <MultiTempCertificateModal
+        isOpen={isCertModalOpen}
+        onClose={() => setIsCertModalOpen(false)}
+        certificateNumber={activeCert?.certificateNumber}
+        compartmentCode={activeCert?.compartmentCode}
+        htmlContent={activeCert?.htmlContent}
+        verificationHash={activeCert?.verificationHash}
+        verificationUrl={activeCert?.verificationUrl}
+      />
     </div>
   );
 }
