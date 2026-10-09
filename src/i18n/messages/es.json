@@ -1653,6 +1653,19 @@
       "eligibleVat": "Elegible para devolución",
       "refundedVat": "Reembolsado",
       "pendingVat": "Pendiente"
+    },
+    "transitWatchdog": {
+      "title": "Radar de Visados y Cumplimiento de Tránsito Internacional",
+      "subtitle": "Control automático previo al despacho de visados Schengen, Mauritania, Senegal, Carta Verde y Marrón",
+      "complianceRate": "Tasa de Conformidad",
+      "corridorEurope": "Corredor Europeo (Schengen)",
+      "corridorAfrica": "Corredor Africano (Tránsito)",
+      "expiryAlerts": "Alertas de Vencimiento Próximo (≤30d)",
+      "simulateAudit": "Comprobar Conformidad",
+      "dispatchAllowed": "Despacho Autorizado ✓",
+      "dispatchBlocked": "Despacho Bloqueado ⛔",
+      "sendWhatsAppAlert": "Alerta WhatsApp",
+      "updateExpiry": "Actualizar"
     }
   }
 }

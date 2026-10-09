@@ -1653,6 +1653,19 @@
       "eligibleVat": "Éligible au remboursement",
       "refundedVat": "Remboursé",
       "pendingVat": "En attente"
+    },
+    "transitWatchdog": {
+      "title": "Radar des Visas & Conformité Transit International",
+      "subtitle": "Contrôle automatique pré-dispatch des visas Schengen, Mauritanie, Sénégal, Carte Verte & Brune",
+      "complianceRate": "Taux de Conformité Roster",
+      "corridorEurope": "Corridor Europe (Schengen)",
+      "corridorAfrica": "Corridor Afrique (Transit)",
+      "expiryAlerts": "Alertes Expirations Proches (≤30j)",
+      "simulateAudit": "Vérifier la Conformité",
+      "dispatchAllowed": "Dispatch de Mission Autorisé ✓",
+      "dispatchBlocked": "Dispatch de Mission Bloqué ⛔",
+      "sendWhatsAppAlert": "Alerte WhatsApp",
+      "updateExpiry": "Mettre à jour"
     }
   }
 }

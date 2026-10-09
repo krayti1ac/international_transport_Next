@@ -22,6 +22,7 @@ import {
   Building2,
   Gauge,
   CreditCard,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { FleetFormModal } from '@/components/fleet-form-modal';
@@ -301,6 +302,15 @@ export default function FleetPage() {
             >
               <CreditCard className="w-4 h-4 me-1.5" />
               {t('رسوم الطرق الأوروبية', 'Péages Européens', 'Peajes Europeos')}
+            </Button>
+          </Link>
+          <Link href="/fleet/transit-watchdog">
+            <Button
+              variant="outline"
+              className="h-10 px-3.5 text-xs sm:text-sm rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+            >
+              <ShieldCheck className="w-4 h-4 me-1.5" />
+              {t('رادار التأشيرات والعبور', 'Watchdog Visas & Transit', 'Watchdog Visados')}
             </Button>
           </Link>
           <Button

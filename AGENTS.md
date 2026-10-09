@@ -62,6 +62,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202610190001_green_freight_carbon_audits.sql` — Green Freight & ESG Carbon Footprint Audits Engine under GLEC Framework v3.0, ISO 14083 & EU CBAM (`trip_carbon_audits` table, RLS policies, indexes).
 - `supabase/migrations/202610200001_tachograph_and_driver_compliance.sql` — EU Regulation (EC) 561/2006 Tachograph Compliance Engine (`driver_tachograph_logs`, `driver_compliance_snapshots` tables, RLS policies, indexes).
 - `supabase/migrations/202610210001_european_tolls_and_vignettes.sql` — European Electronic Tolls (Via-T, Télépéage, LKW-Maut) & Eurovignette Engine (`toll_card_invoices`, `trip_toll_expenses` tables, RLS policies, indexes).
+- `supabase/migrations/202610220001_transit_watchdog_and_visa_compliance.sql` — Automated Transit Watchdog & Cross-Border Visa Expiry Engine for EU and African Corridors (`transit_compliance_audits`, `transit_expiry_alerts` tables, RLS policies, indexes).
 
 
 
