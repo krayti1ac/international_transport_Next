@@ -1605,6 +1605,36 @@
       "autoLinkEnabled": "Generación automática de enlaces",
       "autoWhatsAppEnabled": "Envío de recordatorios por WhatsApp",
       "autoEmailEnabled": "Envío de facturas por Email"
+    },
+    "tachograph": {
+      "title": "Radar Tacógrafo y Cumplimiento de Tiempos de Conducción (CE 561/2006)",
+      "subtitle": "Monitorización de conducción continua, pausas obligatorias y techos diarios/semanales",
+      "monitoredDrivers": "Conductores monitorizados",
+      "compliant": "Conforme",
+      "warning": "Aviso preventivo (≤45 min)",
+      "critical": "Urgencia crítica (≤15 min)",
+      "violation": "Infracción reglamentaria",
+      "penaltyExposure": "Riesgo estimado de multas europeas",
+      "continuousDrive": "Conducción continua",
+      "remainingContinuous": "Tiempo restante antes de pausa",
+      "dailyDrive": "Conducción diaria",
+      "remainingDaily": "Tiempo diario restante",
+      "weeklyDrive": "Conducción semanal",
+      "fortnightlyDrive": "Conducción bisemanal",
+      "extensionsUsed": "Extensiones de 10h usadas",
+      "splitBreakPending": "Pausa fraccionada: 15 min hechas (esperando 30 min)",
+      "logActivity": "Registrar actividad",
+      "activityDrive": "Conducción",
+      "activityRest": "Descanso / Pausa",
+      "activityWork": "Otro trabajo",
+      "activityAvailable": "Disponibilidad",
+      "actionRequired": "Acción recomendada",
+      "saveActivity": "Confirmar actividad",
+      "durationMinutes": "Duración en minutos",
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "driver": "Conductor",
+      "allStatuses": "Todos los estados"
     }
   }
 }

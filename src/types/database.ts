@@ -1039,3 +1039,53 @@ export interface TripCarbonAudit {
   updated_at: string;
 }
 
+export type TachographActivityType = 'drive' | 'rest' | 'work' | 'available';
+export type TachographRadarStatus = 'compliant' | 'warning' | 'critical_urgency' | 'violation';
+export type TachographInfringementSeverity = 'none' | 'minor_MI' | 'serious_SI' | 'very_serious_VSI' | 'most_serious_MSI';
+
+export interface DriverTachographLog {
+  id: number;
+  company_id?: number | null;
+  driver_id: number;
+  trip_id?: number | null;
+  truck_id?: number | null;
+  activity_type: TachographActivityType;
+  start_time: string;
+  end_time?: string | null;
+  duration_minutes: number;
+  start_odometer?: number | null;
+  end_odometer?: number | null;
+  start_location?: string | null;
+  end_location?: string | null;
+  country_code: string;
+  card_insertion_status: 'inserted' | 'manual_entry' | 'withdrawn';
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriverComplianceSnapshot {
+  id: number;
+  company_id?: number | null;
+  driver_id: number;
+  snapshot_timestamp: string;
+  current_activity: TachographActivityType;
+  continuous_drive_minutes: number;
+  remaining_continuous_drive_minutes: number;
+  accumulated_break_minutes: number;
+  daily_drive_minutes: number;
+  remaining_daily_drive_minutes: number;
+  daily_10h_extensions_used_this_week: number;
+  reduced_daily_rests_used_this_week: number;
+  weekly_drive_minutes: number;
+  fortnightly_drive_minutes: number;
+  radar_status: TachographRadarStatus;
+  infringement_severity: TachographInfringementSeverity;
+  infringement_details?: string | null;
+  estimated_penalty_eur: number | string;
+  recommended_action?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+

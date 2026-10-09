@@ -1605,6 +1605,36 @@
       "autoLinkEnabled": "توليد روابط الدفع تلقائياً",
       "autoWhatsAppEnabled": "إرسال الإشعارات عبر واتساب",
       "autoEmailEnabled": "إرسال الفواتير عبر البريد"
+    },
+    "tachograph": {
+      "title": "رادار التاكوغراف وامتثال أوقات القيادة الأوروبية (EC 561/2006)",
+      "subtitle": "مراقبة القيادة المتواصلة، فترات الراحة الإلزامية، وسقف القيادة اليومي والأسبوعي للأسطول الدولي",
+      "monitoredDrivers": "السائقون تحت المراقبة",
+      "compliant": "ملتزم نظامياً",
+      "warning": "تنبيه اقتراب الحد (≤45 د)",
+      "critical": "حرج جداً (≤15 د)",
+      "violation": "مخالفة قواعد القيادة",
+      "penaltyExposure": "مخاطر الغرامات الأوروبية التقديرية",
+      "continuousDrive": "القيادة المتواصلة",
+      "remainingContinuous": "المتبقي قبل الاستراحة",
+      "dailyDrive": "القيادة اليومية",
+      "remainingDaily": "المتبقي من السقف اليومي",
+      "weeklyDrive": "القيادة الأسبوعية",
+      "fortnightlyDrive": "القيادة خلال أسبوعين",
+      "extensionsUsed": "تمديدات 10 ساعات المستخدمة",
+      "splitBreakPending": "تم أخذ 15 دقيقة (بانتظار 30 دقيقة)",
+      "logActivity": "تسجيل نشاط تاكوغراف",
+      "activityDrive": "قيادة",
+      "activityRest": "راحة / استراحة",
+      "activityWork": "عمل آخر",
+      "activityAvailable": "جاهزية / متاح",
+      "actionRequired": "الإجراء الميداني الموصى به",
+      "saveActivity": "تأكيد وتسجيل النشاط",
+      "durationMinutes": "المدة بالدقائق",
+      "startTime": "وقت البدء",
+      "endTime": "وقت الانتهاء",
+      "driver": "السائق",
+      "allStatuses": "كافة الحالات"
     }
   }
 }

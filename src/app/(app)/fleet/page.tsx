@@ -20,7 +20,9 @@ import {
   Upload,
   Fuel,
   Building2,
+  Gauge,
 } from 'lucide-react';
+
 import { FleetFormModal } from '@/components/fleet-form-modal';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
@@ -282,6 +284,15 @@ export default function FleetPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/fleet/tachograph">
+            <Button
+              variant="outline"
+              className="h-10 px-3.5 text-xs sm:text-sm rounded-xl border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+            >
+              <Gauge className="w-4 h-4 me-1.5" />
+              {t('رادار التاكوغراف EC 561', 'Radar Tachygraphe CE', 'Radar Tacógrafo CE')}
+            </Button>
+          </Link>
           <Button
             onClick={() => {
               setEditingItem(null);
@@ -289,6 +300,7 @@ export default function FleetPage() {
             }}
             className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-md font-medium text-xs sm:text-sm rounded-xl h-10 px-4 transition-all"
           >
+
             <Plus className="w-4 h-4 me-2" />
             {activeTab === 'trucks'
               ? t('إضافة شاحنة جديدة', 'Ajouter un camion')

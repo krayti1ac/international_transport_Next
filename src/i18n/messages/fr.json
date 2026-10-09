@@ -1605,6 +1605,36 @@
       "autoLinkEnabled": "Génération auto de liens",
       "autoWhatsAppEnabled": "Envoi des rappels WhatsApp",
       "autoEmailEnabled": "Envoi des factures par Email"
+    },
+    "tachograph": {
+      "title": "Radar Tachygraphe & Conformité des Temps de Conduite (CE 561/2006)",
+      "subtitle": "Surveillance de la conduite continue, des pauses obligatoires et des plafonds journaliers/hebdomadaires",
+      "monitoredDrivers": "Chauffeurs surveillés",
+      "compliant": "Conforme",
+      "warning": "Avertissement (≤45 min)",
+      "critical": "Urgence critique (≤15 min)",
+      "violation": "Infraction réglementaire",
+      "penaltyExposure": "Risque d'amendes européennes estimé",
+      "continuousDrive": "Conduite continue",
+      "remainingContinuous": "Temps restant avant pause",
+      "dailyDrive": "Conduite journalière",
+      "remainingDaily": "Temps journalier restant",
+      "weeklyDrive": "Conduite hebdomadaire",
+      "fortnightlyDrive": "Conduite bi-hebdomadaire",
+      "extensionsUsed": "Extensions 10h utilisées",
+      "splitBreakPending": "Pause fractionnée : 15 min faites (attente 30 min)",
+      "logActivity": "Enregistrer une activité",
+      "activityDrive": "Conduite",
+      "activityRest": "Repos / Pause",
+      "activityWork": "Autre travail",
+      "activityAvailable": "Disponibilité",
+      "actionRequired": "Action recommandée",
+      "saveActivity": "Confirmer l'activité",
+      "durationMinutes": "Durée en minutes",
+      "startTime": "Heure de début",
+      "endTime": "Heure de fin",
+      "driver": "Chauffeur",
+      "allStatuses": "Tous les statuts"
     }
   }
 }
