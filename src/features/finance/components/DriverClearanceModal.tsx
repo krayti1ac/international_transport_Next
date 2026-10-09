@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/forex';
 import type { DriverSettlementStatement } from '../types/fiscal-settlements.types';
+import { getDriverClearanceExportAction } from '../services/financial-export.actions';
 import {
   FileText,
   Printer,
@@ -26,6 +27,7 @@ import {
   Building,
   Receipt,
   Download,
+  Loader2,
 } from 'lucide-react';
 
 interface DriverClearanceModalProps {
@@ -39,8 +41,30 @@ export function DriverClearanceModal({
   onClose,
   statement,
 }: DriverClearanceModalProps) {
-  const { t, dir } = useLanguage();
+  const { t, dir, locale } = useLanguage();
   const printRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const handleExportPdf = async () => {
+    if (!statement) return;
+    setIsExporting(true);
+    try {
+      const res = await getDriverClearanceExportAction(statement.id, locale);
+      if (res.success && res.htmlContent) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(res.htmlContent);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => {
+            printWindow.print();
+          }, 350);
+        }
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (!statement) return null;
 
@@ -342,12 +366,22 @@ export function DriverClearanceModal({
           <div className="text-xs text-muted-foreground hidden sm:block">
             {t('المصادقة الإلكترونية محفوظة في سجلات التدقيق', 'Archivage sécurisé dans le journal d\'audit', 'Registro seguro en auditoría')}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={isExporting}
+              className="gap-2 bg-primary text-primary-foreground font-bold"
+            >
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>{t('تصدير PDF معتمد برمز QR', 'Télécharger PDF Certifié (QR)', 'Exportar PDF Certificado')}</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
               <Printer className="w-4 h-4" />
-              {t('طباعة الوثيقة الرسمية', 'Imprimer le Décompte', 'Imprimir')}
+              {t('طباعة سريعة', 'Imprimer', 'Imprimir')}
             </Button>
-            <Button size="sm" onClick={onClose}>
+            <Button size="sm" variant="ghost" onClick={onClose}>
               {t('إغلاق', 'Fermer', 'Cerrar')}
             </Button>
           </div>
@@ -356,3 +390,4 @@ export function DriverClearanceModal({
     </Dialog>
   );
 }
+

@@ -168,3 +168,4 @@ for (const [lang, data] of [["ar", arData], ["fr", frData], ["es", esData]]) {
 }
 
 console.log("Successfully synchronized fiscalSettlements translations across ar, fr, and es!");
+

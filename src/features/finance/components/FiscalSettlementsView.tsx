@@ -18,6 +18,7 @@ import {
   closeTripFiscalPnlAction,
   getFiscalPeriodSummaryAction,
 } from '../services/fiscal-settlements.actions';
+import { exportFiscalPnlExcelAction } from '../services/financial-export.actions';
 import type {
   DriverSettlementStatement,
   SettlementStatus,
@@ -46,6 +47,7 @@ import {
   ArrowDownRight,
   Check,
   Building,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export function FiscalSettlementsView() {
@@ -53,6 +55,7 @@ export function FiscalSettlementsView() {
   const { toast } = useToast();
   const { startDate, endDate } = useFiscalStore();
   const [isPending, startTransition] = useTransition();
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
   // Fiscal period string (e.g. '2026-10')
@@ -79,6 +82,45 @@ export function FiscalSettlementsView() {
     (DriverSettlementStatement & { driver?: { name: string; phone?: string; matricule?: string } }) | null
   >(null);
   const [isClearanceModalOpen, setIsClearanceModalOpen] = useState(false);
+
+  const handleExportExcel = async () => {
+    setIsExportingExcel(true);
+    try {
+      const res = await exportFiscalPnlExcelAction(fiscalMonth, locale);
+      if (res.success && res.base64Data) {
+        const byteCharacters = atob(res.base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || `TransBodanon_PnL_${fiscalMonth}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        toast({
+          title: t('تم تصدير مصنف Excel بنجاح', 'Export Excel réussi', 'Exportación Excel exitosa'),
+          description: res.fileName,
+        });
+      } else {
+        toast({
+          title: t('خطأ في التصدير', 'Erreur d\'export', 'Error de exportación'),
+          description: res.error,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   // Fetch data
   const loadData = useCallback(async () => {
@@ -432,6 +474,23 @@ export function FiscalSettlementsView() {
               </select>
             </div>
           )}
+
+          {activeTab === 'trip_pnl' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isExportingExcel}
+              className="h-8 gap-2 text-xs font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 shadow-xs"
+            >
+              {isExportingExcel ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              )}
+              <span>{t('تصدير مصنف Excel المحاسبي (.xlsx)', 'Exporter Excel P&L (.xlsx)', 'Exportar Excel P&L (.xlsx)')}</span>
+            </Button>
+          )}
         </div>
 
         {/* Tab 1: Driver Settlements Table */}
@@ -737,3 +796,4 @@ export function FiscalSettlementsView() {
     </div>
   );
 }
+

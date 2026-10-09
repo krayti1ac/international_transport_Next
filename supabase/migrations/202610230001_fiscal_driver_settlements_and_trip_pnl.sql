@@ -163,3 +163,4 @@ CREATE POLICY "trip_closings_company_isolation" ON public.trip_fiscal_closings
             AND (company_id = trip_fiscal_closings.company_id OR role = 'super_admin')
         )
     );
+

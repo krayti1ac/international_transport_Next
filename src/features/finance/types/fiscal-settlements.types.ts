@@ -228,3 +228,4 @@ export interface FiscalPeriodSummary {
   pendingStatementsCount: number;
   closedTripsCount: number;
 }
+
