@@ -71,6 +71,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202610280001_reefer_cold_chain_compliance.sql` — Reefer Telematics & Cold Chain Compliance Engine (`trip_reefer_monitoring_profiles`, `reefer_temperature_logs`, `reefer_excursion_incidents` tables, RLS policies, indexes).
 - `supabase/migrations/202610290001_reefer_calibration_and_atp_scheduler.sql` — Reefer Sensor Calibration & ATP Recertification Scheduler Engine (`reefer_atp_certifications`, `reefer_sensor_calibration_logs` tables, RLS policies, indexes).
 - `supabase/migrations/202610300001_reefer_refrigerant_and_txv_radar.sql` — Reefer Refrigerant Leak & Expansion Valve (TXV/EXV) Predictive Radar Engine (`reefer_circuit_diagnostics_logs`, `reefer_predictive_leak_incidents` tables, RLS policies, indexes).
+- `supabase/migrations/202610310001_reefer_multi_compartment_telematics.sql` — Multi-Temp & Multi-Compartment Reefer Telematics Engine (`reefer_compartment_profiles`, `reefer_compartment_telemetry_logs`, `reefer_cross_bulkhead_alerts` tables, RLS policies, indexes).
 
 
 
