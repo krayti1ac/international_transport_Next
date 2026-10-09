@@ -23,6 +23,8 @@ import {
   Euro,
   Calendar,
   X,
+  MessageSquare,
+  MapPin,
 } from 'lucide-react';
 import type {
   DriverComplianceStatusResult,
@@ -33,7 +35,9 @@ import type {
 import {
   getFleetComplianceRadarAction,
   logDriverActivityAction,
+  triggerDriverRestAlertAction,
 } from '../services/tachograph.actions';
+
 
 interface TachographComplianceRadarViewProps {
   initialSummary: FleetComplianceRadarSummary;
@@ -56,6 +60,42 @@ export function TachographComplianceRadarView({
   const [modalLocation, setModalLocation] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // WhatsApp rest alert state
+  const [sendingAlertDriverId, setSendingAlertDriverId] = useState<number | null>(null);
+  const [alertFeedback, setAlertFeedback] = useState<{
+    driverId: number;
+    message: string;
+    success: boolean;
+  } | null>(null);
+
+  const handleSendWhatsAppRestAlert = async (driverId: number) => {
+    setSendingAlertDriverId(driverId);
+    setAlertFeedback(null);
+    const res = await triggerDriverRestAlertAction(driverId, {
+      forceSend: true,
+      language: dir === 'rtl' ? 'ar' : 'fr',
+    });
+    setSendingAlertDriverId(null);
+    if (res.success && res.alertSent) {
+      setAlertFeedback({
+        driverId,
+        message: t(
+          `تم إرسال تنبيه الواتساب مع باحة (${res.parking?.name || 'SSTPA'}) بنجاح!`,
+          `Alerte envoyée avec succès avec (${res.parking?.name || 'SSTPA'}) !`,
+          `¡Alerta enviada con éxito hacia (${res.parking?.name || 'SSTPA'})!`
+        ),
+        success: true,
+      });
+    } else {
+      setAlertFeedback({
+        driverId,
+        message: res.error || t('فشل إرسال التنبيه', "Échec de l'envoi", 'Error al enviar'),
+        success: false,
+      });
+    }
+  };
+
 
   const refreshRadar = () => {
     startTransition(async () => {
@@ -613,16 +653,54 @@ export function TachographComplianceRadarView({
                     </p>
                   </div>
 
-                  {/* Quick Activity Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openLogModal(driver.driver_id)}
-                    className="w-full text-xs h-8 flex items-center justify-center gap-1"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    {t('تسجيل نشاط لهذا السائق', 'Enregistrer activité', 'Registrar actividad')}
-                  </Button>
+                  {/* Rest Alert Feedback Banner if present */}
+                  {alertFeedback && alertFeedback.driverId === driver.driver_id && (
+                    <div
+                      className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
+                        alertFeedback.success
+                          ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                          : 'bg-destructive/10 text-destructive border border-destructive/20'
+                      }`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-[11px] font-medium leading-tight">{alertFeedback.message}</span>
+                    </div>
+                  )}
+
+                  {/* Actions Row: Quick Activity & WhatsApp Rest Alert */}
+                  <div className="flex flex-col gap-1.5">
+                    {(driver.radar_status === 'critical_urgency' ||
+                      driver.radar_status === 'warning' ||
+                      driver.radar_status === 'violation') && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={sendingAlertDriverId === driver.driver_id}
+                        onClick={() => handleSendWhatsAppRestAlert(driver.driver_id)}
+                        className="w-full text-xs h-8 flex items-center justify-center gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 font-semibold"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                        {sendingAlertDriverId === driver.driver_id
+                          ? t('جاري الإرسال...', 'Envoi en cours...', 'Enviando...')
+                          : t(
+                              'إرسال تنبيه واتساب مع باحة الاستراحة',
+                              'Alerte WhatsApp Parking',
+                              'Alerta WhatsApp Parking'
+                            )}
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openLogModal(driver.driver_id)}
+                      className="w-full text-xs h-8 flex items-center justify-center gap-1"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      {t('تسجيل نشاط لهذا السائق', 'Enregistrer activité', 'Registrar actividad')}
+                    </Button>
+                  </div>
+
                 </CardContent>
               </Card>
             );

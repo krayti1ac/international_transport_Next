@@ -1635,7 +1635,9 @@
       "endTime": "Heure de fin",
       "driver": "Chauffeur",
       "allStatuses": "Tous les statuts",
-      "fmsSync": "Sync Direct FMS / CAN-Bus (J1939)"
+      "fmsSync": "Sync Direct FMS / CAN-Bus (J1939)",
+      "sendWhatsAppParkingAlert": "Alerte WhatsApp avec Parking",
+      "nearestSafeParking": "Aire de stationnement sécurisée (SSTPA)"
     }
   }
 }

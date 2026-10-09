@@ -19,7 +19,13 @@ import {
   TachographComplianceEngine,
   ActivitySegment,
 } from './tachograph-compliance.service';
+import {
+  TachographRestAlertService,
+  type RestAlertDispatchResult,
+} from './tachograph-rest-alert.service';
+
 import type {
+
   DriverComplianceStatusResult,
   FleetComplianceRadarSummary,
 } from '../types/tachograph.types';
@@ -203,11 +209,27 @@ export async function logDriverActivityAction(rawInput: unknown) {
     });
 
 
+    // 6. Proactive WhatsApp rest alert dispatch if driver reached critical urgency (<=15 min)
+    if (
+      evaluation.radar_status === 'critical_urgency' ||
+      evaluation.remaining_continuous_drive_minutes <= 15
+    ) {
+      TachographRestAlertService.triggerCriticalRestAlert({
+        driverId: input.driver_id,
+        remainingMinutes: evaluation.remaining_continuous_drive_minutes,
+        radarStatus: evaluation.radar_status,
+        truckPlate,
+      }).catch((alertErr) => {
+        console.warn('Auto Tachograph Rest Alert background dispatch failed:', alertErr);
+      });
+    }
+
     try {
       revalidatePath('/fleet');
     } catch {
       // safe fallback if not in request context
     }
+
 
     return {
       success: true,
@@ -293,8 +315,49 @@ export async function recordTachographActivityAction(input: RecordTachographActi
 }
 
 /**
+ * Triggers an immediate WhatsApp rest alert to the driver with nearest certified safe parking
+ */
+export async function triggerDriverRestAlertAction(
+  driverId: number,
+  options?: { forceSend?: boolean; language?: 'ar' | 'fr' | 'es'; latitude?: number; longitude?: number }
+): Promise<RestAlertDispatchResult> {
+
+  try {
+    const supabase = await createClient();
+    const { data: snapshot } = await supabase
+      .from('driver_compliance_snapshots')
+      .select('*')
+      .eq('driver_id', driverId)
+      .maybeSingle();
+
+    const remainingMinutes = snapshot?.remaining_continuous_drive_minutes ?? 15;
+    const radarStatus = snapshot?.radar_status ?? 'critical_urgency';
+
+    const result = await TachographRestAlertService.triggerCriticalRestAlert({
+      driverId,
+      remainingMinutes,
+      radarStatus,
+      latitude: options?.latitude,
+      longitude: options?.longitude,
+      forceSend: options?.forceSend ?? true,
+      language: options?.language ?? 'ar',
+    });
+
+    return result;
+  } catch (error: any) {
+    console.error('Error in triggerDriverRestAlertAction:', error);
+    return {
+      success: false,
+      alertSent: false,
+      error: error.message || 'فشل إرسال تنبيه الاستراحة للواتساب',
+    };
+  }
+}
+
+/**
  * 2. Retrieves live compliance radar snapshot for a specific driver
  */
+
 
 export async function getDriverComplianceRadarAction(driverId: number) {
   try {

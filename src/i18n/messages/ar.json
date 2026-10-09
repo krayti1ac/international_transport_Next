@@ -1635,7 +1635,9 @@
       "endTime": "وقت الانتهاء",
       "driver": "السائق",
       "allStatuses": "كافة الحالات",
-      "fmsSync": "تزامن حي FMS / CAN-Bus (J1939)"
+      "fmsSync": "تزامن حي FMS / CAN-Bus (J1939)",
+      "sendWhatsAppParkingAlert": "إرسال تنبيه واتساب مع باحة الاستراحة",
+      "nearestSafeParking": "أقرب باحة استراحة آمنة معتمدة (SSTPA)"
     }
   }
 }
