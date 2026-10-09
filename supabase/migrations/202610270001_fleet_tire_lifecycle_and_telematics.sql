@@ -157,3 +157,4 @@ CREATE POLICY "tire_logs_delete_policy" ON public.tire_sensor_telematics_logs
 
 -- Refresh PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
+

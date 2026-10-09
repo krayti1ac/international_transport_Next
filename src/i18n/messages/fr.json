@@ -1759,5 +1759,28 @@
     "cancel": "Annuler",
     "noIncidentsFound": "Aucun incident de fraude ou siphonage enregistré",
     "cleanFleetMsg": "Flotte saine - Tous les flux de carburant sont conformes à la télématique et aux normes de consommation."
+  },
+  "reefer": {
+    "title": "Système d'audit certifié de la chaîne du froid",
+    "cargo": {
+      "fresh_produce": "Fruits & Légumes frais (+2°C à +6°C)",
+      "deep_frozen": "Poissons & Surgelés profonds (-18°C à -25°C)",
+      "pharma_cold": "Médicaments & Produits pharmaceutiques GDP (+2°C à +8°C)",
+      "meat_chilled": "Viandes fraîches réfrigérées (0°C à +4°C)"
+    },
+    "compliance": {
+      "compliant": "Conforme aux normes internationales",
+      "warning": "Avertissement: Excursions mineures",
+      "breached": "Rupture critique de la chaîne du froid"
+    },
+    "mkt": "Température Cinétique Moyenne (MKT)",
+    "setpoint": "Consigne programmée",
+    "supplyTemp": "Température d'air soufflé",
+    "returnTemp": "Température d'air repris",
+    "dieselBurned": "Consommation gazole groupe frigo",
+    "doorBreaches": "Ouvertures de portes en transit",
+    "excursionMinutes": "Durée d'excursion thermique (min)",
+    "certificate": "Certificat de conformité numérique certifié"
   }
 }
+

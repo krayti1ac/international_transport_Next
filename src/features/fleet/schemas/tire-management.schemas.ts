@@ -41,3 +41,4 @@ export type RecordTireInspectionInput = z.infer<typeof recordTireInspectionSchem
 export type RotateTireInput = z.infer<typeof rotateTireSchema>;
 export type MountTireInput = z.input<typeof mountTireSchema>;
 export type FilterFleetTiresInput = z.input<typeof filterFleetTiresSchema>;
+

@@ -1759,5 +1759,28 @@
     "cancel": "Cancelar",
     "noIncidentsFound": "No hay incidentes de fraude o sifonaje registrados",
     "cleanFleetMsg": "Flota en perfecto estado: todos los consumos coinciden con los sensores y parámetros normativos."
+  },
+  "reefer": {
+    "title": "Sistema certificado de auditoría de la cadena de frío",
+    "cargo": {
+      "fresh_produce": "Frutas y verduras frescas (+2°C a +6°C)",
+      "deep_frozen": "Pescados y ultracongelados (-18°C a -25°C)",
+      "pharma_cold": "Medicamentos y productos farmacéuticos GDP (+2°C a +8°C)",
+      "meat_chilled": "Carnes frescas refrigeradas (0°C a +4°C)"
+    },
+    "compliance": {
+      "compliant": "Conforme con normas internacionales",
+      "warning": "Advertencia: Excursiones menores",
+      "breached": "Ruptura crítica de la cadena de frío"
+    },
+    "mkt": "Temperatura Cinética Media (MKT)",
+    "setpoint": "Punto de consigna",
+    "supplyTemp": "Temperatura de aire impulsado",
+    "returnTemp": "Temperatura de aire retornado",
+    "dieselBurned": "Consumo de gasóleo del equipo de frío",
+    "doorBreaches": "Aperturas de puertas en tránsito",
+    "excursionMinutes": "Duración de excursión térmica (min)",
+    "certificate": "Certificado digital de conformidad verificado"
   }
 }
+
