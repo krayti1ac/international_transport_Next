@@ -127,3 +127,4 @@ CREATE POLICY "bulk_items_company_isolation" ON public.bulk_transfer_items
             AND (company_id = bulk_transfer_items.company_id OR role = 'super_admin')
         )
     );
+

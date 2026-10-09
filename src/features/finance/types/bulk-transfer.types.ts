@@ -163,3 +163,4 @@ export interface EligibleSettlementForTransfer {
   is_iban_valid: boolean;
   validation_errors: string[];
 }
+

@@ -17,17 +17,21 @@ import {
   ShieldCheck,
   Zap,
   CreditCard,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '@/components/language-provider';
 import { CanBusTelematicsMonitor } from '@/features/fleet/components/CanBusTelematicsMonitor';
 import { FuelReconciliationDashboardView } from '@/features/fleet/components/FuelReconciliationDashboardView';
+import { FleetFuelAnalyticsDashboardView } from '@/features/fleet/components/FleetFuelAnalyticsDashboardView';
 
 export default function FleetFuelAnalyticsPage() {
   const { t, dir } = useLanguage();
   const { data: trucks = [], isLoading } = useTrucks();
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'analytics' | 'telematics' | 'fraud_radar' | 'card_reconciliation'>('analytics');
+  const [activeTab, setActiveTab] = useState<
+    'bi_analytics' | 'analytics' | 'telematics' | 'fraud_radar' | 'card_reconciliation'
+  >('bi_analytics');
 
   const filteredTrucks = useMemo(() => {
     return trucks.filter(
@@ -56,6 +60,18 @@ export default function FleetFuelAnalyticsPage() {
 
         {/* Tab Switcher */}
         <div className="flex items-center p-1 rounded-xl bg-muted border border-border text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('bi_analytics')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              activeTab === 'bi_analytics'
+                ? 'bg-background text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 inline-block me-1.5 text-primary" />
+            {t('ذكاء الأعمال المتقدم (BI)', 'Analytics BI', 'Analítica BI')}
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('analytics')}
@@ -107,7 +123,9 @@ export default function FleetFuelAnalyticsPage() {
         </div>
       </div>
 
-      {activeTab === 'card_reconciliation' ? (
+      {activeTab === 'bi_analytics' ? (
+        <FleetFuelAnalyticsDashboardView />
+      ) : activeTab === 'card_reconciliation' ? (
         <FuelReconciliationDashboardView />
       ) : activeTab === 'telematics' ? (
         <CanBusTelematicsMonitor />
