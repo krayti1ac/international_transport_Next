@@ -2,20 +2,23 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Client, Invoice } from '@/types/database';
+import type { Client, Invoice, TripOrder } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { MessageSquare, Send, Phone, Zap } from 'lucide-react';
+import { MessageSquare, Send, Phone, Zap, Bot, Users } from 'lucide-react';
 import { formatPhoneNumber } from '@/lib/phone-utils';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
+import { WhatsAppInteractiveConsole } from '@/features/whatsapp/components/WhatsAppInteractiveConsole';
 
 export default function WhatsAppNotificationsPage() {
   const { t, dir } = useLanguage();
   const [clients, setClients] = useState<Client[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [trips, setTrips] = useState<TripOrder[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,9 +33,10 @@ export default function WhatsAppNotificationsPage() {
 
   const fetchData = async () => {
     try {
-      const [clientsRes, invoicesRes] = await Promise.all([
+      const [clientsRes, invoicesRes, tripsRes] = await Promise.all([
         supabase.from('clients').select('*').order('name'),
         supabase.from('invoices').select('*').order('issue_date', { ascending: false }),
+        supabase.from('trip_orders').select('id, route, cmr_number').order('id', { ascending: false }).limit(20),
       ]);
 
       if (clientsRes.error) throw clientsRes.error;
@@ -40,6 +44,7 @@ export default function WhatsAppNotificationsPage() {
 
       setClients(clientsRes.data || []);
       setInvoices(invoicesRes.data || []);
+      setTrips(tripsRes.data || []);
     } catch (error: any) {
       toast({
         title: t('خطأ في تحميل البيانات', 'Erreur de chargement des données'),
@@ -129,12 +134,36 @@ export default function WhatsAppNotificationsPage() {
 
   return (
     <div className="space-y-6" dir={dir}>
-      <h1 className="text-2xl font-bold font-amiri">{t('إشعارات واتساب', 'Notifications WhatsApp')}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-amiri">{t('إشعارات واتساب الرسمية', 'Centre WhatsApp Officiel')}</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {t('منظومة الرسائل التفاعلية والأتمتة الذكية عبر WhatsApp Cloud API', 'Système de messagerie interactive et automatisée via WhatsApp Cloud API')}
+          </p>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-amiri">{t('إرسال إشعارات سريعة', 'Envoi de notifications rapides')}</CardTitle>
+      <Tabs defaultValue="interactive" className="w-full space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="interactive" className="flex items-center gap-2 text-xs">
+            <Bot className="w-4 h-4" />
+            {t('البوابة التفاعلية (Meta API)', 'Passerelle Interactive (Meta)')}
+          </TabsTrigger>
+          <TabsTrigger value="clients" className="flex items-center gap-2 text-xs">
+            <Users className="w-4 h-4" />
+            {t('دليل العملاء والإرسال المباشر', 'Clients & Envoi Direct')}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="interactive" className="space-y-6">
+          <WhatsAppInteractiveConsole trips={trips} invoices={invoices} />
+        </TabsContent>
+
+        <TabsContent value="clients" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-amiri">{t('إرسال إشعارات سريعة', 'Envoi de notifications rapides')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -354,6 +383,8 @@ export default function WhatsAppNotificationsPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

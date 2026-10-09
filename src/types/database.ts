@@ -991,3 +991,21 @@ export interface BookingRequest {
   updated_at: string;
 }
 
+export interface WhatsAppMessageLog {
+  id: number;
+  company_id?: number | null;
+  wamid?: string | null;
+  phone: string;
+  direction: 'inbound' | 'outbound';
+  message_type: 'text' | 'interactive' | 'location' | 'status' | 'document' | 'template';
+  content?: string | null;
+  interactive_action_id?: string | null;
+  status: 'received' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+  error_message?: string | null;
+  related_entity_type?: 'trip_order' | 'invoice' | 'driver' | 'client' | 'emergency' | null;
+  related_entity_id?: number | null;
+  raw_payload?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
