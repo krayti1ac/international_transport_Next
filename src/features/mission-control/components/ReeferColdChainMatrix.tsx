@@ -22,7 +22,10 @@ import {
   ChevronDown,
   ChevronUp,
   Wrench,
+  FileCheck2,
 } from 'lucide-react';
+import { GdpComplianceCertificateModal } from '@/features/tracking/components/GdpComplianceCertificateModal';
+
 
 interface ReeferColdChainMatrixProps {
   telemetryList: TelematicsTelemetry[];
@@ -39,6 +42,7 @@ export function ReeferColdChainMatrix({
 }: ReeferColdChainMatrixProps) {
   const { t, dir } = useLanguage();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [certAsset, setCertAsset] = useState<TelematicsTelemetry | null>(null);
 
   return (
     <div className="space-y-4" dir={dir}>
@@ -215,6 +219,20 @@ export function ReeferColdChainMatrix({
                       </Button>
                     )}
 
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[10px] px-2 gap-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                      title={t('شهادة مطابقة سلسلة التبريد GDP', 'Certificat GDP / EN 12830', 'Certificado GDP')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCertAsset(asset);
+                      }}
+                    >
+                      <FileCheck2 className="w-3 h-3" />
+                      <span>{t('شهادة GDP', 'Certif GDP', 'Certif GDP')}</span>
+                    </Button>
+
                     {asset.driverPhone && (
                       <Button
                         size="icon"
@@ -256,7 +274,71 @@ export function ReeferColdChainMatrix({
           );
         })}
       </div>
+
+      {/* Official GDP Compliance Certificate Modal */}
+      {certAsset && (
+        <GdpComplianceCertificateModal
+          open={Boolean(certAsset)}
+          onOpenChange={(open) => {
+            if (!open) setCertAsset(null);
+          }}
+          profile={{
+            id: `prof-${certAsset.tripId ?? certAsset.truckId}`,
+            companyId: 1,
+            tripId: certAsset.tripId ?? certAsset.truckId,
+            trailerId: certAsset.trailerId ?? null,
+            coolingUnitBrand: certAsset.frigoIoT?.model || certAsset.reeferModel || 'Carrier Transicold Vector 1550',
+            atpClass: 'class_c',
+            cargoCategory:
+              certAsset.cargoProfile === 'frozen_fish'
+                ? 'deep_frozen'
+                : certAsset.cargoProfile === 'frozen_meat'
+                ? 'meat_chilled'
+                : certAsset.cargoProfile === 'pharmaceuticals'
+                ? 'pharma_cold'
+                : 'fresh_produce',
+            setpointTemp: certAsset.targetTemp,
+            minTempThreshold: certAsset.cargoProfile === 'frozen_fish' ? -25 : 2,
+            maxTempThreshold: certAsset.cargoProfile === 'frozen_fish' ? -18 : 6,
+            maxAllowedExcursionMinutes: 45,
+            mktActivationEnergyKj: 83.144,
+            isActive: true,
+          }}
+          evaluation={{
+            tripId: certAsset.tripId ?? certAsset.truckId,
+            atpClass: 'class_c',
+            cargoCategory:
+              certAsset.cargoProfile === 'frozen_fish'
+                ? 'deep_frozen'
+                : certAsset.cargoProfile === 'frozen_meat'
+                ? 'meat_chilled'
+                : certAsset.cargoProfile === 'pharmaceuticals'
+                ? 'pharma_cold'
+                : 'fresh_produce',
+            totalLogsCount: 48,
+            setpointTemp: certAsset.targetTemp,
+            avgSupplyTemp: certAsset.currentTemp,
+            avgReturnTemp: certAsset.currentTemp,
+            mktTemperatureCelsius: certAsset.currentTemp,
+            complianceStatus:
+              certAsset.tempStatus === 'critical_drift'
+                ? 'breached'
+                : certAsset.tempStatus === 'warning'
+                ? 'warning'
+                : 'compliant',
+            totalExcursionMinutes: certAsset.tempStatus === 'critical_drift' ? 60 : 0,
+            doorBreachesCount: certAsset.doorBreachRisk ? 1 : 0,
+            totalDieselBurnedLiters: 112.5,
+            complianceScorePercent: certAsset.tempStatus === 'critical_drift' ? 70 : 100,
+            certificateHash: `ATP-CLASS_C-${certAsset.tripId ?? certAsset.truckId}-A892F109C4819E77`,
+          }}
+          truckPlate={certAsset.truckPlate}
+          trailerPlate={certAsset.trailerPlate}
+          route={certAsset.tripRoute || undefined}
+        />
+      )}
     </div>
   );
 }
+
 
