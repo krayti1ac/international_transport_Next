@@ -1,6 +1,8 @@
 import { getExecutiveMetrics } from '@/features/analytics/services/executive-metrics.actions';
+import { getExecutiveBiReportAction } from '@/features/analytics/services/executive-bi.actions';
 import { ExecutiveCharts } from '@/features/analytics/components/ExecutiveCharts';
 import { ExecutiveControlTower } from '@/features/analytics/components/ExecutiveControlTower';
+import { ExecutiveProfitabilityView } from '@/features/analytics/components/ExecutiveProfitabilityView';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/forex';
 import { Truck } from '@/components/icons/vehicle-icons';
@@ -11,7 +13,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function ExecutiveDashboardPage() {
   const { startDate, endDate } = useFiscalStore.getState();
-  const metrics = await getExecutiveMetrics(startDate, endDate);
+  const [metrics, biReportRes] = await Promise.all([
+    getExecutiveMetrics(startDate, endDate),
+    getExecutiveBiReportAction({ startDate, endDate, currency: 'MAD' }),
+  ]);
 
   const totalTrucks = Object.values(metrics.fleetStatus).reduce((a, b) => a + b, 0);
   const activeAndInTransit = metrics.fleetStatus.active + metrics.fleetStatus.in_transit;
@@ -115,6 +120,11 @@ export default async function ExecutiveDashboardPage() {
 
       {/* 3. Recharts Visual Trend Component */}
       <ExecutiveCharts trendData={metrics.monthlyTrend} fleetStatus={metrics.fleetStatus} />
+
+      {/* 4. Strategic Executive BI & Fleet Profitability Analytics */}
+      {biReportRes?.data && (
+        <ExecutiveProfitabilityView initialReport={biReportRes.data} />
+      )}
     </div>
   );
 }
