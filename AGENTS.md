@@ -59,5 +59,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/20261011_client_portal_and_booking_requests.sql` — Client Portal & Self-Service Booking System for Exporters (`booking_requests` table, RLS policies, `users.client_id`).
 - `supabase/migrations/202610170001_payment_links_and_recurring_invoices.sql` — Online Payment Links (Stripe & CMI) and Automated Recurring Invoices Engine (`payment_links`, `recurring_invoice_schedules` tables, RLS policies, indexes).
 - `supabase/migrations/202610180001_whatsapp_messages_and_interactions.sql` — WhatsApp Cloud API Interactive Messaging Logs, Webhooks Tracking, and Multi-Tenant RLS (`whatsapp_message_logs` table, indexes, RLS policies).
+- `supabase/migrations/202610190001_green_freight_carbon_audits.sql` — Green Freight & ESG Carbon Footprint Audits Engine under GLEC Framework v3.0, ISO 14083 & EU CBAM (`trip_carbon_audits` table, RLS policies, indexes).
 
 

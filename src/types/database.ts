@@ -1009,3 +1009,33 @@ export interface WhatsAppMessageLog {
   updated_at: string;
 }
 
+export interface TripCarbonAudit {
+  id: number;
+  company_id?: number | null;
+  trip_id: number;
+  client_id?: number | null;
+  invoice_id?: number | null;
+  cargo_weight_tons: number;
+  road_distance_km: number;
+  ferry_distance_km: number;
+  truck_euro_class: 'euro_5' | 'euro_6' | 'electric_hybrid';
+  is_reefer: boolean;
+  reefer_hours: number;
+  road_wtw_emissions_kg: number;
+  ferry_wtw_emissions_kg: number;
+  reefer_wtw_emissions_kg: number;
+  total_wtw_emissions_kg: number;
+  total_ttw_emissions_kg: number;
+  emissions_intensity_g_per_tkm: number;
+  baseline_all_road_emissions_kg: number;
+  emissions_saved_kg: number;
+  emissions_savings_percentage: number;
+  efficiency_rating: 'A+' | 'A' | 'B' | 'C' | 'D' | 'E';
+  glec_framework_version: string;
+  certificate_hash?: string | null;
+  certificate_issued_at?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
