@@ -19,6 +19,7 @@ import {
   Gauge,
   DollarSign,
   Cpu,
+  Disc,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/forex';
 import { MatriculeBadge } from '@/components/ui/matricule-badge';
@@ -30,6 +31,7 @@ import {
 import { MaintenanceSchedulerModal } from '@/features/fleet/components/MaintenanceSchedulerModal';
 import { CompleteMaintenanceModal } from '@/features/fleet/components/CompleteMaintenanceModal';
 import { PredictiveMaintenanceRadarView } from '@/features/fleet/components/PredictiveMaintenanceRadarView';
+import { TireAxleVisualizerView } from '@/features/fleet/components/TireAxleVisualizerView';
 import { useLanguage } from '@/components/language-provider';
 
 export default function MaintenancePage() {
@@ -204,10 +206,14 @@ export default function MaintenancePage() {
       </div>
 
       <Tabs defaultValue="radar" className="w-full">
-        <TabsList className="grid w-full sm:w-[500px] grid-cols-3 h-11 rounded-xl mb-4">
+        <TabsList className="grid w-full sm:w-[680px] grid-cols-4 h-11 rounded-xl mb-4">
           <TabsTrigger value="radar" className="rounded-lg text-xs font-bold gap-2">
             <Cpu className="w-3.5 h-3.5 text-indigo-500" />
-            {t('رادار الأعطال الذكي (OBD)', 'Radar OBD-II', 'OBD Radar')}
+            {t('رادار الأعطال (OBD)', 'Radar OBD-II', 'OBD Radar')}
+          </TabsTrigger>
+          <TabsTrigger value="tires" className="rounded-lg text-xs font-bold gap-2">
+            <Disc className="w-3.5 h-3.5 text-sky-500" />
+            {t('إدارة الإطارات (TPMS)', 'Gestion Pneus', 'Tire Fleet')}
           </TabsTrigger>
           <TabsTrigger value="scheduler" className="rounded-lg text-xs font-bold gap-2">
             <Calendar className="w-3.5 h-3.5" />
@@ -221,6 +227,10 @@ export default function MaintenancePage() {
 
         <TabsContent value="radar" className="space-y-4">
           <PredictiveMaintenanceRadarView />
+        </TabsContent>
+
+        <TabsContent value="tires" className="space-y-4">
+          <TireAxleVisualizerView />
         </TabsContent>
 
         <TabsContent value="scheduler" className="space-y-4">

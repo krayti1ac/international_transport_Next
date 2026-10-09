@@ -67,6 +67,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202610240001_fuel_theft_incidents_and_fraud_detection.sql` — Intelligent Fuel Fraud & Anti-Siphoning Detection Engine (`fuel_theft_incidents` table, RLS policies, indexes).
 - `supabase/migrations/202610250001_bulk_wire_transfers.sql` — B2B Bulk Wire Transfer / SEPA XML & Moroccan LCN Engine (`bulk_transfer_batches`, `bulk_transfer_items` tables, RLS policies, indexes).
 - `supabase/migrations/202610260001_fleet_obd_diagnostic_radar.sql` — Predictive Fleet Maintenance & OBD-II/DTC Diagnostic Radar Engine (`fleet_obd_diagnostic_events`, `predictive_maintenance_recommendations` tables, RLS policies, indexes).
+- `supabase/migrations/202610270001_fleet_tire_lifecycle_and_telematics.sql` — Tire Fleet Management, Tread Wear Telematics & Axle Lifecycle Engine (`fleet_tires`, `tire_sensor_telematics_logs` tables, RLS policies, indexes).
 
 
 
