@@ -153,3 +153,4 @@ export class FiscalPnlExcelService {
     return XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
   }
 }
+
