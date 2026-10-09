@@ -265,3 +265,73 @@ export async function sendCriticalFleetAlertPushNotification(params: {
   }
 }
 
+/**
+ * Sends an instant test push notification with emergency vibration pattern to the current user/driver.
+ */
+export async function testDriverPushAction(params: {
+  driverId?: number;
+  locale?: 'ar' | 'fr' | 'es';
+}): Promise<SendPushResult> {
+  try {
+    const supabase = await createClient();
+    let query = supabase
+      .from('driver_push_subscriptions')
+      .select('id, endpoint, p256dh_key, auth_key')
+      .eq('is_active', true);
+
+    if (params.driverId) {
+      query = query.eq('driver_id', params.driverId);
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+    }
+
+    const { data: subscriptions } = await query;
+    if (!subscriptions || subscriptions.length === 0) {
+      return { success: false, reason: 'لا توجد أجهزة مسجلة ونشطة لهذا الحساب' };
+    }
+
+    const loc = params.locale || 'ar';
+    const titles = {
+      ar: '🚨 تجربة اهتزاز وإنذار الطوارئ (PWA Push)',
+      fr: '🚨 Test de vibration et alerte d’urgence (PWA Push)',
+      es: '🚨 Prueba de vibración y alerta de emergencia (PWA Push)',
+    };
+    const bodies = {
+      ar: 'تم اختبار نظام الإشعارات الفورية واهتزاز الطوارئ بنجاح على هاتفك.',
+      fr: 'Le système d’alertes push et vibration d’urgence a été testé avec succès.',
+      es: 'El sistema de alertas push y vibración de emergencia se ha probado con éxito.',
+    };
+
+    const payload = JSON.stringify({
+      title: titles[loc],
+      body: bodies[loc],
+      url: '/driver-tasks',
+      tag: `test-push-${Date.now()}`,
+      requireInteraction: true,
+      vibrate: [500, 150, 500, 150, 500, 150, 800],
+      actions: [
+        {
+          action: 'open_mission',
+          title: loc === 'es' ? 'Confirmar ✅' : loc === 'fr' ? 'Confirmer ✅' : 'تأكيد الاستلام ✅',
+        },
+        {
+          action: 'dismiss',
+          title: loc === 'es' ? 'Cerrar' : loc === 'fr' ? 'Fermer' : 'إغلاق',
+        },
+      ],
+    });
+
+    return await dispatchPushBatch(subscriptions, payload, supabase);
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'فشل إرسال اختبار الإشعارات';
+    return { success: false, error: message };
+  }
+}
+
+

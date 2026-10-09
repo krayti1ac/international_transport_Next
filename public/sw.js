@@ -2,29 +2,34 @@ if(!self.define){let e,a={};const s=(s,t)=>(s=new URL(s+".js",t).href,a[s]||new 
 
 
 // Web Push Notifications Handler
-self.addEventListener('push', function(event) {
+self.addEventListener('push', function (event) {
   if (!event.data) return;
   try {
     const data = event.data.json();
-    const title = data.title || '????? ??????? - ????? ???????';
+    const title = data.title || 'ترانس بودانون - تنبيه مأمورية';
+    const defaultVibrate = data.tag && data.tag.includes('emergency')
+      ? [500, 150, 500, 150, 500, 150, 800]
+      : [300, 100, 300, 100, 400];
+
     const options = {
       body: data.body || '',
       icon: data.icon || '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      dir: 'rtl',
-      lang: 'ar',
+      badge: data.badge || '/icon-192x192.png',
+      image: data.image || undefined,
+      dir: data.dir || 'rtl',
+      lang: data.lang || 'ar',
       tag: data.tag || 'general-dispatch',
-      renotify: true,
-      requireInteraction: data.requireInteraction || false,
-      vibrate: data.vibrate || [200, 100, 200, 100, 400],
+      renotify: data.renotify !== undefined ? data.renotify : true,
+      requireInteraction: data.requireInteraction !== undefined ? data.requireInteraction : true,
+      vibrate: data.vibrate || defaultVibrate,
       data: {
-        url: data.url || '/driver-tasks',
-        tripId: data.tripId || null,
+        url: (data.data && data.data.url) || data.url || '/driver-tasks',
+        tripId: (data.data && data.data.tripId) || data.tripId || null,
         timestamp: Date.now()
       },
       actions: data.actions || [
-        { action: 'open_mission', title: '??? ?????? ?????? ??' },
-        { action: 'dismiss', title: '?????' }
+        { action: 'open_mission', title: 'عرض تفاصيل الرحلة 🚛' },
+        { action: 'dismiss', title: 'إغلاق' }
       ]
     };
     event.waitUntil(self.registration.showNotification(title, options));
@@ -33,14 +38,14 @@ self.addEventListener('push', function(event) {
   }
 });
 
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   if (event.action === 'dismiss') return;
-  const targetUrl = event.notification.data?.url || '/driver-tasks';
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/driver-tasks';
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url && client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(targetUrl);
           return client.focus();
         }
@@ -51,3 +56,50 @@ self.addEventListener('notificationclick', function(event) {
     })
   );
 });
+
+// Background Sync API (Offline Outbox Upload on Reconnection)
+self.addEventListener('sync', function (event) {
+  const syncTag = event.tag;
+  if (
+    syncTag === 'sync-offline-outbox' ||
+    syncTag === 'sync-fuel-receipts' ||
+    syncTag === 'sync-pod-signatures' ||
+    (syncTag && syncTag.startsWith('sync-'))
+  ) {
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+        const promises = clientList.map(function (client) {
+          return client.postMessage({
+            type: 'TRIGGER_OFFLINE_SYNC',
+            tag: syncTag,
+            timestamp: Date.now()
+          });
+        });
+        return Promise.all(promises);
+      })
+    );
+  }
+});
+
+// Periodic Background Sync API (Telemetry Heartbeat & Reefer IoT Health)
+self.addEventListener('periodicsync', function (event) {
+  const periodicTag = event.tag;
+  if (
+    periodicTag === 'periodic-driver-heartbeat' ||
+    periodicTag === 'periodic-truck-sync'
+  ) {
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+        const promises = clientList.map(function (client) {
+          return client.postMessage({
+            type: 'PERIODIC_HEARTBEAT_TICK',
+            tag: periodicTag,
+            timestamp: Date.now()
+          });
+        });
+        return Promise.all(promises);
+      })
+    );
+  }
+});
+

@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Bell, BellRing, BellOff, ShieldAlert, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Bell, BellRing, BellOff, ShieldAlert, CheckCircle2, RefreshCw, Zap } from 'lucide-react';
 import {
   subscribeDriverPushAction,
   unsubscribeDriverPushAction,
+  testDriverPushAction,
 } from '../services/push-notifications.actions';
 import { getOrCreateDeviceId } from '@/lib/license';
 import { useLanguage } from '@/components/language-provider';
@@ -21,10 +22,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export function PushSubscriptionManager({ driverId }: { driverId?: number }) {
-  const { t, dir } = useLanguage();
+  const { t, dir, locale } = useLanguage();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
 
   useEffect(() => {
@@ -128,6 +130,45 @@ export function PushSubscriptionManager({ driverId }: { driverId?: number }) {
     }
   };
 
+  const handleTestEmergencyAlert = async () => {
+    setIsTesting(true);
+    try {
+      // 1. Hardware Emergency Vibration pulse
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([500, 150, 500, 150, 500, 150, 800]);
+      }
+
+      // 2. Server Push Alert
+      const res = await testDriverPushAction({
+        driverId,
+        locale: (locale as 'ar' | 'fr' | 'es') || 'ar',
+      });
+
+      if (!res.success) {
+        // Fallback local Service Worker notification
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification(
+          t('🚨 تجربة اهتزاز الطوارئ (اختبار محلي)', '🚨 Test alerte d’urgence', '🚨 Prueba de alerta de emergencia'),
+          {
+            body: t(
+              'تم اختبار اهتزاز الطوارئ بنجاح على هذا الجهاز.',
+              'Vibration d’urgence déclenchée avec succès sur cet appareil.',
+              'Vibración de emergencia activada con éxito en este dispositivo.'
+            ),
+            icon: '/icon-192x192.png',
+            badge: '/icon-192x192.png',
+            vibrate: [500, 150, 500, 150, 500, 150, 800],
+            tag: 'test-emergency-vibe',
+          } as any
+        );
+      }
+    } catch (err) {
+      console.error('Emergency test push error:', err);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   if (!isSupported) {
     return null;
   }
@@ -151,7 +192,7 @@ export function PushSubscriptionManager({ driverId }: { driverId?: number }) {
           <p className="text-sm font-bold text-foreground">
             {isSubscribed
               ? t('تنبيهات الطوارئ والمأموريات مفعلة', 'Notifications de mission & urgences activées', 'Notificaciones de misión y emergencias activadas')
-              : t('تفعيل إشعارات الهاتف الفورية (PWA Push)', 'Activer les notifications push mobiles', 'Activar notificaciones push móviles')}
+              : t('تفعيل إشعارات الهاتف الفورية (PWA Push)', 'Activer les notifications push mobiles', 'Activar notificaciones push mobiles')}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isSubscribed
@@ -169,22 +210,40 @@ export function PushSubscriptionManager({ driverId }: { driverId?: number }) {
         </div>
       </div>
 
-      <button
-        onClick={isSubscribed ? handleUnsubscribe : handleSubscribe}
-        disabled={isLoading}
-        className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 ${
-          isSubscribed
-            ? 'bg-muted text-foreground hover:bg-muted/80 border border-border/50'
-            : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20'
-        }`}
-      >
-        {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-        {isLoading
-          ? t('جاري المعالجة...', 'Traitement...', 'Procesando...')
-          : isSubscribed
-          ? t('إلغاء التفعيل', 'Désactiver', 'Desactivar')
-          : t('تفعيل الإشعارات 🔔', 'Activer les notifications 🔔', 'Activar notificaciones 🔔')}
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {isSubscribed && (
+          <button
+            onClick={handleTestEmergencyAlert}
+            disabled={isTesting}
+            title={t('اختبار اهتزاز الطوارئ على الهاتف', 'Tester la vibration d’urgence', 'Probar vibración de emergencia')}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 border border-amber-500/30 transition-all flex items-center gap-1.5"
+          >
+            {isTesting ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            )}
+            <span>{t('تجربة اهتزاز الطوارئ ⚡', 'Test alerte ⚡', 'Probar alerta ⚡')}</span>
+          </button>
+        )}
+
+        <button
+          onClick={isSubscribed ? handleUnsubscribe : handleSubscribe}
+          disabled={isLoading}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 ${
+            isSubscribed
+              ? 'bg-muted text-foreground hover:bg-muted/80 border border-border/50'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20'
+          }`}
+        >
+          {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+          {isLoading
+            ? t('جاري المعالجة...', 'Traitement...', 'Procesando...')
+            : isSubscribed
+            ? t('إلغاء التفعيل', 'Désactiver', 'Desactivar')
+            : t('تفعيل الإشعارات 🔔', 'Activer les notifications 🔔', 'Activar notificaciones 🔔')}
+        </button>
+      </div>
     </div>
   );
 }

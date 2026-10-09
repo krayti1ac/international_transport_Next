@@ -173,6 +173,59 @@ export default function DriverTasksPage() {
     };
   }, [supabase, toast, t]);
 
+  // Service Worker Message & Background Sync Listener
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    // Register Background Sync tags if supported
+    navigator.serviceWorker.ready.then(async (reg) => {
+      try {
+        if ('sync' in reg) {
+          await (reg as any).sync.register('sync-offline-outbox');
+        }
+      } catch (e) {
+        console.warn('[PWA BackgroundSync Register Warn]:', e);
+      }
+    });
+
+    // Listen to sync trigger from Service Worker
+    const handleSwMessage = async (event: MessageEvent) => {
+      if (event.data?.type === 'TRIGGER_OFFLINE_SYNC') {
+        try {
+          const { processAllOfflineQueues } = await import('@/lib/offline-sync');
+          const syncResult = await processAllOfflineQueues();
+          const totalSynced =
+            syncResult.receipts.successCount +
+            syncResult.pods.successCount +
+            syncResult.tasks.successCount +
+            syncResult.checkpoints.successCount;
+
+          if (totalSynced > 0) {
+            toast({
+              title: t(
+                'مزامنة البيانات غير المتصلة 📡',
+                'Synchronisation PWA 📡',
+                'Sincronización PWA 📡'
+              ),
+              description: t(
+                `تم رفع ${totalSynced} سجلات غير متصلة بنجاح إلى المنظومة المركزية.`,
+                `${totalSynced} actions hors-ligne ont été synchronisées avec succès.`,
+                `Se sincronizaron con éxito ${totalSynced} acciones offline.`
+              ),
+            });
+          }
+        } catch (err) {
+          console.error('[PWA Message Sync Error]:', err);
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, [t, toast]);
+
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return t('قيد الانتظار', 'En attente');

@@ -1,4 +1,9 @@
-// Web Push Notifications & Actions Handler for Driver PWA
+// ============================================================================
+// Trans Bodanon TMS — Driver PWA Service Worker Extension (Worker Script)
+// Capabilities: Web Push Notifications, Background Sync, Periodic Sync & Actions
+// ============================================================================
+
+// 1. Web Push Notifications Handler
 self.addEventListener('push', function (event: any) {
   if (!event.data) return;
 
@@ -6,20 +11,25 @@ self.addEventListener('push', function (event: any) {
     const data = event.data.json();
     const title = data.title || 'ترانس بودانون - تنبيه مأمورية';
 
-    const options = {
+    // Emergency vibration vs normal mission vibration
+    const defaultVibrate = data.tag?.includes('emergency')
+      ? [500, 150, 500, 150, 500, 150, 800]
+      : [300, 100, 300, 100, 400];
+
+    const options: any = {
       body: data.body || '',
       icon: data.icon || '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      image: data.image || null,
-      dir: 'rtl' as const,
-      lang: 'ar',
+      badge: data.badge || '/icon-192x192.png',
+      image: data.image || undefined,
+      dir: data.dir || 'rtl',
+      lang: data.lang || 'ar',
       tag: data.tag || 'general-dispatch',
-      renotify: true,
-      requireInteraction: data.requireInteraction || false,
-      vibrate: data.vibrate || [200, 100, 200, 100, 400],
+      renotify: data.renotify ?? true,
+      requireInteraction: data.requireInteraction ?? true,
+      vibrate: data.vibrate || defaultVibrate,
       data: {
-        url: data.url || '/driver-tasks',
-        tripId: data.tripId || null,
+        url: data.data?.url || data.url || '/driver-tasks',
+        tripId: data.data?.tripId || data.tripId || null,
         timestamp: Date.now(),
       },
       actions: data.actions || [
@@ -34,6 +44,7 @@ self.addEventListener('push', function (event: any) {
   }
 });
 
+// 2. Notification Click & Action Routing Handler
 self.addEventListener('notificationclick', function (event: any) {
   event.notification.close();
 
@@ -44,7 +55,7 @@ self.addEventListener('notificationclick', function (event: any) {
   event.waitUntil(
     (self as any).clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList: any[]) {
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url && client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(targetUrl);
           return client.focus();
         }
@@ -56,3 +67,50 @@ self.addEventListener('notificationclick', function (event: any) {
   );
 });
 
+// 3. Background Sync API (Offline Outbox Upload on Connection Restore)
+self.addEventListener('sync', function (event: any) {
+  const syncTag = event.tag;
+
+  if (
+    syncTag === 'sync-offline-outbox' ||
+    syncTag === 'sync-fuel-receipts' ||
+    syncTag === 'sync-pod-signatures' ||
+    (syncTag && syncTag.startsWith('sync-'))
+  ) {
+    event.waitUntil(
+      (self as any).clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList: any[]) {
+        const promises = clientList.map(function (client: any) {
+          return client.postMessage({
+            type: 'TRIGGER_OFFLINE_SYNC',
+            tag: syncTag,
+            timestamp: Date.now(),
+          });
+        });
+        return Promise.all(promises);
+      })
+    );
+  }
+});
+
+// 4. Periodic Background Sync API (Telemetry Heartbeat & Reefer IoT Health)
+self.addEventListener('periodicsync', function (event: any) {
+  const periodicTag = event.tag;
+
+  if (
+    periodicTag === 'periodic-driver-heartbeat' ||
+    periodicTag === 'periodic-truck-sync'
+  ) {
+    event.waitUntil(
+      (self as any).clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList: any[]) {
+        const promises = clientList.map(function (client: any) {
+          return client.postMessage({
+            type: 'PERIODIC_HEARTBEAT_TICK',
+            tag: periodicTag,
+            timestamp: Date.now(),
+          });
+        });
+        return Promise.all(promises);
+      })
+    );
+  }
+});
