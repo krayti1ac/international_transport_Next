@@ -48,7 +48,9 @@ import {
   Check,
   Building,
   FileSpreadsheet,
+  Landmark,
 } from 'lucide-react';
+import { BulkTransferBatchModal } from './BulkTransferBatchModal';
 
 export function FiscalSettlementsView() {
   const { t, dir, locale } = useLanguage();
@@ -82,6 +84,7 @@ export function FiscalSettlementsView() {
     (DriverSettlementStatement & { driver?: { name: string; phone?: string; matricule?: string } }) | null
   >(null);
   const [isClearanceModalOpen, setIsClearanceModalOpen] = useState(false);
+  const [isBulkTransferModalOpen, setIsBulkTransferModalOpen] = useState(false);
 
   const handleExportExcel = async () => {
     setIsExportingExcel(true);
@@ -472,6 +475,16 @@ export function FiscalSettlementsView() {
                 <option value="approved">{t('مصادق عليه (Approved)', 'Approuvé', 'Aprobado')}</option>
                 <option value="settled">{t('تم الصرف والتسوية (Settled)', 'Réglé & Clôturé', 'Liquidado')}</option>
               </select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBulkTransferModalOpen(true)}
+                className="h-8 gap-2 text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 shadow-xs"
+              >
+                <Landmark className="w-3.5 h-3.5 text-primary" />
+                <span>{t('التحويل البنكي المجمع (SEPA / LCN)', 'Virement Bancaire (SEPA / LCN)', 'Transferencia Masiva (SEPA / LCN)')}</span>
+              </Button>
             </div>
           )}
 
@@ -792,6 +805,13 @@ export function FiscalSettlementsView() {
           setSelectedStatement(null);
         }}
         statement={selectedStatement}
+      />
+
+      {/* Bulk Bank Transfer & SEPA XML / LCN Modal */}
+      <BulkTransferBatchModal
+        isOpen={isBulkTransferModalOpen}
+        onClose={() => setIsBulkTransferModalOpen(false)}
+        onSuccess={loadData}
       />
     </div>
   );

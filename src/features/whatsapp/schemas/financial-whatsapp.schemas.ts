@@ -15,3 +15,4 @@ export const sendFuelTheftAlertWhatsAppSchema = z.object({
 
 export type SendDriverClearanceWhatsAppInput = z.infer<typeof sendDriverClearanceWhatsAppSchema>;
 export type SendFuelTheftAlertWhatsAppInput = z.infer<typeof sendFuelTheftAlertWhatsAppSchema>;
+
