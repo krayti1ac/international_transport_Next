@@ -23,8 +23,11 @@ import {
   ChevronUp,
   Wrench,
   FileCheck2,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { GdpComplianceCertificateModal } from '@/features/tracking/components/GdpComplianceCertificateModal';
+import { useTelematicsStream } from '@/features/tracking/hooks/useTelematicsStream';
 
 
 interface ReeferColdChainMatrixProps {
@@ -44,16 +47,48 @@ export function ReeferColdChainMatrix({
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [certAsset, setCertAsset] = useState<TelematicsTelemetry | null>(null);
 
+  // Real-time telematics stream connection
+  const { status: streamStatus, reconnect: reconnectStream } = useTelematicsStream({
+    enabled: true,
+  });
+
   return (
     <div className="space-y-4" dir={dir}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-base font-bold font-amiri text-foreground flex items-center gap-2">
           <Snowflake className="w-5 h-5 text-cyan-500 animate-spin-slow" />
           <span>{t('رادار مبردات الشحن وسلسلة التبريد Frigo', 'Matrice Télématique Frigorifique')}</span>
         </h3>
-        <Badge variant="outline" className="text-xs font-mono font-medium">
-          {telemetryList.length} {t('وحدات نشطة', 'unités actives')}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {streamStatus === 'connected' ? (
+            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 text-[11px] py-0.5 px-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Wifi className="w-3 h-3 text-emerald-500" />
+              <span>{t('reefer.stream.live', 'بث لحظي نشط (SSE)')}</span>
+            </Badge>
+          ) : streamStatus === 'connecting' ? (
+            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1.5 text-[11px] py-0.5 px-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <Wifi className="w-3 h-3 text-amber-500" />
+              <span>{t('reefer.stream.connecting', 'جاري الاتصال...')}</span>
+            </Badge>
+          ) : (
+            <Badge
+              onClick={reconnectStream}
+              className="cursor-pointer bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1 text-[11px] py-0.5 px-2 transition-colors"
+              title="إعادة الاتصال بالبث المباشر"
+            >
+              <WifiOff className="w-3 h-3 text-rose-500" />
+              <span>{t('reefer.stream.reconnect', 'إعادة الاتصال')}</span>
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs font-mono font-medium">
+            {telemetryList.length} {t('وحدات نشطة', 'unités actives')}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pe-1">

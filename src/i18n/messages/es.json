@@ -1780,7 +1780,13 @@
     "dieselBurned": "Consumo de gasóleo del equipo de frío",
     "doorBreaches": "Aperturas de puertas en tránsito",
     "excursionMinutes": "Duración de excursión térmica (min)",
-    "certificate": "Certificado digital de conformidad verificado"
+    "certificate": "Certificado digital de conformidad verificado",
+    "stream": {
+      "live": "Transmisión en vivo activa (SSE)",
+      "connecting": "Conectando al flujo...",
+      "offline": "Transmisión desconectada",
+      "reconnect": "Reconectar"
+    }
   }
 }
 

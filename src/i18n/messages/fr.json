@@ -1780,7 +1780,13 @@
     "dieselBurned": "Consommation gazole groupe frigo",
     "doorBreaches": "Ouvertures de portes en transit",
     "excursionMinutes": "Durée d'excursion thermique (min)",
-    "certificate": "Certificat de conformité numérique certifié"
+    "certificate": "Certificat de conformité numérique certifié",
+    "stream": {
+      "live": "Flux direct actif (SSE)",
+      "connecting": "Connexion au flux...",
+      "offline": "Flux déconnecté",
+      "reconnect": "Reconnexion"
+    }
   }
 }
 

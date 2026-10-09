@@ -23,6 +23,8 @@ import {
   RefreshCw,
   PlusCircle,
   MessageCircle,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import type {
   ColdChainAuditEvaluation,
@@ -32,6 +34,7 @@ import type {
 } from '../types/reefer-compliance.types';
 import { REEFER_CARGO_CATALOG } from '../types/reefer-compliance.types';
 import { GdpComplianceCertificateModal } from './GdpComplianceCertificateModal';
+import { useTelematicsStream } from '../hooks/useTelematicsStream';
 import {
   generateReeferCertificateAction,
   logReeferTelemetryAction,
@@ -73,9 +76,53 @@ export function ReeferColdChainAuditCard({
   const [isPending, startTransition] = useTransition();
 
   const [evaluation, setEvaluation] = useState<ColdChainAuditEvaluation>(initialEvaluation);
+  const [telemetryLogs, setTelemetryLogs] = useState<ReeferTelemetryLog[]>(logs);
+  const [activeIncidents, setActiveIncidents] = useState<ReeferExcursionIncident[]>(incidents);
   const [showCertModal, setShowCertModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'logs' | 'incidents'>('overview');
   const [sendingAlertId, setSendingAlertId] = useState<string | null>(null);
+
+  // Real-Time Telematics & Sensor Stream (SSE)
+  const {
+    status: streamStatus,
+    reconnect: reconnectStream,
+  } = useTelematicsStream({
+    tripId,
+    enabled: true,
+    onTelemetry: (packet) => {
+      const newLog: ReeferTelemetryLog = {
+        id: packet.id,
+        tripId,
+        supplyAirTemp: packet.supplyAirTemp,
+        returnAirTemp: packet.returnAirTemp,
+        ambientTemp: packet.ambientTemp,
+        compressorStatus: packet.compressorStatus,
+        isDefrostActive: packet.isDefrostActive,
+        doorOpenSensor: packet.doorOpenSensor,
+        dieselFuelLevelLiters: packet.dieselFuelLevelLiters,
+        dieselBurnRateLph: packet.dieselBurnRateLph,
+        latitude: packet.latitude,
+        longitude: packet.longitude,
+        isGeofenceSafe: packet.isGeofenceSafe,
+        recordedAt: packet.recordedAt,
+      };
+
+      setTelemetryLogs((prev) => [...prev, newLog]);
+
+      if (packet.mktCelsius !== undefined) {
+        setEvaluation((prev) => ({
+          ...prev,
+          mktTemperatureCelsius: packet.mktCelsius!,
+          avgSupplyTemp: packet.supplyAirTemp,
+          avgReturnTemp: packet.returnAirTemp,
+          totalLogsCount: prev.totalLogsCount + 1,
+        }));
+      }
+    },
+    onIncident: (inc) => {
+      setActiveIncidents((prev) => [inc, ...prev]);
+    },
+  });
 
   const cargoPreset = REEFER_CARGO_CATALOG[profile.cargoCategory] || REEFER_CARGO_CATALOG.fresh_produce;
 
@@ -183,7 +230,7 @@ export function ReeferColdChainAuditCard({
     }
   };
 
-  const latestLog = logs && logs.length > 0 ? logs[logs.length - 1] : null;
+  const latestLog = telemetryLogs && telemetryLogs.length > 0 ? telemetryLogs[telemetryLogs.length - 1] : null;
 
   return (
     <Card className={`border border-slate-800 bg-slate-900/90 text-slate-100 shadow-xl overflow-hidden ${className}`}>
@@ -223,7 +270,34 @@ export function ReeferColdChainAuditCard({
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center">
+          <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
+            {/* Live SSE Stream Pulse Status */}
+            {streamStatus === 'connected' ? (
+              <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 text-[11px] py-1 px-2.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-medium">{t('reefer.stream.live', 'بث لحظي نشط (SSE)')}</span>
+              </Badge>
+            ) : streamStatus === 'connecting' ? (
+              <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 text-[11px] py-1 px-2.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" />
+                <Wifi className="w-3.5 h-3.5 text-amber-400" />
+                <span>{t('reefer.stream.connecting', 'جاري الاتصال بالبث...')}</span>
+              </Badge>
+            ) : (
+              <Badge
+                onClick={reconnectStream}
+                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 text-[11px] py-1 px-2.5 transition-colors"
+                title="اضغط لإعادة محاولة الاتصال بالبث المباشر"
+              >
+                <WifiOff className="w-3.5 h-3.5 text-rose-400" />
+                <span>{t('reefer.stream.reconnect', 'إعادة الاتصال بالبث')}</span>
+              </Badge>
+            )}
+
             {evaluation.certificateHash ? (
               <Button
                 variant="outline"
@@ -293,7 +367,7 @@ export function ReeferColdChainAuditCard({
               </div>
             </div>
             <div className="text-[10px] text-slate-500 border-t border-slate-800/60 pt-1.5">
-              {logs.length} تسجيل EN 12830
+              {telemetryLogs.length} تسجيل EN 12830
             </div>
           </div>
 
@@ -345,14 +419,14 @@ export function ReeferColdChainAuditCard({
         </div>
 
         {/* Excursion Incidents Alert (if any active) */}
-        {incidents && incidents.length > 0 && (
+        {activeIncidents && activeIncidents.length > 0 && (
           <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-950/20 space-y-2">
             <div className="flex items-center gap-2 text-rose-400 text-xs font-bold">
               <AlertTriangle className="w-4 h-4" />
-              تم رصد {incidents.length} واقعة انحراف حراري أو خرق تشغيلي أثناء الترانزيت:
+              تم رصد {activeIncidents.length} واقعة انحراف حراري أو خرق تشغيلي أثناء الترانزيت:
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {incidents.slice(0, 4).map((inc) => (
+              {activeIncidents.slice(0, 4).map((inc) => (
                 <div key={inc.id} className="p-2.5 rounded bg-slate-900/80 border border-slate-800 flex justify-between items-center">
                   <div>
                     <span className="font-semibold text-slate-200 block">
@@ -392,11 +466,11 @@ export function ReeferColdChainAuditCard({
         )}
 
         {/* Telemetry Stream Log Table (Recent 5 logs) */}
-        {logs && logs.length > 0 && (
+        {telemetryLogs && telemetryLogs.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-medium text-slate-400">
               <span>سجل التدفق اللحظي لحساسات مسجل التبريد EN 12830 (DataCOLD / TracKing)</span>
-              <span>عرض آخر {Math.min(logs.length, 5)} قراءات</span>
+              <span>عرض آخر {Math.min(telemetryLogs.length, 5)} قراءات</span>
             </div>
             <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
               <table className="w-full text-xs text-slate-300">
@@ -411,7 +485,7 @@ export function ReeferColdChainAuditCard({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {logs.slice(-5).map((log) => (
+                  {telemetryLogs.slice(-5).map((log) => (
                     <tr key={log.id} className="hover:bg-slate-900/40">
                       <td className="py-2 px-3 font-mono text-[11px]">
                         {new Date(log.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
