@@ -2080,6 +2080,38 @@
       "doorsSealedEnforced": "Mantenimiento de puertas cerradas hasta el muelle",
       "cooldownActive": "Alerta protegida por periodo de enfriamiento (ya enviada)",
       "simulateAlert": "Simular alerta al conductor"
+    },
+    "driverHotspotConfirmation": {
+      "title": "Confirmación obligatoria del protocolo de frío (Aproximación a punto crítico)",
+      "subtitle": "Se está aproximando a un muelle de alto riesgo térmico. Las directrices GDP exigen la confirmación de pautas y sensores.",
+      "hotspotAlert": "Alerta aproximación punto crítico",
+      "dviScore": "Índice de vulnerabilidad DVI",
+      "distanceRemaining": "Distancia restante",
+      "etaMinutes": "Llegada estimada",
+      "mandatoryChecklist": "Lista de verificación operativa obligatoria",
+      "continuousRunLabel": "Equipo frigorífico configurado en marcha continua (Continuous Run) y modo Cycle-Sentry deshabilitado",
+      "doorsSealedLabel": "Puertas traseras herméticamente cerradas y precintos intactos hasta el acople en muelle",
+      "curtainsReadyLabel": "Cortina térmica móvil preparada para despliegue inmediato al romper precintos",
+      "telematicsStatus": "Estado telemático en tiempo real (CAN-Bus / IoT)",
+      "telematicsScore": "Puntuación de conformidad telemática",
+      "compressorStatus": "Compresor",
+      "running": "En marcha",
+      "idle": "Parado",
+      "coolingMode": "Modo de frío",
+      "continuous": "Continuo (Continuous)",
+      "cycleSentry": "Ahorro (Cycle-Sentry)",
+      "doorSensor": "Sensor de puertas",
+      "closed": "Cerrado / Hermético",
+      "open": "Abierto",
+      "confirmButton": "Confirmar conformidad y ajuste de frío",
+      "confirming": "Verificando y confirmando...",
+      "successTitle": "Conformidad confirmada con éxito",
+      "successDescription": "Su declaración ha sido sellada criptográficamente y cotejada con los sensores telemáticos",
+      "warningDiscrepancyTitle": "¡Aviso de discrepancia telemática!",
+      "warningDiscrepancyDescription": "Ha confirmado marcha continua, pero los sensores telemáticos indican compresor inactivo o modo Cycle-Sentry. ¡Por favor ajuste el equipo de inmediato!",
+      "offlineQueued": "Declaración guardada localmente, se sincronizará en cuanto haya conexión",
+      "close": "Cerrar",
+      "dismiss": "Ocultar temporalmente"
     }
   }
 }

@@ -2080,6 +2080,38 @@
       "doorsSealedEnforced": "حظر فتح الأبواب قبل الرصيف",
       "cooldownActive": "التنبيه محمي بفترة التهدئة (تم الإرسال مؤخراً)",
       "simulateAlert": "محاكاة إرسال تنبيه السائق"
+    },
+    "driverHotspotConfirmation": {
+      "title": "تأكيد بروتوكول التبريد الإلزامي (الاقتراب من بؤرة حرجة)",
+      "subtitle": "أنت تقترب من رصيف عالي المخاطر الحرارية. يتطلب ميثاق GDP تأكيد الإجراءات الميدانية والتحقق من الحساسات.",
+      "hotspotAlert": "تنبيه اقتراب من بؤرة حرجة",
+      "dviScore": "مؤشر هشاشة الرصيف DVI",
+      "distanceRemaining": "المسافة المتبقية",
+      "etaMinutes": "الوصول المتوقع",
+      "mandatoryChecklist": "قائمة التحقق الميداني الإلزامية للسائق",
+      "continuousRunLabel": "تم ضبط وحدة التبريد على التشغيل المستمر (Continuous Run) ومنع وضع Cycle-Sentry",
+      "doorsSealedLabel": "تم التأكد من إحكام إغلاق أبواب المقطورة وسلامة الأختام حتى الالتحام بالرصيف",
+      "curtainsReadyLabel": "ستارة العزل الحراري المتنقلة جاهزة للنشر فور فك الأختام داخل الرصيف",
+      "telematicsStatus": "حالة الفحص التليماتي اللحظي (CAN-Bus / IoT)",
+      "telematicsScore": "درجة الامتثال التليماتي",
+      "compressorStatus": "حالة الضاغط",
+      "running": "يعمل",
+      "idle": "متوقف",
+      "coolingMode": "وضع التبريد",
+      "continuous": "مستمر (Continuous)",
+      "cycleSentry": "توفير (Cycle-Sentry)",
+      "doorSensor": "حساس الأبواب",
+      "closed": "محكم الإغلاق",
+      "open": "مفتوح",
+      "confirmButton": "تأكيد الامتثال وضبط التبريد الميداني",
+      "confirming": "جاري التحقق والتأكيد...",
+      "successTitle": "تم تأكيد الامتثال بنجاح",
+      "successDescription": "تم توثيق إقرارك برمز تشفيري مشفر ومطابقة قراءات الحساسات التليماتية",
+      "warningDiscrepancyTitle": "تحذير تباين تليماتي!",
+      "warningDiscrepancyDescription": "أكدت وضع التشغيل المستمر، بينما حساسات الشاحنة تفيد بتوقف الضاغط أو وضع توفير الطاقة. يرجى ضبط وحدة التبريد فوراً!",
+      "offlineQueued": "تم حفظ الإقرار محلياً وسيتم مزامنته تلقائياً فور توفر الشبكة",
+      "close": "إغلاق",
+      "dismiss": "إخفاء مؤقت"
     }
   }
 }

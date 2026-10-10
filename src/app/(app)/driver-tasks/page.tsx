@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/components/language-provider';
-import { MapPin, Fuel, FileText, CheckCircle } from 'lucide-react';
+import { MapPin, Fuel, FileText, CheckCircle, Flame, ShieldCheck } from 'lucide-react';
 import { NavigationLauncher } from '@/features/trips/components/NavigationLauncher';
 import Decimal from 'decimal.js';
 import { calculateDriverSafetyScore, type DriverSafetyBreakdown } from '@/features/drivers/services/driver-safety-score.actions';
@@ -20,6 +20,7 @@ import {
   getCachedDriverDocumentOffline,
 } from '@/lib/offline-sync';
 import { DriverTacticalOfflineBar } from '@/features/drivers/components/DriverTacticalOfflineBar';
+import { DriverHotspotActionModal } from '@/features/tracking/components/DriverHotspotActionModal';
 
 export default function DriverTasksPage() {
   const { t, dir } = useLanguage();
@@ -28,6 +29,8 @@ export default function DriverTasksPage() {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [safetyData, setSafetyData] = useState<DriverSafetyBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showHotspotModal, setShowHotspotModal] = useState(false);
+  const [hotspotConfirmed, setHotspotConfirmed] = useState(false);
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
@@ -254,6 +257,41 @@ export default function DriverTasksPage() {
         activeTrip={trips[0] || null}
       />
 
+      {/* Approaching Critical Hotspot Tactical Alert Banner */}
+      {trips.length > 0 && (
+        <div className="rounded-xl border border-rose-500/40 bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-rose-500/5 p-3.5 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-lg bg-rose-500 p-2 text-white animate-pulse shrink-0">
+              <Flame className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-rose-600 dark:text-rose-400">
+                  {t('تنبيه اقتراب من بؤرة حرجة', 'Alerte approche foyer critique (DVI 85)')}
+                </span>
+                {hotspotConfirmed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1 border border-emerald-500/30">
+                    <ShieldCheck className="w-3 h-3" />
+                    {t('تم تأكيد التبريد المستمر', 'Froid continu confirmé')}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t('Mercamadrid Docks — يلزم تأكيد ضبط التبريد المستمر (GDP)', 'Mercamadrid Docks — Confirmation marche continue requise (GDP)')}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant={hotspotConfirmed ? 'outline' : 'destructive'}
+            onClick={() => setShowHotspotModal(true)}
+            className="text-xs shrink-0 font-bold"
+          >
+            {hotspotConfirmed ? t('عرض التأكيد', 'Voir confirmation') : t('تأكيد التبريد ❄️', 'Confirmer le froid ❄️')}
+          </Button>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold font-amiri text-foreground">
           {t('مهامي وجدول الرحلات', 'Mes Missions & Planning Chauffeur')}
@@ -420,6 +458,27 @@ export default function DriverTasksPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Driver Approaching Critical Hotspot Modal */}
+      {trips[0] && (
+        <DriverHotspotActionModal
+          isOpen={showHotspotModal}
+          onClose={() => setShowHotspotModal(false)}
+          truckId={trips[0].truck_id || 101}
+          truckPlate="67890-A-40"
+          tripId={trips[0].id}
+          tripNumber={`TRIP-${trips[0].id}`}
+          driverId={driver?.id || 1}
+          driverName={driver?.name || 'Mohamed Al-Amrani'}
+          dockId="DOCK-MAD-04"
+          dockName="Mercamadrid Hall 4 Frigo"
+          facilityOrPort="Mercamadrid Plataforma Logística Frigorífica"
+          dviScore={85.0}
+          distanceKm={5.2}
+          etaMinutes={7}
+          onConfirmed={() => setHotspotConfirmed(true)}
+        />
       )}
     </div>
   );

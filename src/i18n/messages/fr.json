@@ -2080,6 +2080,38 @@
       "doorsSealedEnforced": "Maintien des portes scellées jusqu'au quai",
       "cooldownActive": "Alerte protégée par le délai de temporisation (déjà envoyée)",
       "simulateAlert": "Simuler l'alerte chauffeur"
+    },
+    "driverHotspotConfirmation": {
+      "title": "Confirmation obligatoire du protocole de froid (Approche d'un foyer critique)",
+      "subtitle": "Vous approchez d'un quai à haut risque thermique. Les directives GDP exigent la validation des consignes et des capteurs.",
+      "hotspotAlert": "Alerte approche foyer critique",
+      "dviScore": "Indice de vulnérabilité DVI",
+      "distanceRemaining": "Distance restante",
+      "etaMinutes": "Arrivée estimée",
+      "mandatoryChecklist": "Liste de contrôle opérationnelle obligatoire",
+      "continuousRunLabel": "Groupe frigo configuré en marche continue (Continuous Run) et mode veille Cycle-Sentry désactivé",
+      "doorsSealedLabel": "Portes arrière hermétiquement fermées et scellés vérifiés jusqu'à la mise à quai",
+      "curtainsReadyLabel": "Cloison thermique mobile prête pour déploiement immédiat dès rupture des scellés",
+      "telematicsStatus": "État de la télématique en temps réel (CAN-Bus / IoT)",
+      "telematicsScore": "Score de conformité télématique",
+      "compressorStatus": "Compresseur",
+      "running": "En marche",
+      "idle": "À l'arrêt",
+      "coolingMode": "Mode de froid",
+      "continuous": "Continu (Continuous)",
+      "cycleSentry": "Éco (Cycle-Sentry)",
+      "doorSensor": "Capteur portes",
+      "closed": "Fermé / Étanche",
+      "open": "Ouvert",
+      "confirmButton": "Confirmer la conformité et le réglage du froid",
+      "confirming": "Vérification et confirmation en cours...",
+      "successTitle": "Conformité confirmée avec succès",
+      "successDescription": "Votre affirmation a été signée cryptographiquement et validée avec les capteurs télématiques",
+      "warningDiscrepancyTitle": "Avertissement de divergence télématique !",
+      "warningDiscrepancyDescription": "Vous avez confirmé le mode Continu, mais les capteurs télématiques indiquent un compresseur inactif ou en mode veille. Veuillez corriger immédiatement !",
+      "offlineQueued": "Déclaration enregistrée localement, synchronisation dès retour du réseau",
+      "close": "Fermer",
+      "dismiss": "Masquer temporairement"
     }
   }
 }
