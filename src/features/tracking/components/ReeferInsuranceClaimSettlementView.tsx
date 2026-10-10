@@ -29,6 +29,7 @@ import {
   ArrowRight,
   ExternalLink,
   Layers,
+  Send,
 } from 'lucide-react';
 import type {
   CargoCategory,
@@ -43,6 +44,7 @@ import {
   fetchReeferClaimsAction,
   updateClaimStatusAction,
 } from '../services/reefer-claim.actions';
+import { InsuranceDossierDispatchModal } from './InsuranceDossierDispatchModal';
 
 interface ReeferInsuranceClaimSettlementViewProps {
   initialClaims?: ReeferCargoInsuranceClaim[];
@@ -61,6 +63,7 @@ export function ReeferInsuranceClaimSettlementView({
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showCalculator, setShowCalculator] = useState<boolean>(false);
+  const [dispatchClaim, setDispatchClaim] = useState<ReeferCargoInsuranceClaim | null>(null);
 
   // Calculator Form State
   const [calcCategory, setCalcCategory] = useState<CargoCategory>('fresh_produce');
@@ -459,6 +462,16 @@ export function ReeferInsuranceClaimSettlementView({
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDispatchClaim(claim)}
+                        className="text-xs text-blue-600 border-blue-500/40 hover:bg-blue-500/10 gap-1"
+                      >
+                        <Send className="h-3 w-3" />
+                        {t('dispatchToInsurerBtn')}
+                      </Button>
+
                       {claim.claimStatus === 'under_review' && (
                         <Button
                           size="sm"
@@ -646,6 +659,18 @@ export function ReeferInsuranceClaimSettlementView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Insurance Dossier Dispatch Modal */}
+      {dispatchClaim && (
+        <InsuranceDossierDispatchModal
+          claim={dispatchClaim}
+          isOpen={!!dispatchClaim}
+          onClose={() => setDispatchClaim(null)}
+          onSuccess={() => {
+            refreshClaims();
+          }}
+        />
       )}
     </div>
   );
