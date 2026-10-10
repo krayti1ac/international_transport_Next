@@ -30,6 +30,7 @@ import {
   ExternalLink,
   Layers,
   Send,
+  Receipt,
 } from 'lucide-react';
 import type {
   CargoCategory,
@@ -45,6 +46,7 @@ import {
   updateClaimStatusAction,
 } from '../services/reefer-claim.actions';
 import { InsuranceDossierDispatchModal } from './InsuranceDossierDispatchModal';
+import { ClaimCreditNoteModal } from './ClaimCreditNoteModal';
 
 interface ReeferInsuranceClaimSettlementViewProps {
   initialClaims?: ReeferCargoInsuranceClaim[];
@@ -64,6 +66,7 @@ export function ReeferInsuranceClaimSettlementView({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showCalculator, setShowCalculator] = useState<boolean>(false);
   const [dispatchClaim, setDispatchClaim] = useState<ReeferCargoInsuranceClaim | null>(null);
+  const [reconcileClaim, setReconcileClaim] = useState<ReeferCargoInsuranceClaim | null>(null);
 
   // Calculator Form State
   const [calcCategory, setCalcCategory] = useState<CargoCategory>('fresh_produce');
@@ -488,12 +491,24 @@ export function ReeferInsuranceClaimSettlementView({
                         claim.claimStatus === 'under_review') && (
                         <Button
                           size="sm"
-                          onClick={() => handleUpdateStatus(claim.id, 'settled')}
+                          onClick={() => setReconcileClaim(claim)}
                           disabled={isPending}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1"
                         >
-                          <CheckCircle2 className="h-3 w-3" />
+                          <Receipt className="h-3 w-3" />
                           {t('settleCreditNoteBtn')}
+                        </Button>
+                      )}
+
+                      {claim.claimStatus === 'settled' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setReconcileClaim(claim)}
+                          className="text-xs text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10 gap-1"
+                        >
+                          <Receipt className="h-3 w-3" />
+                          {t('viewCreditNoteBtn')}
                         </Button>
                       )}
                     </div>
@@ -669,6 +684,30 @@ export function ReeferInsuranceClaimSettlementView({
           onClose={() => setDispatchClaim(null)}
           onSuccess={() => {
             refreshClaims();
+          }}
+        />
+      )}
+
+      {/* Automated Credit Note & General Ledger Reconciliation Modal */}
+      {reconcileClaim && (
+        <ClaimCreditNoteModal
+          claim={reconcileClaim}
+          isOpen={!!reconcileClaim}
+          onClose={() => setReconcileClaim(null)}
+          onSuccess={(details) => {
+            setClaims((prev) =>
+              prev.map((c) =>
+                c.id === details.claimId
+                  ? {
+                      ...c,
+                      claimStatus: 'settled',
+                      creditNoteNumber: details.creditNoteNumber,
+                      settledAt: details.reconciledAt,
+                    }
+                  : c
+              )
+            );
+            setReconcileClaim(null);
           }}
         />
       )}
