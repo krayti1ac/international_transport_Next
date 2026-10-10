@@ -2004,7 +2004,12 @@
       "skippedStatus": "Protegido por cooldown",
       "failedStatus": "Fallo de envío",
       "topDocks": "Muelles más activos",
-      "refresh": "Actualizar registro"
+      "refresh": "Actualizar registro",
+      "exportExcel": "Exportar Excel",
+      "exportPdf": "Informe PDF",
+      "monthLabel": "Mes contable",
+      "exportExcelSuccess": "Libro Excel exportado con éxito",
+      "exportPdfSuccess": "Informe PDF generado con éxito"
     }
   }
 }

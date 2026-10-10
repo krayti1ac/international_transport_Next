@@ -2004,7 +2004,12 @@
       "skippedStatus": "محمي بالتهدئة",
       "failedStatus": "فشل الإرسال",
       "topDocks": "أكثر الأرصفة نشاطاً",
-      "refresh": "تحديث السجلات"
+      "refresh": "تحديث السجلات",
+      "exportExcel": "تصدير Excel",
+      "exportPdf": "تقرير PDF",
+      "monthLabel": "الشهر المحاسبي",
+      "exportExcelSuccess": "تم تصدير المصنف بنجاح",
+      "exportPdfSuccess": "تم تجهيز تقرير PDF بنجاح"
     }
   }
 }

@@ -2004,7 +2004,12 @@
       "skippedStatus": "Protégé par temporisation",
       "failedStatus": "Échec de l'envoi",
       "topDocks": "Quais les plus actifs",
-      "refresh": "Actualiser le journal"
+      "refresh": "Actualiser le journal",
+      "exportExcel": "Exporter Excel",
+      "exportPdf": "Rapport PDF",
+      "monthLabel": "Mois comptable",
+      "exportExcelSuccess": "Classeur Excel exporté avec succès",
+      "exportPdfSuccess": "Rapport PDF généré avec succès"
     }
   }
 }

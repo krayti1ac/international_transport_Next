@@ -14,7 +14,10 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  Download,
   ExternalLink,
+  FileSpreadsheet,
+  FileText,
   Filter,
   MessageSquare,
   RefreshCw,
@@ -35,6 +38,10 @@ import {
   fetchDockArrivalsAuditAction,
   resendTargetedDispatchAction,
 } from '../services/dock-dispatch-audit.actions';
+import {
+  exportMonthlyDockArrivalsExcelAction,
+  exportMonthlyDockArrivalsPdfAction,
+} from '../services/dock-export.actions';
 import type {
   DockArrivalDispatchItem,
   DockDispatchStats,
@@ -71,6 +78,9 @@ export function DockArrivalsAuditView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompartment, setSelectedCompartment] = useState<'ALL' | 'C1' | 'C2' | 'C3'>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const [isPending, startTransition] = useTransition();
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -138,6 +148,91 @@ export function DockArrivalsAuditView({
       });
     } finally {
       setResendingId(null);
+    }
+  };
+
+  // Handle Monthly Excel Export
+  const handleExportExcel = async () => {
+    setIsExportingExcel(true);
+    try {
+      const res = await exportMonthlyDockArrivalsExcelAction({
+        month: selectedMonth,
+        compartmentCode: selectedCompartment,
+        dispatchStatus: selectedStatus as any,
+        locale: 'ar',
+        format: 'excel',
+      });
+      if (res.success && res.content) {
+        const blob = new Blob([res.content], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.filename || `dock_arrivals_${selectedMonth}.xls`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({
+          title: 'تم تصدير المصنف بنجاح',
+          description: `تم حفظ كشف حركة وصول الأرصفة لشهر ${selectedMonth} بصيغة Excel متعددة الأوراق`,
+        });
+      } else {
+        toast({
+          title: 'فشل تصدير Excel',
+          description: res.error || 'حدث خطأ أثناء إنشاء المصنف',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      toast({
+        title: 'خطأ في التصدير',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // Handle Monthly PDF / Printable Report Export
+  const handleExportPdf = async () => {
+    setIsExportingPdf(true);
+    try {
+      const res = await exportMonthlyDockArrivalsPdfAction({
+        month: selectedMonth,
+        compartmentCode: selectedCompartment,
+        dispatchStatus: selectedStatus as any,
+        locale: 'ar',
+        format: 'pdf',
+      });
+      if (res.success && res.content) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(res.content);
+          printWindow.document.close();
+          printWindow.focus();
+        }
+        toast({
+          title: 'تم تجهيز كشف PDF بنجاح',
+          description: `تم فتح تقرير الامتثال والتبريد المعتمد لشهر ${selectedMonth} للطباعة والأرشفة الجمركية`,
+        });
+      } else {
+        toast({
+          title: 'فشل تصدير PDF',
+          description: res.error || 'حدث خطأ أثناء توليد التقرير',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      toast({
+        title: 'خطأ في التصدير',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -224,16 +319,51 @@ export function DockArrivalsAuditView({
               مراقبة لحظية لوصول شاحنات الأسطول المبرد لمستودعات ومراكز التفريغ (Mercamadrid, Perpignan...) مع أتمتة بث شهادات الحجرات للمستلمين
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-2 py-1">
+              <span className="text-xs text-muted-foreground font-medium">الشهر:</span>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                aria-label="اختر الشهر المحاسبي"
+                className="bg-transparent text-xs font-semibold text-foreground focus:outline-hidden cursor-pointer"
+              />
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isExportingExcel || isPending}
+              className="gap-1.5 text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+              title="تصدير مصنف Excel متعدد الأوراق"
+            >
+              <FileSpreadsheet className={`w-3.5 h-3.5 ${isExportingExcel ? 'animate-bounce' : ''}`} />
+              <span>{isExportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={isExportingPdf || isPending}
+              className="gap-1.5 text-xs border-sky-500/40 text-sky-600 dark:text-sky-400 hover:bg-sky-500/10"
+              title="تصدير وثيقة PDF رسمية موثقة برمز QR"
+            >
+              <FileText className={`w-3.5 h-3.5 ${isExportingPdf ? 'animate-pulse' : ''}`} />
+              <span>{isExportingPdf ? 'جاري التجهيز...' : 'تقرير PDF'}</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
               onClick={loadData}
               disabled={isPending}
-              className="gap-2"
+              className="gap-1.5 text-xs"
             >
-              <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin' : ''}`} />
-              <span>تحديث السجلات</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isPending ? 'animate-spin' : ''}`} />
+              <span>تحديث</span>
             </Button>
           </div>
         </div>
@@ -521,3 +651,4 @@ export function DockArrivalsAuditView({
     </div>
   );
 }
+
