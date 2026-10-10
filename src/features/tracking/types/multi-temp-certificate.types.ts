@@ -82,3 +82,38 @@ export const exportBatchCompartmentCertificatesSchema = z.object({
 
 export type ExportBatchCompartmentCertificatesInput = z.infer<typeof exportBatchCompartmentCertificatesSchema>;
 
+// Targeted Receiver WhatsApp Schemas
+export const dispatchCompartmentReceiverSchema = z.object({
+  compartmentId: z.string().uuid(),
+  trailerId: z.coerce.number().positive(),
+  tripId: z.coerce.number().optional().nullable(),
+  receiverName: z.string().min(2),
+  receiverPhone: z.string().min(6),
+  locale: z.enum(['ar', 'fr', 'es']).default('ar'),
+  forceBypassCooldown: z.boolean().optional().default(false),
+  arrivalLocationName: z.string().optional(),
+  isGeofenceTriggered: z.boolean().optional().default(false),
+});
+
+export type DispatchCompartmentReceiverInput = z.infer<typeof dispatchCompartmentReceiverSchema>;
+
+export const dispatchBatchReceiversSchema = z.object({
+  trailerId: z.coerce.number().positive(),
+  tripId: z.coerce.number().optional().nullable(),
+  locale: z.enum(['ar', 'fr', 'es']).default('ar'),
+  forceBypassCooldown: z.boolean().optional().default(false),
+  arrivalLocationName: z.string().optional(),
+  isGeofenceTriggered: z.boolean().optional().default(false),
+  receivers: z
+    .array(
+      z.object({
+        compartmentCode: z.enum(['C1', 'C2', 'C3']),
+        receiverName: z.string().min(2),
+        receiverPhone: z.string().min(6),
+      })
+    )
+    .min(1),
+});
+
+export type DispatchBatchReceiversInput = z.infer<typeof dispatchBatchReceiversSchema>;
+

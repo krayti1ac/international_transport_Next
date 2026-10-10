@@ -1962,6 +1962,22 @@
       "complianceScore": "Puntuación de Integridad y Cumplimiento",
       "compartment": "Compartimento Objetivo",
       "customsNotice": "Este certificado está destinado al receptor de la zona designada con historial autónomo de su evaporador."
+    },
+    "multiTempReceiverDispatch": {
+      "title": "Envío del Certificado del Compartimento al Destinatario por WhatsApp",
+      "subtitle": "Transmisión directa del informe térmico certificado al destinatario a la llegada o bajo demanda",
+      "buttonSend": "Enviar al Destinatario (WhatsApp)",
+      "sending": "Enviando por WhatsApp...",
+      "success": "Certificado del compartimento enviado al destinatario con éxito",
+      "receiverName": "Nombre del destinatario / Receptor",
+      "receiverPhone": "Teléfono del destinatario (internacional con prefijo)",
+      "bypassCooldown": "Ignorar tiempo de espera (envío forzado)",
+      "cooldownNotice": "Envío omitido: certificado ya transmitido en los últimos 15 minutos.",
+      "batchTitle": "Difusión masiva a destinatarios de todos los compartimentos",
+      "batchButton": "Difundir a Destinatarios por WhatsApp",
+      "batchSuccess": "Certificados de compartimentos difundidos a los destinatarios con éxito",
+      "arrivalNotice": "Activar aviso de llegada geográfica (Geofence)",
+      "arrivalLocation": "Nombre del muelle / Plataforma de descarga"
     }
   }
 }

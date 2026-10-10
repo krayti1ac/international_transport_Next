@@ -88,6 +88,7 @@ export function MultiTempCompartmentMatrixView({
   // Certificate Modal State
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
   const [activeCert, setActiveCert] = useState<{
+    compartmentId?: string;
     certificateNumber?: string;
     compartmentCode?: string;
     htmlContent?: string;
@@ -216,6 +217,7 @@ export function MultiTempCompartmentMatrixView({
       });
       if (res.success && res.htmlContent) {
         setActiveCert({
+          compartmentId,
           certificateNumber: res.certificateNumber,
           compartmentCode: res.compartmentCode || compCode,
           htmlContent: res.htmlContent,
@@ -984,6 +986,9 @@ export function MultiTempCompartmentMatrixView({
       <MultiTempCertificateModal
         isOpen={isCertModalOpen}
         onClose={() => setIsCertModalOpen(false)}
+        compartmentId={activeCert?.compartmentId}
+        trailerId={currentTrailerId}
+        tripId={summary.compartments[0]?.profile.tripId ?? null}
         certificateNumber={activeCert?.certificateNumber}
         compartmentCode={activeCert?.compartmentCode}
         htmlContent={activeCert?.htmlContent}
