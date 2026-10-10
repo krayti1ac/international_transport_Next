@@ -2069,6 +2069,17 @@
         "standardGdpCrossDock": "Aplicar protocolo estándar de cross-docking a temperatura controlada (GDP)",
         "routineAeroSealCheck": "Control rutinario de la estanqueidad neumática del muelle"
       }
+    },
+    "hotspotDriverAlert": {
+      "title": "Alertas de aproximación a puntos críticos para conductores",
+      "subtitle": "Radar proactivo que alerta a los conductores de frigos 15 km antes del muelle de los protocolos obligatorios por WhatsApp",
+      "hotspotAlertSent": "Alerta proactiva enviada al conductor por WhatsApp con éxito",
+      "distanceToDock": "Distancia al muelle",
+      "etaMinutes": "Tiempo estimado de llegada",
+      "continuousCoolingEnforced": "Refrigeración continua obligatoria",
+      "doorsSealedEnforced": "Mantenimiento de puertas cerradas hasta el muelle",
+      "cooldownActive": "Alerta protegida por periodo de enfriamiento (ya enviada)",
+      "simulateAlert": "Simular alerta al conductor"
     }
   }
 }

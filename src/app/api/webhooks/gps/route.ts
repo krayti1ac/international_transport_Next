@@ -5,6 +5,7 @@ import { evaluatePortGeofences } from '@/features/tracking/services/port-geofenc
 import { evaluateColdChainTemperatureDrift } from '@/features/predictive/services/cold-chain-monitor.service';
 import { parseFrigoTelemetryPacket } from '@/features/tracking/services/frigo-telematics-parser.service';
 import { GeofenceReceiverTriggerService } from '@/features/tracking/services/geofence-receiver-trigger.service';
+import { HotspotProximityRadarService } from '@/features/tracking/services/hotspot-proximity-radar.service';
 import type { ParsedFrigoIoTData } from '@/features/tracking/types/frigo-iot.types';
 
 interface RawGPSPayload {
@@ -334,6 +335,16 @@ export async function POST(req: NextRequest) {
         longitude: norm.longitude,
         timestamp: recordTime,
       });
+
+      // 5.5 رادار رصد الاقتراب من البؤر الحرجة للأرصفة (DVI ≥ 60) وتنبيه السائق عبر واتساب
+      await HotspotProximityRadarService.evaluateApproachingHotspot({
+        truckId,
+        latitude: norm.latitude,
+        longitude: norm.longitude,
+        speedKmh: norm.speed || 45,
+        timestamp: recordTime,
+        truckPlate: norm.plateNumber,
+      }).catch((radarErr) => console.warn('Hotspot proximity radar evaluation error:', radarErr));
 
       // 6. رصد انحراف درجات حرارة مقطورات التبريد Frigo في الوقت الفعلي
       if (norm.frigoTemperature !== null && norm.frigoTemperature !== undefined) {

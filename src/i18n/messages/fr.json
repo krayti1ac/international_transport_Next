@@ -2069,6 +2069,17 @@
         "standardGdpCrossDock": "Appliquer le protocole standard de cross-docking sous température dirigée (GDP)",
         "routineAeroSealCheck": "Contrôle systématique de l'étanchéité pneumatique du quai"
       }
+    },
+    "hotspotDriverAlert": {
+      "title": "Alertes d'approche des foyers critiques pour chauffeurs",
+      "subtitle": "Radar proactif alertant les chauffeurs de frigos 15 km avant le quai des consignes obligatoires de froid par WhatsApp",
+      "hotspotAlertSent": "Alerte proactive envoyée au chauffeur via WhatsApp avec succès",
+      "distanceToDock": "Distance au quai",
+      "etaMinutes": "Heure estimée d'arrivée",
+      "continuousCoolingEnforced": "Refroidissement continu obligatoire",
+      "doorsSealedEnforced": "Maintien des portes scellées jusqu'au quai",
+      "cooldownActive": "Alerte protégée par le délai de temporisation (déjà envoyée)",
+      "simulateAlert": "Simuler l'alerte chauffeur"
     }
   }
 }

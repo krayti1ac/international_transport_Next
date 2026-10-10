@@ -26,6 +26,8 @@ import {
   MapPin,
   RefreshCw,
   Search,
+  Send,
+  Radio,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -43,6 +45,7 @@ import {
   fetchDockRiskClustersAction,
   flagHighRiskDockAction,
 } from '../services/dock-risk.actions';
+import { simulateApproachingHotspotAlertAction } from '../services/hotspot-proximity-radar.actions';
 import type {
   DockHeatmapSummaryKpi,
   DockRiskCluster,
@@ -60,6 +63,7 @@ export function DockThermalHeatmapView({
   initialSummary,
 }: DockThermalHeatmapViewProps) {
   const t = useTranslations('dockHeatmap');
+  const tDriverAlert = useTranslations('hotspotDriverAlert');
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -174,6 +178,37 @@ export function DockThermalHeatmapView({
       }
     } finally {
       setIsSavingFlag(false);
+    }
+  };
+
+  // Simulate urgent approaching hotspot alert dispatch to driver
+  const handleSimulateDriverAlert = async (dock: DockRiskCluster) => {
+    try {
+      const res = await simulateApproachingHotspotAlertAction({
+        truckId: 101,
+        latitude: dock.coordinates.lat + 0.05, // simulated ~5 km away
+        longitude: dock.coordinates.lng + 0.05,
+        speedKmh: 50,
+        truckPlate: '45892-A-10',
+      });
+
+      if (res.dispatched || res.approachingHotspot) {
+        toast({
+          title: tDriverAlert('hotspotAlertSent'),
+          description: `${dock.dockName} — DVI ${dock.metrics.dviScore}/100`,
+        });
+      } else {
+        toast({
+          title: tDriverAlert('title'),
+          description: res.error || 'Evaluation completed',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err?.message || 'Failed to simulate driver alert',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -742,6 +777,26 @@ export function DockThermalHeatmapView({
                       {dock.flaggedReason}
                     </div>
                   )}
+
+                  {/* Proactive Driver Alert Trigger for Critical / Monitored Docks */}
+                  <div className="pt-2 border-t flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                      <Radio className="h-3 w-3 text-rose-500 animate-pulse" />
+                      &lt; 15 km / 30 min Radar
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1.5 border-rose-500/30 text-rose-600 hover:bg-rose-500/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSimulateDriverAlert(dock);
+                      }}
+                    >
+                      <Send className="h-3 w-3" />
+                      <span>{tDriverAlert('simulateAlert')}</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
