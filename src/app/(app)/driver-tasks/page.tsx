@@ -21,6 +21,7 @@ import {
 } from '@/lib/offline-sync';
 import { DriverTacticalOfflineBar } from '@/features/drivers/components/DriverTacticalOfflineBar';
 import { DriverHotspotActionModal } from '@/features/tracking/components/DriverHotspotActionModal';
+import { DockDoorThermalLossCard } from '@/features/tracking/components/DockDoorThermalLossCard';
 
 export default function DriverTasksPage() {
   const { t, dir } = useLanguage();
@@ -290,6 +291,23 @@ export default function DriverTasksPage() {
             {hotspotConfirmed ? t('عرض التأكيد', 'Voir confirmation') : t('تأكيد التبريد ❄️', 'Confirmer le froid ❄️')}
           </Button>
         </div>
+      )}
+
+      {/* Dock Door Exposure & Thermal Loss Stopwatch Card */}
+      {trips.length > 0 && (
+        <DockDoorThermalLossCard
+          tripId={trips[0].id}
+          tripNumber={`TRIP-${trips[0].id}`}
+          truckId={trips[0].truck_id || 101}
+          truckPlate="67890-A-40"
+          driverId={driver?.id || 1}
+          driverName={driver?.name || 'Mohamed Al-Amrani'}
+          dockId="DOCK-MAD-04"
+          dockName="Mercamadrid Hall 4 Frigo"
+          facilityOrPort="Mercamadrid Plataforma Logística Frigorífica"
+          compartment="C1"
+          cargoCategory="fresh_produce"
+        />
       )}
 
       <div>
