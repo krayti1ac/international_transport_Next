@@ -6,12 +6,14 @@
  */
 
 import React, { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
   Activity,
   AlertOctagon,
   AlertTriangle,
   ArrowRightLeft,
+  Building2,
   CheckCircle2,
   Clock,
   DoorClosed,
@@ -329,6 +331,16 @@ export function MultiTempCompartmentMatrixView({
         </div>
 
         <div className="flex items-center gap-3 relative z-10">
+          <Link href="/fleet/dock-dispatches">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40 text-xs gap-1.5"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>سجل وصول الأرصفة</span>
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"

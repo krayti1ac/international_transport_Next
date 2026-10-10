@@ -1978,6 +1978,33 @@
       "batchSuccess": "Certificados de compartimentos difundidos a los destinatarios con éxito",
       "arrivalNotice": "Activar aviso de llegada geográfica (Geofence)",
       "arrivalLocation": "Nombre del muelle / Plataforma de descarga"
+    },
+    "dockDispatchAudit": {
+      "title": "Registro de Llegadas a Muelles y Despacho Automático",
+      "subtitle": "Monitoreo en tiempo real de llegadas a muelles de descarga y difusión automatizada de certificados GDP por WhatsApp",
+      "totalArrivals": "Total de Llegadas",
+      "totalDispatches": "Certificados Despachados",
+      "successRate": "Tasa de Entrega Exitosa",
+      "cooldownProtected": "Protegido por Cooldown",
+      "searchPlaceholder": "Buscar por camión, viaje, muelle o destinatario...",
+      "allCompartments": "Todos los compartimentos",
+      "allStatuses": "Todos los estados",
+      "resendButton": "Reenviar de inmediato",
+      "resending": "Reenviando...",
+      "resendSuccess": "Certificado de compartimento reenviado con éxito por WhatsApp",
+      "viewCertificate": "Ver certificado",
+      "dockArrival": "Llegada al muelle",
+      "cooldownActive": "Tiempo de cooldown activo ({minutes} min restantes)",
+      "cooldownReady": "Listo para reenvío inmediato",
+      "emptyState": "No hay registros de llegada o despacho que coincidan",
+      "deliveredStatus": "Entregado",
+      "sentStatus": "Enviado",
+      "readStatus": "Leído",
+      "simulatedStatus": "Modo simulación",
+      "skippedStatus": "Protegido por cooldown",
+      "failedStatus": "Fallo de envío",
+      "topDocks": "Muelles más activos",
+      "refresh": "Actualizar registro"
     }
   }
 }

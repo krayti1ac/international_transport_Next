@@ -1978,6 +1978,33 @@
       "batchSuccess": "تم بث شهادات الحجرات لمستلمي الشحنات بنجاح",
       "arrivalNotice": "تفعيل إشعار الوصول الجغرافي (Geofence)",
       "arrivalLocation": "اسم موقع الوصول / الرصيف"
+    },
+    "dockDispatchAudit": {
+      "title": "سجل وصول الأرصفة وبث الشهادات التلقائي",
+      "subtitle": "مراقبة لحظية لوصول شاحنات الأسطول المبرد لمستودعات ومراكز التفريغ وأتمتة بث شهادات الحجرات للمستلمين",
+      "totalArrivals": "إجمالي عمليات الوصول",
+      "totalDispatches": "الشهادات المبثوثة",
+      "successRate": "نسبة نجاح التسليم",
+      "cooldownProtected": "محمي برادار التهدئة",
+      "searchPlaceholder": "بحث بالشاحنة، الرحلة، الرصيف، أو المستلم...",
+      "allCompartments": "كافة الحجرات",
+      "allStatuses": "كافة الحالات",
+      "resendButton": "إعادة إرسال فوري",
+      "resending": "جاري الإرسال...",
+      "resendSuccess": "تم إعادة إرسال شهادة الحجرة بنجاح عبر WhatsApp",
+      "viewCertificate": "معاينة الشهادة",
+      "dockArrival": "وصول إلى الرصيف",
+      "cooldownActive": "حماية التهدئة نشطة ({minutes} دقيقة متبقية)",
+      "cooldownReady": "متاح للإرسال الفوري",
+      "emptyState": "لا توجد سجلات وصول أو إرسال مطابقة للبحث",
+      "deliveredStatus": "مستلم",
+      "sentStatus": "مرسل",
+      "readStatus": "تمت القراءة",
+      "simulatedStatus": "وضع تجريبي",
+      "skippedStatus": "محمي بالتهدئة",
+      "failedStatus": "فشل الإرسال",
+      "topDocks": "أكثر الأرصفة نشاطاً",
+      "refresh": "تحديث السجلات"
     }
   }
 }

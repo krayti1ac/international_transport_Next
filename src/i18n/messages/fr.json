@@ -1978,6 +1978,33 @@
       "batchSuccess": "Certificats de compartiments diffusés aux destinataires avec succès",
       "arrivalNotice": "Activer l'avis d'arrivée géographique (Geofence)",
       "arrivalLocation": "Nom du quai / Site de déchargement"
+    },
+    "dockDispatchAudit": {
+      "title": "Journal des Arrivées aux Quais & Envois Automatiques",
+      "subtitle": "Suivi en temps réel des arrivées aux quais de déchargement et diffusion automatisée des certificats GDP par WhatsApp",
+      "totalArrivals": "Total des Arrivées",
+      "totalDispatches": "Certificats Envoyés",
+      "successRate": "Taux de Livraison Réussi",
+      "cooldownProtected": "Protégé par Temporisation",
+      "searchPlaceholder": "Rechercher par camion, voyage, quai ou destinataire...",
+      "allCompartments": "Tous les compartiments",
+      "allStatuses": "Tous les statuts",
+      "resendButton": "Renvoyer immédiatement",
+      "resending": "Renvoi en cours...",
+      "resendSuccess": "Certificat de compartiment renvoyé avec succès via WhatsApp",
+      "viewCertificate": "Voir le certificat",
+      "dockArrival": "Arrivée au quai",
+      "cooldownActive": "Délai de temporisation actif ({minutes} min restantes)",
+      "cooldownReady": "Prêt pour renvoi immédiat",
+      "emptyState": "Aucun enregistrement d'arrivée ou d'envoi correspondant",
+      "deliveredStatus": "Livré",
+      "sentStatus": "Envoyé",
+      "readStatus": "Lu",
+      "simulatedStatus": "Mode simulation",
+      "skippedStatus": "Protégé par temporisation",
+      "failedStatus": "Échec de l'envoi",
+      "topDocks": "Quais les plus actifs",
+      "refresh": "Actualiser le journal"
     }
   }
 }
