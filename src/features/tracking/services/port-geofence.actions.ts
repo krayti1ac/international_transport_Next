@@ -5,6 +5,7 @@ import { recordAuditLog } from '@/lib/audit.server';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import { dispatchTripLifecycleNotifications } from '@/features/trips/services/notification-dispatcher';
 import { updateTripStatus } from '@/features/trips/services/trips.actions';
+import { GeofenceReceiverTriggerService } from './geofence-receiver-trigger.service';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -216,6 +217,17 @@ export async function evaluatePortGeofences(params: {
           zoneNameEs: matchedZone?.name_fr,
           zoneType: matchedZone?.zoneType,
         }).catch((err) => console.warn('Client port geofence notification error:', err));
+
+        // Auto-Geofence Targeted Receiver Dispatch Hook
+        GeofenceReceiverTriggerService.evaluateGeofenceReceiverArrival({
+          truckId,
+          latitude,
+          longitude,
+          zoneName: zoneNameAr,
+          zoneId: matchedZone?.id,
+          zoneType: matchedZone?.zoneType,
+          timestamp: nowIso,
+        }).catch((err) => console.warn('[Port Geofence Auto-Receiver Trigger Error]:', err));
       }
 
       // Record Audit Log

@@ -4,6 +4,7 @@ import { findMatchingZone, calculateDistance } from '@/lib/geofence';
 import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
 import { evaluateColdChainTemperatureDrift } from '@/features/predictive/services/cold-chain-monitor.service';
 import { parseFrigoTelemetryPacket } from '@/features/tracking/services/frigo-telematics-parser.service';
+import { GeofenceReceiverTriggerService } from '@/features/tracking/services/geofence-receiver-trigger.service';
 import type { ParsedFrigoIoTData } from '@/features/tracking/types/frigo-iot.types';
 
 interface RawGPSPayload {
@@ -404,7 +405,7 @@ async function processGeofenceAlerts(
 ) {
   const { data: zones, error: zonesError } = await supabase
     .from('geofence_zones')
-    .select('id, name, latitude, longitude, radius_km')
+    .select('id, name, latitude, longitude, radius_km, zone_type')
     .eq('is_active', true);
 
   if (zonesError || !zones || zones.length === 0) {
@@ -464,6 +465,18 @@ async function processGeofenceAlerts(
           notified: false,
         });
         currentlyInsideZones.add(currentMatch.zoneId);
+
+        // Auto-Geofence Targeted Receiver Dispatch Hook
+        const matchedZoneRecord = zones.find((z) => z.id === currentMatch.zoneId);
+        GeofenceReceiverTriggerService.evaluateGeofenceReceiverArrival({
+          truckId,
+          latitude,
+          longitude,
+          zoneName: currentMatch.zoneName,
+          zoneId: currentMatch.zoneId,
+          zoneType: (matchedZoneRecord as any)?.zone_type,
+          timestamp,
+        }).catch((err) => console.warn('[Auto-Geofence Receiver Trigger Error]:', err));
       }
     }
   }
