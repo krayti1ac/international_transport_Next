@@ -387,4 +387,128 @@ describe('AI MT940 & CAMT.053 Banking Reconciliation Engine', () => {
       expect(result.unmatchedBankRows.length).toBe(0);
     });
   });
+
+  describe('5. LCN Commercial Bills, Remittance Bordereaux & Bounced Impayés Reconciliation', () => {
+    it('reconciles individual commercial_bill credit inflows, remittance_bordereau escompte with agios, and bounced_bill debit outflows with Decimal.js bounce fee extraction', () => {
+      const statementTransactions: ParsedStatementTransaction[] = [
+        // 1. Individual LCN encaissement credit inflow
+        {
+          id: 'STMT-LCN-01',
+          statementType: 'mt940',
+          date: '2026-10-15',
+          amount: 18500,
+          amountDecimal: '18500.00',
+          currency: 'MAD',
+          reference: 'LCN-774411',
+          description: 'ENCAISSEMENT EFFET LCN-774411 AGRI SOUSS EXPORT',
+        },
+        // 2. Remittance Bordereau Escompte batch credit inflow (Gross 80,000 MAD, Net received 79,150 MAD after 850 MAD discount agios)
+        {
+          id: 'STMT-BRD-02',
+          statementType: 'mt940',
+          date: '2026-10-15',
+          amount: 79150,
+          amountDecimal: '79150.00',
+          currency: 'MAD',
+          reference: 'BRD-ESC-20261014-882',
+          description: 'REMISE ESCOMPTE LCN BRD-ESC-20261014-882 ATTIJARIWAFA BANK',
+        },
+        // 3. Bounced / Unpaid LCN Debit Outflow (Face value 25,000 MAD + 150 MAD bank bounce fee = -25,150.00 MAD)
+        {
+          id: 'STMT-IMP-03',
+          statementType: 'mt940',
+          date: '2026-10-16',
+          amount: -25150,
+          amountDecimal: '-25150.00',
+          currency: 'MAD',
+          reference: 'LCN-990022',
+          description: 'REJET IMPAYE EFFET LCN-990022 PROVISION INSUFFISANTE FRAIS 150 DH',
+        },
+      ];
+
+      const commercialBills = [
+        {
+          id: 'bill-uuid-1',
+          bill_number: 'LCN-774411',
+          bill_type: 'lcn',
+          direction: 'receivable',
+          amount: 18500,
+          currency: 'MAD',
+          maturity_date: '2026-10-15',
+          status: 'remitted_collection',
+          drawer_or_beneficiary: 'AGRI SOUSS EXPORT',
+          client_id: 201,
+          client: { name: 'AGRI SOUSS EXPORT' },
+        },
+        {
+          id: 'bill-uuid-2',
+          bill_number: 'LCN-990022',
+          bill_type: 'lcn',
+          direction: 'receivable',
+          amount: 25000,
+          currency: 'MAD',
+          maturity_date: '2026-10-15',
+          status: 'remitted_collection',
+          drawer_or_beneficiary: 'TRANS MAROC FRUITS',
+          client_id: 202,
+          client: { name: 'TRANS MAROC FRUITS' },
+        },
+      ];
+
+      const remittanceBordereaux = [
+        {
+          id: 'brd-uuid-1',
+          bordereau_number: 'BRD-ESC-20261014-882',
+          remittance_type: 'escompte',
+          bank_name: 'Attijariwafa Bank',
+          remittance_date: '2026-10-14',
+          bills_count: 2,
+          total_amount: 80000,
+          estimated_agios_ttc: 850,
+          estimated_net_credit: 79150,
+          currency: 'MAD',
+          status: 'submitted',
+          bill_ids: ['bill-esc-1', 'bill-esc-2'],
+        },
+      ];
+
+      const result = reconcileStatementCore({
+        statementTransactions,
+        systemTransactions: [],
+        invoices: [],
+        commercialBills,
+        remittanceBordereaux,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.matched.length).toBe(3);
+      expect(result.unmatchedBankRows.length).toBe(0);
+
+      // Verify counters
+      expect(result.clearedBillsCount).toBe(1);
+      expect(result.bordereauMatchesCount).toBe(1);
+      expect(result.bouncedBillsCount).toBe(1);
+
+      // 1. Check Commercial Bill match
+      const lcnMatch = result.matched.find((m) => m.matchType === 'commercial_bill');
+      expect(lcnMatch).toBeDefined();
+      expect(lcnMatch?.commercialBill?.bill_number).toBe('LCN-774411');
+      expect(lcnMatch?.confidence).toBe('high');
+
+      // 2. Check Remittance Bordereau Escompte match
+      const brdMatch = result.matched.find((m) => m.matchType === 'remittance_bordereau');
+      expect(brdMatch).toBeDefined();
+      expect(brdMatch?.remittanceBordereau?.bordereau_number).toBe('BRD-ESC-20261014-882');
+      expect(brdMatch?.remittanceBordereau?.bordereau_type).toBe('escompte');
+      expect(brdMatch?.confidence).toBe('high');
+
+      // 3. Check Bounced Bill (Impayé) match & Decimal.js fee extraction
+      const bounceMatch = result.matched.find((m) => m.matchType === 'bounced_bill');
+      expect(bounceMatch).toBeDefined();
+      expect(bounceMatch?.bouncedBill?.bill_number).toBe('LCN-990022');
+      expect(bounceMatch?.bouncedBill?.detected_bounce_fee).toBe(150);
+      expect(bounceMatch?.bouncedBill?.bounce_reason).toContain('REJET IMPAYE EFFET LCN-990022');
+    });
+  });
 });
+

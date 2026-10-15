@@ -12,6 +12,12 @@ import {
   reconcileStatementCore,
   calculateForexDifferential,
 } from './bank-auto-reconciler.service';
+import {
+  fetchCommercialBillsAction,
+  clearCommercialBillAction,
+  bounceCommercialBillAction,
+} from '@/features/treasury/services/commercial-bills.actions';
+import { fetchRemittanceBordereauxAction } from '@/features/treasury/services/remittance-bordereau.actions';
 import type {
   BankStatementFormat,
   DebitCreditMark,
@@ -86,6 +92,20 @@ export async function autoReconcileBankStatement(
 
     if (invError) throw invError;
 
+    // 3. Fetch active Commercial Bills (LCN, Chèques, Traites) and Remittance Bordereaux
+    const [billsRes, bordereauxRes] = await Promise.all([
+      fetchCommercialBillsAction(),
+      fetchRemittanceBordereauxAction(),
+    ]);
+
+    const activeCommercialBills = (billsRes.data || []).filter(
+      (b) =>
+        b.status === 'in_portfolio' ||
+        b.status === 'remitted_for_collection' ||
+        b.status === 'discounted'
+    );
+    const activeBordereaux = bordereauxRes.bordereaux || [];
+
     // Normalise incoming rows into ParsedStatementTransaction format
     const statementTransactions: ParsedStatementTransaction[] = bankRows.map((r, idx) => {
       const isStatementTx = 'statementType' in r;
@@ -115,6 +135,8 @@ export async function autoReconcileBankStatement(
       statementTransactions,
       systemTransactions: systemTransactions || [],
       invoices: (invoices as any[]) || [],
+      commercialBills: activeCommercialBills,
+      remittanceBordereaux: activeBordereaux,
     });
 
     return result;
@@ -205,8 +227,8 @@ export async function parseAndReconcileStatementAction(
 }
 
 /**
- * Confirm a single match (either treasury transaction or invoice)
- * Automatically registers forex differentials and records audit logs
+ * Confirm a single match (treasury transaction, invoice, commercial bill, remittance bordereau, or bounced bill)
+ * Automatically registers forex differentials, FIFO settlements, and records audit logs
  */
 export async function confirmSingleSmartMatch(
   match: SmartReconciliationMatch,
@@ -239,6 +261,88 @@ export async function confirmSingleSmartMatch(
           matchScore: match.matchScore,
         },
       });
+
+      return { success: true };
+    }
+
+    if (match.matchType === 'commercial_bill' && match.commercialBill) {
+      const bill = match.commercialBill;
+      const bankAmt = new Decimal(match.bankRow.amount).abs().toNumber();
+      const clearRes = await clearCommercialBillAction({
+        billId: bill.id,
+        clearedDate: match.bankRow.date,
+        clearedAmount: bankAmt,
+        bankAccountId,
+        triggerFifoAllocation: true,
+        notes: `تحصيل آلي عبر كشف الحساب البنكي (${match.bankRow.reference || bill.bill_number})`,
+      });
+
+      if (!clearRes.success) {
+        return { success: false, error: clearRes.error || 'فشل تحصيل الورقة التجارية' };
+      }
+
+      return { success: true };
+    }
+
+    if (match.matchType === 'remittance_bordereau' && match.remittanceBordereau) {
+      const brd = match.remittanceBordereau;
+      const bankAmt = new Decimal(match.bankRow.amount).abs();
+      const statementRef = match.bankRow.reference || brd.bordereau_number;
+
+      // 1. Mark all commercial bills referencing this bordereau as cleared
+      await supabase
+        .from('commercial_bills')
+        .update({
+          status: 'cleared',
+          cleared_date: match.bankRow.date,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('remittance_reference', brd.bordereau_number);
+
+      // 2. Record reconciled treasury deposit for the net bordereau settlement
+      await supabase.from('treasury_transactions').insert({
+        type: 'income',
+        amount: bankAmt.toNumber(),
+        currency: match.bankRow.currency || 'MAD',
+        bank_account_id: bankAccountId,
+        description: `تحصيل جدول التسليم البنكي ${brd.bordereau_number} (${brd.bills_count} سندات)`,
+        reference: statementRef,
+        reconciliation_status: 'reconciled',
+        bank_statement_ref: statementRef,
+      });
+
+      try {
+        await recordAuditLog({
+          entityType: 'remittance_bordereaux',
+          entityId: brd.id,
+          actionType: 'update',
+          reason: `تسوية بنكية لحافظة الأوراق التجارية ${brd.bordereau_number}`,
+          newData: {
+            bordereau_number: brd.bordereau_number,
+            settled_amount: bankAmt.toFixed(2),
+            bank_account_id: bankAccountId,
+          },
+        });
+      } catch {
+        // Non-blocking audit log
+      }
+
+      return { success: true };
+    }
+
+    if (match.matchType === 'bounced_bill' && match.bouncedBill) {
+      const bounced = match.bouncedBill;
+      const bounceRes = await bounceCommercialBillAction({
+        billId: bounced.id,
+        bounceDate: match.bankRow.date,
+        bounceReason: bounced.bounce_reason,
+        bounceFee: bounced.detected_bounce_fee,
+        reverseSettlement: true,
+      });
+
+      if (!bounceRes.success) {
+        return { success: false, error: bounceRes.error || 'فشل تسجيل إرجاع الورقة التجارية' };
+      }
 
       return { success: true };
     }

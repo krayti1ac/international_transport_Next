@@ -298,25 +298,39 @@ export function calculateAdvancedMatchScore(params: {
 
 /**
  * Pure smart reconciliation core engine
- * Reconciles parsed statement transactions with system invoices & treasury transactions
+ * Reconciles parsed statement transactions with system invoices, treasury transactions,
+ * remittance bordereaux, and commercial bills (both cleared credits and bounced/unpaid debits).
  */
 export function reconcileStatementCore(params: {
   statementTransactions: ParsedStatementTransaction[];
   systemTransactions: any[];
   invoices: any[];
+  commercialBills?: any[];
+  remittanceBordereaux?: any[];
 }): SmartAutoReconcileResult {
-  const { statementTransactions, systemTransactions, invoices } = params;
+  const {
+    statementTransactions,
+    systemTransactions,
+    invoices,
+    commercialBills = [],
+    remittanceBordereaux = [],
+  } = params;
 
   const matched: SmartReconciliationMatch[] = [];
   const matchedBankIndices = new Set<number>();
   const matchedTreasuryIds = new Set<number>();
   const matchedInvoiceIds = new Set<number>();
+  const matchedBillIds = new Set<string>();
+  const matchedBordereauIds = new Set<string>();
 
   let highConfidenceCount = 0;
   let forexGainCount = 0;
   let forexLossCount = 0;
   let totalForexImpact = new Decimal(0);
   let matchedVolume = new Decimal(0);
+  let clearedBillsCount = 0;
+  let bouncedBillsCount = 0;
+  let bordereauMatchesCount = 0;
 
   // Phase 1: Match against unreconciled Treasury Transactions
   for (let i = 0; i < statementTransactions.length; i++) {
@@ -370,7 +384,302 @@ export function reconcileStatementCore(params: {
     }
   }
 
-  // Phase 2: Match remaining rows against unpaid / pending Invoices
+  // Phase 2: Match against Remittance Bordereaux & Commercial Bills (LCN / Chèques / Traites)
+  for (let i = 0; i < statementTransactions.length; i++) {
+    if (matchedBankIndices.has(i)) continue;
+    const bankTx = statementTransactions[i];
+
+    // 2A. Credit inflows -> Match against Remittance Bordereaux (batch encaissement/escompte)
+    if (bankTx.amount > 0 && remittanceBordereaux.length > 0) {
+      let bestBordereauMatch: SmartReconciliationMatch | null = null;
+      let highestBrdScore = 0;
+
+      for (const brd of remittanceBordereaux) {
+        const brdId = String(brd.id || brd.bordereau_number);
+        if (matchedBordereauIds.has(brdId)) continue;
+
+        const totalFaceDec = new Decimal(
+          brd.total_face_value ?? brd.totalFaceValue ?? brd.total_amount ?? 0
+        );
+        const netProceedsDec = new Decimal(
+          brd.estimated_net_proceeds ??
+            brd.estimatedNetProceeds ??
+            brd.estimated_net_credit ??
+            totalFaceDec
+        );
+        const agiosDec = new Decimal(
+          brd.estimated_agios ?? brd.estimatedAgios ?? brd.estimated_agios_ttc ?? 0
+        );
+        const vatDec = new Decimal(brd.estimated_vat ?? brd.estimatedVat ?? 0);
+        const brdType =
+          brd.bordereau_type || brd.bordereauType || brd.remittance_type || 'encaissement';
+        const brdNum = brd.bordereau_number || brd.bordereauNumber || '';
+        const remDate = brd.remittance_date || brd.remittanceDate || bankTx.date;
+        const bankName = brd.bank_name || brd.bankName || '';
+
+        const targetExpectedAmt = brdType === 'escompte' ? netProceedsDec : totalFaceDec;
+
+        const { score, breakdown, reason } = calculateAdvancedMatchScore({
+          bankRow: bankTx,
+          systemDate: remDate,
+          systemAmount: targetExpectedAmt.toFixed(2),
+          systemCurrency: 'MAD',
+          systemRef: `${brdNum} REMISE BORDEREAU LCN`,
+          partnerIdentifiers: [bankName, brdNum],
+        });
+
+        // Allow bank agios variation tolerance up to 1.5% on escompte if reference matches
+        const bankAmtDec = new Decimal(bankTx.amount).abs();
+        const diffFromNet = bankAmtDec.minus(targetExpectedAmt).abs();
+        let adjustedScore = score;
+        if (
+          breakdown.amountScore < 30 &&
+          diffFromNet.lessThanOrEqualTo(totalFaceDec.times(0.015))
+        ) {
+          breakdown.amountScore = 34;
+          adjustedScore =
+            breakdown.amountScore +
+            breakdown.dateScore +
+            breakdown.referenceScore +
+            breakdown.partnerScore;
+        }
+
+        if (adjustedScore > highestBrdScore && adjustedScore >= 55) {
+          highestBrdScore = adjustedScore;
+          const confidence: MatchConfidence =
+            adjustedScore >= 80 ? 'high' : adjustedScore >= 65 ? 'medium' : 'low';
+          bestBordereauMatch = {
+            bankRow: {
+              date: bankTx.date,
+              amount: bankTx.amount,
+              reference: bankTx.reference,
+              description: bankTx.description,
+              currency: bankTx.currency,
+              raw: bankTx.raw,
+            },
+            statementTransaction: bankTx,
+            matchType: 'remittance_bordereau',
+            confidence,
+            matchScore: adjustedScore,
+            scoreBreakdown: breakdown,
+            matchReason: `تسوية حافظة تسليم بنكي (${brdNum}) - ${reason}`,
+            remittanceBordereau: {
+              id: brdId,
+              bordereau_number: brdNum,
+              bordereau_type: brdType,
+              total_face_value: totalFaceDec.toNumber(),
+              estimated_agios: agiosDec.toNumber(),
+              estimated_vat: vatDec.toNumber(),
+              estimated_net_proceeds: netProceedsDec.toNumber(),
+              bills_count: Number(brd.bills_count ?? brd.billsCount ?? 1),
+              remittance_date: remDate,
+              bank_name: bankName,
+            },
+          };
+        }
+      }
+
+      if (bestBordereauMatch) {
+        matched.push(bestBordereauMatch);
+        matchedBankIndices.add(i);
+        matchedBordereauIds.add(bestBordereauMatch.remittanceBordereau!.id);
+        bordereauMatchesCount++;
+        matchedVolume = matchedVolume.plus(new Decimal(bankTx.amount).abs());
+        if (bestBordereauMatch.confidence === 'high') highConfidenceCount++;
+        continue;
+      }
+    }
+
+    // 2B. Credit inflows -> Match against individual Commercial Bills (LCN / Chèque / Traite)
+    if (bankTx.amount > 0 && commercialBills.length > 0) {
+      let bestBillMatch: SmartReconciliationMatch | null = null;
+      let highestBillScore = 0;
+
+      for (const bill of commercialBills) {
+        const billId = String(bill.id);
+        const status = bill.status || 'in_portfolio';
+        if (matchedBillIds.has(billId) || status === 'cleared' || status === 'cancelled') continue;
+
+        const faceDec = new Decimal(bill.face_value ?? bill.faceValue ?? bill.amount ?? 0);
+        const discFeeDec = new Decimal(bill.discount_fee ?? bill.discountFee ?? 0);
+        const netExpectedDec = Decimal.max(0, faceDec.minus(discFeeDec));
+        const billNumber = bill.bill_number || bill.billNumber || '';
+        const billType = bill.bill_type || bill.billType || 'lcn_promissory_note';
+        const clientName =
+          bill.client_name ||
+          bill.clientName ||
+          bill.client?.name ||
+          bill.drawer_or_beneficiary ||
+          '';
+        const dueDate = bill.due_date || bill.dueDate || bill.maturity_date || bankTx.date;
+        const remRef = bill.remittance_reference || bill.remittanceReference || '';
+        const currency = bill.currency || 'MAD';
+
+        // Score against netExpected (or faceValue if collection)
+        const targetAmt = status === 'discounted' ? netExpectedDec : faceDec;
+
+        const { score, breakdown, reason, forex } = calculateAdvancedMatchScore({
+          bankRow: bankTx,
+          systemDate: dueDate,
+          systemAmount: targetAmt.toFixed(2),
+          systemCurrency: currency,
+          systemRef: `${billNumber} ${remRef}`,
+          partnerIdentifiers: [clientName, bill.drawer_bank_name || bill.drawerBankName || ''],
+        });
+
+        if (score > highestBillScore && score >= 50) {
+          highestBillScore = score;
+          const confidence: MatchConfidence = score >= 80 ? 'high' : score >= 60 ? 'medium' : 'low';
+          bestBillMatch = {
+            bankRow: {
+              date: bankTx.date,
+              amount: bankTx.amount,
+              reference: bankTx.reference,
+              description: bankTx.description,
+              currency: bankTx.currency,
+              raw: bankTx.raw,
+            },
+            statementTransaction: bankTx,
+            matchType: 'commercial_bill',
+            confidence,
+            matchScore: score,
+            scoreBreakdown: breakdown,
+            matchReason: `تحصيل ورقة تجارية (${billNumber}) - ${reason}`,
+            forex,
+            commercialBill: {
+              id: billId,
+              bill_number: billNumber,
+              bill_type: billType,
+              face_value: faceDec.toNumber(),
+              discount_fee: discFeeDec.toNumber(),
+              net_expected: targetAmt.toNumber(),
+              currency,
+              client_name: clientName,
+              due_date: dueDate,
+              remittance_reference: remRef || null,
+              status,
+            },
+          };
+        }
+      }
+
+      if (bestBillMatch) {
+        matched.push(bestBillMatch);
+        matchedBankIndices.add(i);
+        matchedBillIds.add(bestBillMatch.commercialBill!.id);
+        clearedBillsCount++;
+        matchedVolume = matchedVolume.plus(new Decimal(bankTx.amount).abs());
+        if (bestBillMatch.confidence === 'high') highConfidenceCount++;
+        continue;
+      }
+    }
+
+    // 2C. Debit outflows -> Automatic Bounced / Unpaid LCN & Check Detection (Impayés)
+    if (bankTx.amount < 0 && commercialBills.length > 0) {
+      const bankTextUpper = `${bankTx.reference || ''} ${bankTx.description || ''} ${
+        bankTx.remittanceInfo || ''
+      } ${bankTx.transactionCode || ''}`.toUpperCase();
+
+      const hasBounceKeyword =
+        bankTextUpper.includes('IMPAY') ||
+        bankTextUpper.includes('REJET') ||
+        bankTextUpper.includes('UNPAID') ||
+        bankTextUpper.includes('BOUNCE') ||
+        bankTextUpper.includes('RTN') ||
+        bankTextUpper.includes('INSUFFIS');
+
+      let bestBounceMatch: SmartReconciliationMatch | null = null;
+      let highestBounceScore = 0;
+
+      for (const bill of commercialBills) {
+        const billId = String(bill.id);
+        if (matchedBillIds.has(billId)) continue;
+
+        const billNumber = (bill.bill_number || bill.billNumber || '').toUpperCase();
+        const billType = bill.bill_type || bill.billType || 'lcn_promissory_note';
+        const clientName =
+          bill.client_name ||
+          bill.clientName ||
+          bill.client?.name ||
+          bill.drawer_or_beneficiary ||
+          '';
+        const faceDec = new Decimal(bill.face_value ?? bill.faceValue ?? bill.amount ?? 0);
+        const bankDebitAbs = new Decimal(bankTx.amount).abs();
+
+        const normBank = normalizeReference(bankTextUpper);
+        const normBill = normalizeReference(billNumber);
+        const refMatched = Boolean(
+          normBill && normBill.length >= 3 && normBank.includes(normBill)
+        );
+
+        if (!hasBounceKeyword && !refMatched) continue;
+
+        // Check if debit amount equals faceValue + bounceFee (where bounceFee is 0..1000 MAD)
+        const diffDec = bankDebitAbs.minus(faceDec);
+        const isAmountPlausible =
+          diffDec.greaterThanOrEqualTo(-0.05) && diffDec.lessThanOrEqualTo(1000);
+
+        if (!isAmountPlausible) continue;
+
+        const detectedFeeDec = Decimal.max(0, diffDec);
+        const amountScore = diffDec.abs().lessThanOrEqualTo(0.05) ? 40 : 36;
+        const refScore = refMatched ? 25 : 15;
+        const partnerScore =
+          clientName && bankTextUpper.includes(clientName.toUpperCase()) ? 15 : 10;
+        const dateScore = 15;
+        const totalScore = amountScore + refScore + partnerScore + dateScore;
+
+        if (totalScore > highestBounceScore) {
+          highestBounceScore = totalScore;
+          const confidence: MatchConfidence = totalScore >= 80 ? 'high' : 'medium';
+          bestBounceMatch = {
+            bankRow: {
+              date: bankTx.date,
+              amount: bankTx.amount,
+              reference: bankTx.reference,
+              description: bankTx.description,
+              currency: bankTx.currency,
+              raw: bankTx.raw,
+            },
+            statementTransaction: bankTx,
+            matchType: 'bounced_bill',
+            confidence,
+            matchScore: totalScore,
+            scoreBreakdown: {
+              amountScore,
+              dateScore,
+              referenceScore: refScore,
+              partnerScore,
+            },
+            matchReason: `رصد إرجاع ورقة تجارية بدون رصيد (Impayé #${billNumber}) + عمولة رفض ${detectedFeeDec.toFixed(2)} MAD`,
+            bouncedBill: {
+              id: billId,
+              bill_number: bill.bill_number || bill.billNumber,
+              bill_type: billType,
+              face_value: faceDec.toNumber(),
+              detected_bounce_fee: Number(detectedFeeDec.toFixed(2)),
+              total_debit_amount: Number(bankDebitAbs.toFixed(2)),
+              bounce_reason: bankTx.description || 'Rejet bancaire / Défaut de provision (SIMT)',
+              client_name: clientName,
+              currency: bill.currency || 'MAD',
+            },
+          };
+        }
+      }
+
+      if (bestBounceMatch) {
+        matched.push(bestBounceMatch);
+        matchedBankIndices.add(i);
+        matchedBillIds.add(bestBounceMatch.bouncedBill!.id);
+        bouncedBillsCount++;
+        matchedVolume = matchedVolume.plus(new Decimal(bankTx.amount).abs());
+        if (bestBounceMatch.confidence === 'high') highConfidenceCount++;
+        continue;
+      }
+    }
+  }
+
+  // Phase 3: Match remaining rows against unpaid / pending Invoices
   for (let i = 0; i < statementTransactions.length; i++) {
     if (matchedBankIndices.has(i)) continue;
     const bankTx = statementTransactions[i];
@@ -488,5 +797,9 @@ export function reconcileStatementCore(params: {
     forexGainCount,
     forexLossCount,
     totalForexImpact: totalForexImpact.toFixed(2),
+    clearedBillsCount,
+    bouncedBillsCount,
+    bordereauMatchesCount,
   };
 }
+

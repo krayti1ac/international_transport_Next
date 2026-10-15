@@ -745,6 +745,54 @@ export default function BankReconciliationScreen() {
                                 </p>
                               </div>
                             )}
+                            {m.matchType === 'commercial_bill' && m.commercialBill && (
+                              <div>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] mb-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                                >
+                                  <FileText className="w-3 h-3 me-1" />
+                                  {t('ورقة تجارية LCN/شيك', 'Effet LCN/Chèque', 'Efecto LCN/Cheque')} #{m.commercialBill.bill_number}
+                                </Badge>
+                                <p className="font-semibold text-foreground">{m.commercialBill.client_name}</p>
+                                <p className="font-mono text-muted-foreground" dir="ltr">
+                                  {formatMoney(m.commercialBill.net_expected, m.commercialBill.currency)}
+                                </p>
+                              </div>
+                            )}
+                            {m.matchType === 'remittance_bordereau' && m.remittanceBordereau && (
+                              <div>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] mb-1 bg-indigo-500/10 text-indigo-700 border-indigo-500/30"
+                                >
+                                  <Landmark className="w-3 h-3 me-1" />
+                                  {t('جدول تسليم بنكي', 'Bordereau Remise', 'Bordereau Remesa')} #{m.remittanceBordereau.bordereau_number}
+                                </Badge>
+                                <p className="font-semibold text-foreground">
+                                  {m.remittanceBordereau.bank_name} ({m.remittanceBordereau.bills_count}{' '}
+                                  {t('سندات', 'effets', 'efectos')})
+                                </p>
+                                <p className="font-mono text-muted-foreground" dir="ltr">
+                                  {formatMoney(m.remittanceBordereau.estimated_net_proceeds, 'MAD')}
+                                </p>
+                              </div>
+                            )}
+                            {m.matchType === 'bounced_bill' && m.bouncedBill && (
+                              <div>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] mb-1 bg-rose-500/15 text-rose-700 border-rose-500/30"
+                                >
+                                  <AlertCircle className="w-3 h-3 me-1" />
+                                  {t('إرجاع بدون رصيد (Impayé)', 'Impayé / Rejet', 'Devolución / Impago')} #{m.bouncedBill.bill_number}
+                                </Badge>
+                                <p className="font-semibold text-foreground">{m.bouncedBill.client_name}</p>
+                                <p className="font-mono text-rose-600" dir="ltr">
+                                  {t('عمولة رفض:', 'Frais rejet:', 'Comisión:')} +{formatMoney(m.bouncedBill.detected_bounce_fee, m.bouncedBill.currency)}
+                                </p>
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-center">
                             <span

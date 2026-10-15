@@ -71,10 +71,17 @@ export interface MatchScoreBreakdown {
   partnerScore: number;
 }
 
+export type ReconciliationMatchType =
+  | 'treasury_transaction'
+  | 'invoice'
+  | 'commercial_bill'
+  | 'remittance_bordereau'
+  | 'bounced_bill';
+
 export interface SmartReconciliationMatch {
   bankRow: ParsedBankRow;
   statementTransaction?: ParsedStatementTransaction;
-  matchType: 'treasury_transaction' | 'invoice';
+  matchType: ReconciliationMatchType;
   confidence: MatchConfidence;
   matchScore: number;
   scoreBreakdown: MatchScoreBreakdown;
@@ -102,6 +109,42 @@ export interface SmartReconciliationMatch {
     payment_request_ref?: string;
     exchange_rate?: number;
   };
+  commercialBill?: {
+    id: string;
+    bill_number: string;
+    bill_type: string;
+    face_value: number;
+    discount_fee: number;
+    net_expected: number;
+    currency: string;
+    client_name: string;
+    due_date: string;
+    remittance_reference?: string | null;
+    status: string;
+  };
+  remittanceBordereau?: {
+    id: string;
+    bordereau_number: string;
+    bordereau_type: string;
+    total_face_value: number;
+    estimated_agios: number;
+    estimated_vat: number;
+    estimated_net_proceeds: number;
+    bills_count: number;
+    remittance_date: string;
+    bank_name: string;
+  };
+  bouncedBill?: {
+    id: string;
+    bill_number: string;
+    bill_type: string;
+    face_value: number;
+    detected_bounce_fee: number;
+    total_debit_amount: number;
+    bounce_reason: string;
+    client_name: string;
+    currency: string;
+  };
 }
 
 export interface SmartAutoReconcileResult {
@@ -116,6 +159,10 @@ export interface SmartAutoReconcileResult {
   forexGainCount: number;
   forexLossCount: number;
   totalForexImpact: string;
+  clearedBillsCount?: number;
+  bouncedBillsCount?: number;
+  bordereauMatchesCount?: number;
   error?: string;
 }
+
 
