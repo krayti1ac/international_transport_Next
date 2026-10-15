@@ -2342,7 +2342,10 @@
       "statusDelivered": "Livré avec succès",
       "statusUpdatedTitle": "Statut du lot mis à jour",
       "statusUpdatedDesc": "Le statut a été actualisé dans le manifeste de groupage",
-      "statusUpdateFailed": "Échec de la mise à jour du statut du lot"
+      "statusUpdateFailed": "Échec de la mise à jour du statut du lot",
+      "scanPackingListAiBtn": "Scanner Packing List (IA)",
+      "aiImportSuccessTitle": "Importation IA Réussie",
+      "aiImportSuccessDesc": "{count} expédition(s) importée(s) avec succès et recalcul LDM appliqué"
     },
     "groupageSplitBilling": {
       "cardTitle": "Facturation Fractionnée & Répartition des Coûts (Split-Billing & Cost Allocation)",
@@ -2419,6 +2422,44 @@
       "cmrDocLabel": "Lettre de voiture internationale (CMR)",
       "invoiceDocLabel": "Facture légale distincte",
       "invoicePending": "En cours d'émission"
+    },
+    "consignmentAiParser": {
+      "title": "Analyseur IA des Ordres de Transport & Listes de Colisage",
+      "subtitle": "Extraction automatisée des lots, palettes, mètres linéaires LDM et codes douaniers pour le voyage #{tripId}",
+      "fileReadError": "Impossible de lire le fichier sélectionné",
+      "selectFileFirst": "Veuillez d'abord sélectionner un document de transport (PDF ou image)",
+      "parseFailed": "Échec de l'extraction des données du document",
+      "clickToChange": "Cliquer pour modifier",
+      "browseFiles": "Parcourir les fichiers",
+      "dragDropHint": "ou glisser-déposer le document ici",
+      "currencyLabel": "Devise cible",
+      "analyzingDocument": "Analyse et extraction IA en cours...",
+      "startAiScan": "Analyser le document avec l'IA",
+      "confidence": "Indice de confiance",
+      "scanAnother": "Analyser un autre document",
+      "itemsFound": "Lots extraits",
+      "totalPallets": "Total Palettes",
+      "totalLdm": "Mètres Linéaires (LDM)",
+      "totalWeight": "Poids Total",
+      "selectAll": "Tout sélectionner",
+      "deselectAll": "Tout désélectionner",
+      "selectedSummary": "{count} sur {total} lot(s) sélectionné(s) ({pallets} palettes)",
+      "clientLabel": "Nom du Client / Chargeur",
+      "cargoDescLabel": "Description des Marchandises",
+      "originCity": "Ville de Départ",
+      "destCity": "Ville de Livraison",
+      "hsCode": "Code Douanier (SH)",
+      "weightKg": "Poids (kg)",
+      "stackable": "Gerbable",
+      "nonStackable": "Non-gerbable",
+      "ambientTemp": "Température Ambiante",
+      "priceLabel": "Prix du Fret",
+      "cancel": "Annuler",
+      "noItemsSelected": "Veuillez sélectionner au moins un lot à importer",
+      "batchImportError": "Une erreur est survenue lors de l'importation des lots",
+      "importSuccess": "{count} lot(s) importé(s) avec succès dans la remorque",
+      "importingConsignments": "Ajout des lots à la remorque...",
+      "importSelectedBtn": "Importer {count} lot(s) dans la remorque"
     }
   }
 }

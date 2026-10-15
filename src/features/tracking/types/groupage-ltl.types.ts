@@ -80,6 +80,8 @@ export interface TripConsignment {
   epodSignedAt?: string | null;
   epodHmacHash?: string | null;
   trackingToken?: string | null;
+  hsCode?: string | null;
+  sourceDocumentName?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +130,8 @@ export const createLtlConsignmentSchema = z.object({
   freightPrice: z.number().min(0).default(3500),
   currency: z.string().default('MAD'),
   customsMrn: z.string().optional().nullable(),
+  hsCode: z.string().optional().nullable(),
+  sourceDocumentName: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 

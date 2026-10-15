@@ -2342,7 +2342,10 @@
       "statusDelivered": "تم التسليم بنجاح",
       "statusUpdatedTitle": "تم تحديث حالة الشحنة",
       "statusUpdatedDesc": "تم تعديل الحالة في مانيفست الشحن التجميعي",
-      "statusUpdateFailed": "فشل تعديل حالة الشحنة"
+      "statusUpdateFailed": "فشل تعديل حالة الشحنة",
+      "scanPackingListAiBtn": "قراءة قائمة التعبئة (AI)",
+      "aiImportSuccessTitle": "تم استيراد الشحنات بالذكاء الاصطناعي",
+      "aiImportSuccessDesc": "تم استيراد {count} شحنة بنجاح وتحديث سعة المقطورة LDM"
     },
     "groupageSplitBilling": {
       "cardTitle": "الفوترة الجزئية وتوزيع تكاليف الرحلة (Split-Billing & Cost Allocation)",
@@ -2419,6 +2422,44 @@
       "cmrDocLabel": "بوليصة الشحن الدولية (CMR)",
       "invoiceDocLabel": "الفاتورة الضريبية المستقلة",
       "invoicePending": "قيد الإصدار"
+    },
+    "consignmentAiParser": {
+      "title": "قارئ وثائق الشحن وقوائم التعبئة بالذكاء الاصطناعي",
+      "subtitle": "استخراج آلي للشحنات، الباليتات، أبعاد LDM، وأكواد الجمارك للرحلة #{tripId}",
+      "fileReadError": "تعذر قراءة محتوى الملف المحدد",
+      "selectFileFirst": "يرجى اختيار ملف الشحن أولاً (PDF أو صورة)",
+      "parseFailed": "تعذر استخراج بيانات الشحنات من المستند",
+      "clickToChange": "انقر للتغيير",
+      "browseFiles": "تصفح الملفات",
+      "dragDropHint": "أو اسحب وأفلت الملف هنا",
+      "currencyLabel": "العملة المستهدفة",
+      "analyzingDocument": "جاري الفحص واستخراج الشحنات عبر الذكاء الاصطناعي...",
+      "startAiScan": "فحص المستند بالذكاء الاصطناعي",
+      "confidence": "دقة الاستخراج",
+      "scanAnother": "فحص ملف آخر",
+      "itemsFound": "الشحنات المستخرجة",
+      "totalPallets": "إجمالي الباليتات",
+      "totalLdm": "إجمالي الأمتار الخطية",
+      "totalWeight": "إجمالي الوزن",
+      "selectAll": "تحديد الكل",
+      "deselectAll": "إلغاء تحديد الكل",
+      "selectedSummary": "تم تحديد {count} من {total} شحنة ({pallets} باليت)",
+      "clientLabel": "اسم العميل / الشاحن",
+      "cargoDescLabel": "وصف البضاعة",
+      "originCity": "مدينة الشحن",
+      "destCity": "مدينة التسليم",
+      "hsCode": "كود النظام المنسق (HS Code)",
+      "weightKg": "الوزن (كغ)",
+      "stackable": "قابلة للرص",
+      "nonStackable": "غير قابلة للرص",
+      "ambientTemp": "حرارة عادية",
+      "priceLabel": "سعر النولون",
+      "cancel": "إلغاء",
+      "noItemsSelected": "يرجى تحديد شحنة واحدة على الأقل للاستيراد",
+      "batchImportError": "حدث خطأ أثناء استيراد الشحنات",
+      "importSuccess": "تم استيراد {count} شحنة بنجاح وإضافتها للمقطورة",
+      "importingConsignments": "جاري إضافة الشحنات للمقطورة...",
+      "importSelectedBtn": "استيراد {count} شحنة للمقطورة"
     }
   }
 }

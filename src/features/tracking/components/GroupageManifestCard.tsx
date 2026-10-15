@@ -27,6 +27,7 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import type { TripConsignment, ConsignmentStatus } from '../types/groupage-ltl.types';
 import { calculateTrailerUtilization } from '../services/groupage-calculator.service';
@@ -35,6 +36,7 @@ import {
   updateConsignmentStatusAction,
 } from '../services/groupage-consignment.actions';
 import { NewConsignmentModal } from './NewConsignmentModal';
+import { PackingListAiParserModal } from './PackingListAiParserModal';
 
 interface GroupageManifestCardProps {
   tripId: number;
@@ -55,6 +57,7 @@ export function GroupageManifestCard({
 
   const [consignments, setConsignments] = useState<TripConsignment[]>(initialConsignments);
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
+  const [showAiParserModal, setShowAiParserModal] = useState<boolean>(false);
 
   // Load consignments if not provided
   useEffect(() => {
@@ -152,14 +155,25 @@ export function GroupageManifestCard({
               {t('manifestCardSubtitle')}
             </CardDescription>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setShowNewModal(true)}
-            className="text-xs gap-1.5 self-start md:self-auto"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t('addConsignmentBtn')}
-          </Button>
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAiParserModal(true)}
+              className="text-xs gap-1.5 border-violet-500/30 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+              {t('scanPackingListAiBtn')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowNewModal(true)}
+              className="text-xs gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('addConsignmentBtn')}
+            </Button>
+          </div>
         </div>
       </CardHeader>
 
@@ -360,6 +374,22 @@ export function GroupageManifestCard({
           onClose={() => setShowNewModal(false)}
           onSuccess={(newConsignment) => {
             setConsignments((prev) => [...prev, newConsignment]);
+          }}
+        />
+      )}
+
+      {/* AI Document / Packing List Parser Modal */}
+      {showAiParserModal && (
+        <PackingListAiParserModal
+          tripId={tripId}
+          isOpen={showAiParserModal}
+          onClose={() => setShowAiParserModal(false)}
+          onSuccess={(count, newConsignments) => {
+            setConsignments((prev) => [...prev, ...newConsignments]);
+            toast({
+              title: t('aiImportSuccessTitle'),
+              description: t('aiImportSuccessDesc', { count }),
+            });
           }}
         />
       )}
