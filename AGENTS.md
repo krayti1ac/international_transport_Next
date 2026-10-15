@@ -74,6 +74,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202610310001_reefer_multi_compartment_telematics.sql` — Multi-Temp & Multi-Compartment Reefer Telematics Engine (`reefer_compartment_profiles`, `reefer_compartment_telemetry_logs`, `reefer_cross_bulkhead_alerts` tables, RLS policies, indexes).
 - `supabase/migrations/202611010001_reefer_cargo_insurance_claims.sql` — Reefer Cargo Loss Assessment & Insurance Claim Settlement Engine (`reefer_cargo_insurance_claims`, `reefer_claim_settlement_lines` tables, RLS policies, indexes).
 - `supabase/migrations/202611020001_groupage_ltl_multi_consignments.sql` — Groupage & LTL Multi-Consignment Engine (`trip_consignments` table, RLS policies, indexes).
+- `supabase/migrations/202611030001_groupage_split_billing_and_cost_allocation.sql` — Groupage Split-Billing & Cost Allocation Engine (`groupage_trip_cost_allocations` table, `trip_consignments` billing columns, `invoices` consignment links, RLS policies).
 
 
 

@@ -2343,6 +2343,38 @@
       "statusUpdatedTitle": "Estado del envío actualizado",
       "statusUpdatedDesc": "Se ha actualizado el estado en el manifiesto de grupaje",
       "statusUpdateFailed": "Error al actualizar el estado del envío"
+    },
+    "groupageSplitBilling": {
+      "cardTitle": "Facturación Fraccionada y Asignación de Costes (Split-Billing & Cost Allocation)",
+      "cardSubtitle": "Imputación proporcional de costes con Decimal.js, rentabilidad por cliente y emisión de facturas independientes",
+      "modeChargeableWeight": "Por Peso Tasable (Chargeable Weight)",
+      "modeLdm": "Por Metros Lineales (LDM)",
+      "kpiTotalRevenue": "Facturación Consolidada",
+      "kpiSharedCost": "Costes Operativos Compartidos",
+      "kpiNetProfit": "Margen Neto Consolidado",
+      "kpiProfitMargin": "Margen de Beneficio Global",
+      "invoicedBadge": "Facturados",
+      "operatingCostsBreakdownTitle": "Desglose de Costes Operativos del Viaje",
+      "recalculateBtn": "Recalcular Reparto y Rentabilidad",
+      "fuelCostLabel": "Combustible Camión (Fuel)",
+      "ferryCostLabel": "Billete Barco / Ferry",
+      "tollsCostLabel": "Peajes y Viñetas (Via-T)",
+      "customsCostLabel": "Puerto, Tránsito y Aduanas",
+      "driverCostLabel": "Dietas y Gastos de Conductor",
+      "batchInvoicingSubtitle": "Generación de facturas legales independientes para {uninvoiced} envíos no facturados",
+      "generateAllInvoicesBtn": "Emitir Todas las Facturas",
+      "colConsignment": "Envío y Cargador",
+      "colShareRatio": "Cuota de Reparto y Volumen",
+      "colFreightRevenue": "Tarifa de Flete",
+      "colAllocatedCost": "Coste Asignado",
+      "colNetMargin": "Margen Neto y Ratio",
+      "colInvoice": "Facturación",
+      "generateInvoiceBtn": "Emitir Factura",
+      "noConsignmentsForAllocation": "No hay envíos parciales para la imputación de costes",
+      "allocationUpdatedSuccess": "Asignación de costes y márgenes actualizada con éxito",
+      "allocationFailed": "Error al recalcular la asignación de costes",
+      "invoicesGeneratedSuccess": "Facturas fraccionadas generadas con éxito",
+      "invoiceGenerationFailed": "Error al generar las facturas fraccionadas"
     }
   }
 }

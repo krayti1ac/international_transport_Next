@@ -2343,6 +2343,38 @@
       "statusUpdatedTitle": "تم تحديث حالة الشحنة",
       "statusUpdatedDesc": "تم تعديل الحالة في مانيفست الشحن التجميعي",
       "statusUpdateFailed": "فشل تعديل حالة الشحنة"
+    },
+    "groupageSplitBilling": {
+      "cardTitle": "الفوترة الجزئية وتوزيع تكاليف الرحلة (Split-Billing & Cost Allocation)",
+      "cardSubtitle": "توزيع مصاريف الرحلة المشتركة بدقة Decimal.js، تقييم ربحية كل عميل، وإصدار الفواتير المستقلة",
+      "modeChargeableWeight": "حسب الوزن الخاضع للفوترة (Chargeable Weight)",
+      "modeLdm": "حسب الأمتار الخطية (LDM)",
+      "kpiTotalRevenue": "إجمالي إيراد نولون الرحلة",
+      "kpiSharedCost": "إجمالي المصاريف المشتركة",
+      "kpiNetProfit": "صافي الربح المجمع للرحلة",
+      "kpiProfitMargin": "هامش الربح الإجمالي",
+      "invoicedBadge": "مفوترة",
+      "operatingCostsBreakdownTitle": "بيان المصاريف التشغيلية المشتركة للرحلة",
+      "recalculateBtn": "إعادة احتساب التوزيع والربحية",
+      "fuelCostLabel": "محروقات الشاحنة (Fuel)",
+      "ferryCostLabel": "تذكرة العبارة (Ferry)",
+      "tollsCostLabel": "رسوم الطرق (Tolls / Via-T)",
+      "customsCostLabel": "الميناء والجمارك والترانزيت",
+      "driverCostLabel": "سفرية ومصاريف السائق",
+      "batchInvoicingSubtitle": "توليد فواتير رسمية مستقلة لـ {uninvoiced} شحنات غير مفوترة",
+      "generateAllInvoicesBtn": "إصدار الفواتير الجزئية دفعة واحدة",
+      "colConsignment": "مرجع الشحنة والعميل",
+      "colShareRatio": "نسبة الحصة والحجم",
+      "colFreightRevenue": "إيراد النولون",
+      "colAllocatedCost": "التكلفة المحملة",
+      "colNetMargin": "صافي الربح والهامش",
+      "colInvoice": "الفاتورة",
+      "generateInvoiceBtn": "إصدار الفاتورة",
+      "noConsignmentsForAllocation": "لا توجد شحنات فرعية لتوزيع التكاليف عليها",
+      "allocationUpdatedSuccess": "تم تحديث توزيع التكاليف واحتساب هوامش الربحية بنجاح",
+      "allocationFailed": "فشل احتساب توزيع التكاليف",
+      "invoicesGeneratedSuccess": "تم توليد الفواتير الجزئية بنجاح",
+      "invoiceGenerationFailed": "فشل إنشاء الفواتير الجزئية"
     }
   }
 }

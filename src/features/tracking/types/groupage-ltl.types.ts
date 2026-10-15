@@ -60,6 +60,13 @@ export interface TripConsignment {
   cmrNumber?: string | null;
   customsMrn?: string | null;
   status: ConsignmentStatus;
+  invoiceId?: number | null;
+  invoiceNumber?: string | null;
+  invoicedAt?: string | null;
+  allocatedCost?: number;
+  netMargin?: number;
+  profitMarginPct?: number;
+  costAllocationMode?: string;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;

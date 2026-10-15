@@ -2343,6 +2343,38 @@
       "statusUpdatedTitle": "Statut du lot mis à jour",
       "statusUpdatedDesc": "Le statut a été actualisé dans le manifeste de groupage",
       "statusUpdateFailed": "Échec de la mise à jour du statut du lot"
+    },
+    "groupageSplitBilling": {
+      "cardTitle": "Facturation Fractionnée & Répartition des Coûts (Split-Billing & Cost Allocation)",
+      "cardSubtitle": "Ventilation des coûts d'exploitation via Decimal.js, rentabilité par client et émission de factures distinctes",
+      "modeChargeableWeight": "Selon Poids Taxable (Chargeable Weight)",
+      "modeLdm": "Selon Mètres Linéaires (LDM)",
+      "kpiTotalRevenue": "Chiffre d'Affaires Consolidé",
+      "kpiSharedCost": "Charges Opérationnelles Partagées",
+      "kpiNetProfit": "Marge Nette Consolidée",
+      "kpiProfitMargin": "Taux de Marge Globale",
+      "invoicedBadge": "Facturés",
+      "operatingCostsBreakdownTitle": "Ventilation des Charges d'Exploitation du Voyage",
+      "recalculateBtn": "Recalculer Répartition & Marges",
+      "fuelCostLabel": "Carburant Tracteur (Fuel)",
+      "ferryCostLabel": "Billet Traversée Ferry",
+      "tollsCostLabel": "Péages & Vignettes (Via-T)",
+      "customsCostLabel": "Transit, Port & Douane",
+      "driverCostLabel": "Frais de Route & Déplacements",
+      "batchInvoicingSubtitle": "Génération de factures légales distinctes pour {uninvoiced} lots non-facturés",
+      "generateAllInvoicesBtn": "Émettre Toutes les Factures",
+      "colConsignment": "Lot & Donneur d'Ordre",
+      "colShareRatio": "Quote-part & Volume",
+      "colFreightRevenue": "Fret Facturé",
+      "colAllocatedCost": "Charge Imputée",
+      "colNetMargin": "Marge Nette & Taux",
+      "colInvoice": "Facturation",
+      "generateInvoiceBtn": "Émettre Facture",
+      "noConsignmentsForAllocation": "Aucun lot partiel disponible pour la répartition des charges",
+      "allocationUpdatedSuccess": "Ventilation des charges et marges recalculées avec succès",
+      "allocationFailed": "Échec du calcul de ventilation des charges",
+      "invoicesGeneratedSuccess": "Factures fractionnées générées avec succès",
+      "invoiceGenerationFailed": "Échec de l'émission des factures fractionnées"
     }
   }
 }
