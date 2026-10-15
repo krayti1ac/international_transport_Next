@@ -153,3 +153,4 @@ export function calculatePortfolioSummary(
     currency,
   };
 }
+

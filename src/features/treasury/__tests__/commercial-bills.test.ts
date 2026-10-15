@@ -256,3 +256,4 @@ describe('Commercial Bills, Promissory Notes & Moroccan LCN Engine', () => {
     }, 20000);
   });
 });
+

@@ -42,6 +42,8 @@ import {
 import { getMaturityUrgency } from '../services/commercial-bills-calc.service';
 import { NewCommercialBillModal } from './NewCommercialBillModal';
 import { BillLifecycleModal } from './BillLifecycleModal';
+import { RemittanceBordereauModal } from './RemittanceBordereauModal';
+import Decimal from 'decimal.js';
 
 interface CommercialBillsPortfolioCardProps {
   initialBills?: CommercialBill[];
@@ -53,6 +55,7 @@ export function CommercialBillsPortfolioCard({
   bankAccounts = [],
 }: CommercialBillsPortfolioCardProps) {
   const t = useTranslations('commercialBills');
+  const tb = useTranslations('remittanceBordereau');
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -60,6 +63,10 @@ export function CommercialBillsPortfolioCard({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [summary, setSummary] = useState<CommercialBillsSummary | null>(null);
+
+  // Multi-selection state for bank remittance
+  const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
+  const [showBordereauModal, setShowBordereauModal] = useState(false);
 
   // Modals state
   const [showNewModal, setShowNewModal] = useState(false);
@@ -104,6 +111,43 @@ export function CommercialBillsPortfolioCard({
       return matchesStatus && matchesSearch;
     });
   }, [bills, statusFilter, searchQuery]);
+
+  // Selection helpers for bank remittance bordereau
+  const portfolioBills = useMemo(() => {
+    return filteredBills.filter((b) => b.status === 'in_portfolio');
+  }, [filteredBills]);
+
+  const allPortfolioSelected = useMemo(() => {
+    return (
+      portfolioBills.length > 0 &&
+      portfolioBills.every((b) => selectedBillIds.includes(b.id))
+    );
+  }, [portfolioBills, selectedBillIds]);
+
+  const toggleSelectBill = (id: string) => {
+    setSelectedBillIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllPortfolio = () => {
+    if (allPortfolioSelected) {
+      setSelectedBillIds([]);
+    } else {
+      setSelectedBillIds(portfolioBills.map((b) => b.id));
+    }
+  };
+
+  const selectedBillsForBordereau = useMemo(() => {
+    return bills.filter((b) => selectedBillIds.includes(b.id));
+  }, [bills, selectedBillIds]);
+
+  const selectedTotalNominal = useMemo(() => {
+    return selectedBillsForBordereau.reduce(
+      (acc, b) => acc.plus(new Decimal(b.faceValue)),
+      new Decimal(0)
+    ).toNumber();
+  }, [selectedBillsForBordereau]);
 
   const getStatusBadge = (status: BillStatus) => {
     switch (status) {
@@ -201,6 +245,16 @@ export function CommercialBillsPortfolioCard({
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-auto">
+            {selectedBillIds.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => setShowBordereauModal(true)}
+                className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-bold"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>{tb('generateBordereauBtn')} ({selectedBillIds.length})</span>
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -345,11 +399,54 @@ export function CommercialBillsPortfolioCard({
           </div>
         </div>
 
+        {/* Batch Selection Banner */}
+        {selectedBillIds.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-blue-700 dark:text-blue-300">
+                {tb('selectedBannerCount', { count: selectedBillIds.length })}
+              </span>
+              <span className="text-slate-400">|</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                {tb('selectedBannerTotal')}: {selectedTotalNominal.toLocaleString('fr-MA', { minimumFractionDigits: 2 })} MAD
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedBillIds([])}
+                className="h-7 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              >
+                {tb('clearSelection')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowBordereauModal(true)}
+                className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                {tb('generateBordereauBtn')}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Bills Table */}
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
           <table className="w-full text-xs text-start">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold">
               <tr>
+                <th className="w-8 py-2.5 px-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allPortfolioSelected}
+                    onChange={toggleSelectAllPortfolio}
+                    disabled={portfolioBills.length === 0}
+                    className="rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    title={tb('selectAllPortfolio')}
+                  />
+                </th>
                 <th className="py-2.5 px-3">{t('colTypeAndNumber')}</th>
                 <th className="py-2.5 px-3">{t('colClientAndBank')}</th>
                 <th className="py-2.5 px-3">{t('colFaceValue')}</th>
@@ -361,6 +458,20 @@ export function CommercialBillsPortfolioCard({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredBills.map((bill) => (
                 <tr key={bill.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
+                  {/* Select Checkbox */}
+                  <td className="py-3 px-3 text-center">
+                    {bill.status === 'in_portfolio' ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedBillIds.includes(bill.id)}
+                        onChange={() => toggleSelectBill(bill.id)}
+                        className="rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-700 text-[10px]">—</span>
+                    )}
+                  </td>
+
                   {/* Type & Number */}
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-2">
@@ -462,7 +573,7 @@ export function CommercialBillsPortfolioCard({
 
               {filteredBills.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     {t('noBillsFound')}
                   </td>
                 </tr>
@@ -506,6 +617,21 @@ export function CommercialBillsPortfolioCard({
           bankAccounts={bankAccounts}
         />
       )}
+
+      {/* Remittance Bordereau Modal */}
+      {showBordereauModal && (
+        <RemittanceBordereauModal
+          isOpen={showBordereauModal}
+          onClose={() => setShowBordereauModal(false)}
+          selectedBills={selectedBillsForBordereau}
+          bankAccounts={bankAccounts}
+          onSuccess={() => {
+            setSelectedBillIds([]);
+            loadBills();
+          }}
+        />
+      )}
     </Card>
   );
 }
+

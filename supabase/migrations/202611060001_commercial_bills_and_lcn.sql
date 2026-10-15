@@ -82,3 +82,4 @@ CREATE POLICY "Allow authenticated users to upload commercial bills"
     ON storage.objects FOR INSERT
     TO authenticated
     WITH CHECK (bucket_id = 'commercial-bills');
+
