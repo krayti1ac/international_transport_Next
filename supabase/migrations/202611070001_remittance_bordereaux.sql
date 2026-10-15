@@ -47,3 +47,4 @@ CREATE POLICY "Tenant isolation: remittance bordereaux access"
         company_id = (SELECT company_id FROM public.users WHERE id = auth.uid() LIMIT 1) OR
         (SELECT role FROM public.users WHERE id = auth.uid() LIMIT 1) = 'super_admin'
     );
+

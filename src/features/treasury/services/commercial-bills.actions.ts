@@ -23,6 +23,11 @@ import {
   type BillStatus,
 } from '../types/commercial-bills.types';
 import { calculatePortfolioSummary } from './commercial-bills-calc.service';
+import {
+  buildCommercialBillWhatsAppAlert,
+  type BillWhatsAppAlertType,
+} from './lcn-edi-and-alerts.service';
+import { sendWhatsAppText } from '@/features/whatsapp/services/whatsapp-meta-client';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -541,4 +546,127 @@ export async function getCommercialBillsSummaryAction(): Promise<{
     };
   }
 }
+
+/**
+ * Server Action: Dispatches proactive WhatsApp maturity reminder or bounced bill alert
+ */
+export async function sendCommercialBillWhatsAppAlertAction(input: {
+  billId: string;
+  recipientPhone?: string;
+  alertType: BillWhatsAppAlertType;
+  locale?: 'ar' | 'fr' | 'es';
+  fallbackBill?: CommercialBill;
+}): Promise<{
+  success: boolean;
+  messageText?: string;
+  totalClaimableAmount?: number;
+  whatsappLink?: string;
+  dispatchedViaApi?: boolean;
+  error?: string;
+}> {
+  try {
+    let bill = billsStore.get(input.billId) || input.fallbackBill;
+
+    if (!bill) {
+      try {
+        const supabase = await createClient();
+        const { data: row } = await supabase
+          .from('commercial_bills')
+          .select('*')
+          .eq('id', input.billId)
+          .maybeSingle();
+
+        if (row) {
+          bill = {
+            id: row.id,
+            companyId: row.company_id,
+            billType: row.bill_type,
+            billNumber: row.bill_number,
+            clientId: row.client_id,
+            clientName: row.client_name,
+            issuerName: row.issuer_name,
+            drawerBankName: row.drawer_bank_name,
+            drawerBankRib: row.drawer_bank_rib,
+            faceValue: Number(row.face_value || 0),
+            currency: row.currency || 'MAD',
+            issueDate: row.issue_date,
+            dueDate: row.due_date,
+            status: row.status,
+            discountFee: Number(row.discount_fee || 0),
+            bounceReason: row.bounce_reason,
+            bounceDate: row.bounce_date,
+            bounceFee: Number(row.bounce_fee || 0),
+            allocatedInvoiceIds: Array.isArray(row.allocated_invoice_ids)
+              ? row.allocated_invoice_ids
+              : [],
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          };
+        }
+      } catch {
+        // Fallback to in-memory or provided fallbackBill
+      }
+    }
+
+    if (!bill) {
+      return { success: false, error: 'الورقة التجارية غير موجودة' };
+    }
+
+    const locale = input.locale || 'ar';
+    const alertPayload = buildCommercialBillWhatsAppAlert(bill, input.alertType, locale);
+    const targetPhone = (input.recipientPhone || process.env.SAFE_TEST_PHONE || '212694585307').replace(
+      /\D/g,
+      ''
+    );
+
+    let dispatchedViaApi = false;
+    try {
+      const apiRes = await sendWhatsAppText({
+        to: targetPhone,
+        message: alertPayload.message,
+        auditEntity: {
+          type: 'client',
+          id: bill.clientId || bill.id,
+        },
+      });
+      dispatchedViaApi = apiRes.success;
+    } catch {
+      dispatchedViaApi = false;
+    }
+
+    const whatsappLink = `https://wa.me/${targetPhone}?text=${encodeURIComponent(alertPayload.message)}`;
+
+    try {
+      await recordAuditLog({
+        entityType: 'commercial_bills',
+        entityId: bill.id,
+        actionType: 'whatsapp_notification',
+        reason: `Alerte WhatsApp (${input.alertType}) pour ${bill.billNumber}`,
+        newData: {
+          alertType: input.alertType,
+          billNumber: bill.billNumber,
+          clientName: bill.clientName,
+          totalClaimableAmount: alertPayload.totalClaimableAmount,
+          dispatchedViaApi,
+        },
+      });
+    } catch {
+      // Non-blocking audit log
+    }
+
+    return {
+      success: true,
+      messageText: alertPayload.message,
+      totalClaimableAmount: alertPayload.totalClaimableAmount,
+      whatsappLink,
+      dispatchedViaApi,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'فشل إرسال تنبيه واتساب للورقة التجارية',
+    };
+  }
+}
+
 

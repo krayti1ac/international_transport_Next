@@ -527,3 +527,4 @@ export function buildBordereauHtml(bordereau: RemittanceBordereau, qrCodeBase64:
 </body>
 </html>`;
 }
+

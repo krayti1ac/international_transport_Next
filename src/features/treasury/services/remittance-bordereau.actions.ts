@@ -20,6 +20,13 @@ import {
   generateBordereauQrCode,
   buildBordereauHtml,
 } from './remittance-bordereau-pdf.service';
+import {
+  generateSimtLcnEdiFile,
+  generateIso20022LcnXml,
+  type EdiExportFormat,
+} from './lcn-edi-and-alerts.service';
+
+const bordereauStore = new Map<string, RemittanceBordereau>();
 
 /**
  * Generates an official bank remittance bordereau (Encaissement or Escompte),
@@ -236,6 +243,7 @@ export async function generateRemittanceBordereauAction(input: GenerateBordereau
     });
 
     bordereauData.qrCodeData = qrCodeBase64;
+    bordereauStore.set(bordereauData.id, bordereauData);
     const html = buildBordereauHtml(bordereauData, qrCodeBase64);
 
     // 10. Audit Logging (Non-blocking)
@@ -286,12 +294,22 @@ export async function fetchRemittanceBordereauxAction(): Promise<{
 
     if (error) {
       if (error.code === '42P01') {
-        return { success: true, bordereaux: [] };
+        return {
+          success: true,
+          bordereaux: Array.from(bordereauStore.values()),
+        };
       }
-      return { success: false, bordereaux: [], error: error.message };
+      return { success: false, bordereaux: Array.from(bordereauStore.values()), error: error.message };
     }
 
-    const bordereaux: RemittanceBordereau[] = (data || []).map((row) => ({
+    if (!data || data.length === 0) {
+      return {
+        success: true,
+        bordereaux: Array.from(bordereauStore.values()),
+      };
+    }
+
+    const bordereaux: RemittanceBordereau[] = data.map((row) => ({
       id: row.id,
       bordereauNumber: row.bordereau_number,
       bordereauType: row.bordereau_type,
@@ -316,7 +334,7 @@ export async function fetchRemittanceBordereauxAction(): Promise<{
     return { success: true, bordereaux };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب جداول التسليم';
-    return { success: false, bordereaux: [], error: message };
+    return { success: false, bordereaux: Array.from(bordereauStore.values()), error: message };
   }
 }
 
@@ -330,6 +348,7 @@ export async function getRemittanceBordereauByIdAction(id: string): Promise<{
   error?: string;
 }> {
   try {
+    const cached = bordereauStore.get(id);
     const supabase = await createClient();
     const { data: row, error } = await supabase
       .from('remittance_bordereaux')
@@ -338,6 +357,19 @@ export async function getRemittanceBordereauByIdAction(id: string): Promise<{
       .single();
 
     if (error || !row) {
+      if (cached) {
+        const qrCodeBase64 =
+          cached.qrCodeData ||
+          (await generateBordereauQrCode({
+            bordereauNumber: cached.bordereauNumber,
+            totalFaceValue: cached.totalFaceValue,
+            bankName: cached.bankName,
+            remittanceDate: cached.remittanceDate,
+            securityHash: cached.securityHash,
+          }));
+        const html = buildBordereauHtml(cached, qrCodeBase64);
+        return { success: true, bordereau: cached, html };
+      }
       return { success: false, error: 'جدول التسليم غير موجود' };
     }
 
@@ -397,6 +429,7 @@ export async function getRemittanceBordereauByIdAction(id: string): Promise<{
     });
 
     bordereau.qrCodeData = qrCodeBase64;
+    bordereauStore.set(bordereau.id, bordereau);
     const html = buildBordereauHtml(bordereau, qrCodeBase64);
 
     return { success: true, bordereau, html };
@@ -405,3 +438,90 @@ export async function getRemittanceBordereauByIdAction(id: string): Promise<{
     return { success: false, error: message };
   }
 }
+
+/**
+ * Exports a remittance bordereau in Bank Al-Maghrib SIMT (160-char fixed-width)
+ * or ISO 20022 XML format for corporate e-banking teletransmission.
+ */
+export async function exportBordereauEdiAction(
+  bordereauId: string,
+  format: EdiExportFormat,
+  fallbackBordereau?: RemittanceBordereau
+): Promise<{
+  success: boolean;
+  content?: string;
+  filename?: string;
+  mimeType?: string;
+  securityHash?: string;
+  error?: string;
+}> {
+  try {
+    let bordereau: RemittanceBordereau | undefined = fallbackBordereau;
+
+    if (!bordereau || !bordereau.bills || bordereau.bills.length === 0) {
+      const res = await getRemittanceBordereauByIdAction(bordereauId);
+      if (res.success && res.bordereau) {
+        bordereau = res.bordereau;
+      } else if (fallbackBordereau) {
+        bordereau = fallbackBordereau;
+      } else {
+        return { success: false, error: res.error || 'جدول التسليم غير موجود' };
+      }
+    }
+
+    if (format === 'simt') {
+      const simtResult = generateSimtLcnEdiFile(bordereau);
+      try {
+        await recordAuditLog({
+          actionType: 'create',
+          entityType: 'remittance_bordereaux',
+          entityId: bordereau.id,
+          reason: `Export EDI SIMT 160-octets pour bordereau ${bordereau.bordereauNumber}`,
+          newData: {
+            format: 'simt',
+            filename: simtResult.filename,
+            recordCount: simtResult.recordCount,
+            totalCentimes: simtResult.totalCentimes,
+          },
+        });
+      } catch {
+        // Non-blocking audit log
+      }
+      return {
+        success: true,
+        content: simtResult.content,
+        filename: simtResult.filename,
+        mimeType: 'text/plain;charset=utf-8',
+        securityHash: simtResult.securityHash,
+      };
+    } else {
+      const xmlResult = generateIso20022LcnXml(bordereau);
+      try {
+        await recordAuditLog({
+          actionType: 'create',
+          entityType: 'remittance_bordereaux',
+          entityId: bordereau.id,
+          reason: `Export ISO 20022 XML pour bordereau ${bordereau.bordereauNumber}`,
+          newData: {
+            format: 'xml',
+            filename: xmlResult.filename,
+            controlSum: xmlResult.controlSum,
+          },
+        });
+      } catch {
+        // Non-blocking audit log
+      }
+      return {
+        success: true,
+        content: xmlResult.content,
+        filename: xmlResult.filename,
+        mimeType: 'application/xml;charset=utf-8',
+        securityHash: xmlResult.securityHash,
+      };
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'حدث خطأ أثناء تصدير ملف التبادل البنكي';
+    return { success: false, error: message };
+  }
+}
+

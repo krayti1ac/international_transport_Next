@@ -19,6 +19,8 @@ import {
   ShieldCheck,
   Calendar,
   ExternalLink,
+  Download,
+  Code2,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,7 +33,10 @@ import type {
   BordereauBillItem,
 } from '../types/remittance-bordereau.types';
 import { calculateBordereauFinancials } from '../services/remittance-bordereau-pdf.service';
-import { generateRemittanceBordereauAction } from '../services/remittance-bordereau.actions';
+import {
+  generateRemittanceBordereauAction,
+  exportBordereauEdiAction,
+} from '../services/remittance-bordereau.actions';
 
 interface RemittanceBordereauModalProps {
   isOpen: boolean;
@@ -157,6 +162,47 @@ export function RemittanceBordereauModal({
     }
   };
 
+  const handleExportEdi = async (format: 'simt' | 'xml') => {
+    if (!generatedResult) return;
+    try {
+      const res = await exportBordereauEdiAction(
+        generatedResult.bordereau.id,
+        format,
+        generatedResult.bordereau
+      );
+      if (res.success && res.content && res.filename) {
+        const blob = new Blob([res.content], {
+          type: res.mimeType || 'text/plain;charset=utf-8',
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = res.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: tb('ediExportSuccessTitle'),
+          description: tb('ediExportSuccessDesc', { filename: res.filename }),
+        });
+      } else {
+        toast({
+          title: tb('generationErrorTitle'),
+          description: res.error || tb('generationErrorDefault'),
+          variant: 'destructive',
+        });
+      }
+    } catch (err: unknown) {
+      toast({
+        title: tb('generationErrorTitle'),
+        description: err instanceof Error ? err.message : tb('generationErrorDefault'),
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleReset = () => {
     setGeneratedResult(null);
     onClose();
@@ -190,7 +236,7 @@ export function RemittanceBordereauModal({
         </DialogHeader>
 
         {generatedResult ? (
-          /* SUCCESS VIEW WITH PRINT ACTION */
+          /* SUCCESS VIEW WITH PRINT & EDI ACTIONS */
           <div className="py-6 space-y-6 text-center">
             <div className="w-16 h-16 mx-auto bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center">
               <CheckCircle2 className="w-10 h-10" />
@@ -239,13 +285,29 @@ export function RemittanceBordereauModal({
               )}
             </div>
 
-            <div className="flex justify-center gap-3 pt-2">
+            <div className="flex flex-wrap justify-center gap-2.5 pt-2">
               <Button
                 onClick={handlePrint}
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 font-bold"
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 font-bold"
               >
                 <Printer className="w-4 h-4" />
                 {tb('printBordereauButton')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExportEdi('simt')}
+                className="gap-1.5 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold"
+              >
+                <Download className="w-4 h-4" />
+                {tb('exportSimtBtn')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExportEdi('xml')}
+                className="gap-1.5 border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-semibold"
+              >
+                <Code2 className="w-4 h-4" />
+                {tb('exportXmlBtn')}
               </Button>
               <Button variant="outline" onClick={handleReset}>
                 {tb('closeButton')}
@@ -464,3 +526,4 @@ export function RemittanceBordereauModal({
     </Dialog>
   );
 }
+

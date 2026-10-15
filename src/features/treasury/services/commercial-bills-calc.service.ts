@@ -63,17 +63,18 @@ export function calculateNetDiscountProceeds(
 }
 
 /**
- * Evaluates the maturity urgency of a commercial bill relative to today
+ * Evaluates the maturity urgency of a commercial bill relative to today (UTC date-normalized)
  */
 export function getMaturityUrgency(dueDateStr: string): MaturityUrgency {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayIso = new Date().toISOString().split('T')[0];
+  const dueIso = (dueDateStr || '').split('T')[0];
 
-  const due = new Date(dueDateStr);
-  due.setHours(0, 0, 0, 0);
+  const todayMs = Date.parse(`${todayIso}T00:00:00.000Z`);
+  const dueMs = Date.parse(`${dueIso}T00:00:00.000Z`);
 
-  const diffMs = due.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (Number.isNaN(dueMs)) return 'upcoming';
+
+  const diffDays = Math.round((dueMs - todayMs) / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) return 'overdue';
   if (diffDays === 0) return 'due_today';

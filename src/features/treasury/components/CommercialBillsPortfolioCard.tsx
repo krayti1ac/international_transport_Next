@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useTransition } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import {
   CreditCard,
   Plus,
@@ -24,6 +24,11 @@ import {
   RefreshCw,
   AlertCircle,
   ShieldAlert,
+  MessageCircle,
+  Download,
+  Code2,
+  Printer,
+  Archive,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,10 +40,16 @@ import type {
   BillType,
   CommercialBillsSummary,
 } from '../types/commercial-bills.types';
+import type { RemittanceBordereau } from '../types/remittance-bordereau.types';
 import {
   fetchCommercialBillsAction,
   getCommercialBillsSummaryAction,
+  sendCommercialBillWhatsAppAlertAction,
 } from '../services/commercial-bills.actions';
+import {
+  fetchRemittanceBordereauxAction,
+  exportBordereauEdiAction,
+} from '../services/remittance-bordereau.actions';
 import { getMaturityUrgency } from '../services/commercial-bills-calc.service';
 import { NewCommercialBillModal } from './NewCommercialBillModal';
 import { BillLifecycleModal } from './BillLifecycleModal';
@@ -56,6 +67,7 @@ export function CommercialBillsPortfolioCard({
 }: CommercialBillsPortfolioCardProps) {
   const t = useTranslations('commercialBills');
   const tb = useTranslations('remittanceBordereau');
+  const locale = useLocale() as 'ar' | 'fr' | 'es';
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -68,6 +80,10 @@ export function CommercialBillsPortfolioCard({
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [showBordereauModal, setShowBordereauModal] = useState(false);
 
+  // Bordereaux history & EDI export state
+  const [bordereauxList, setBordereauxList] = useState<RemittanceBordereau[]>([]);
+  const [showBordereauxHistory, setShowBordereauxHistory] = useState(false);
+
   // Modals state
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedBillForAction, setSelectedBillForAction] = useState<{
@@ -78,9 +94,10 @@ export function CommercialBillsPortfolioCard({
   // Load data if empty
   const loadBills = () => {
     startTransition(async () => {
-      const [billsRes, summaryRes] = await Promise.all([
+      const [billsRes, summaryRes, brdRes] = await Promise.all([
         fetchCommercialBillsAction(),
         getCommercialBillsSummaryAction(),
+        fetchRemittanceBordereauxAction(),
       ]);
 
       if (billsRes.success && billsRes.data) {
@@ -88,6 +105,9 @@ export function CommercialBillsPortfolioCard({
       }
       if (summaryRes.success && summaryRes.data) {
         setSummary(summaryRes.data);
+      }
+      if (brdRes.success && brdRes.bordereaux) {
+        setBordereauxList(brdRes.bordereaux);
       }
     });
   };
@@ -227,6 +247,68 @@ export function CommercialBillsPortfolioCard({
     }
   };
 
+  const handleSendWhatsAppAlert = async (
+    bill: CommercialBill,
+    alertType: 'maturity_reminder' | 'bounced_alert'
+  ) => {
+    const res = await sendCommercialBillWhatsAppAlertAction({
+      billId: bill.id,
+      alertType,
+      locale,
+      fallbackBill: bill,
+    });
+
+    if (res.success) {
+      toast({
+        title: t('whatsappAlertSentTitle'),
+        description: t('whatsappAlertSentDesc', {
+          number: bill.billNumber,
+          client: bill.clientName,
+        }),
+      });
+      if (!res.dispatchedViaApi && res.whatsappLink && typeof window !== 'undefined') {
+        window.open(res.whatsappLink, '_blank', 'noopener,noreferrer');
+      }
+    } else {
+      toast({
+        title: t('whatsappAlertErrorTitle'),
+        description: res.error || t('whatsappAlertErrorDesc'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleExportBordereauEdi = async (
+    bordereau: RemittanceBordereau,
+    format: 'simt' | 'xml'
+  ) => {
+    const res = await exportBordereauEdiAction(bordereau.id, format, bordereau);
+    if (res.success && res.content && res.filename) {
+      const blob = new Blob([res.content], {
+        type: res.mimeType || 'text/plain;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = res.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: tb('ediExportSuccessTitle'),
+        description: tb('ediExportSuccessDesc', { filename: res.filename }),
+      });
+    } else {
+      toast({
+        title: tb('generationErrorTitle'),
+        description: res.error || tb('generationErrorDefault'),
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <Card className="border-border shadow-sm">
       <CardHeader className="pb-3">
@@ -244,7 +326,7 @@ export function CommercialBillsPortfolioCard({
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2 self-start md:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
             {selectedBillIds.length > 0 && (
               <Button
                 size="sm"
@@ -255,6 +337,17 @@ export function CommercialBillsPortfolioCard({
                 <span>{tb('generateBordereauBtn')} ({selectedBillIds.length})</span>
               </Button>
             )}
+            <Button
+              size="sm"
+              variant={showBordereauxHistory ? 'secondary' : 'outline'}
+              onClick={() => setShowBordereauxHistory((prev) => !prev)}
+              className="text-xs gap-1.5"
+            >
+              <Archive className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>
+                {tb('bordereauxHistoryBtn')} ({bordereauxList.length})
+              </span>
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -358,6 +451,108 @@ export function CommercialBillsPortfolioCard({
             </span>
           </div>
         </div>
+
+        {/* Collapsible Bordereaux History & EDI Teletransmission Panel */}
+        {showBordereauxHistory && (
+          <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/30 dark:bg-indigo-950/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {tb('bordereauxHistoryTitle')}
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                SIMT 160B / ISO 20022 XML
+              </Badge>
+            </div>
+
+            {bordereauxList.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-400">
+                {tb('noBordereauxFound')}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <table className="w-full text-xs text-start">
+                  <thead className="bg-slate-50 dark:bg-slate-800/70 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-2 px-3">{tb('bordereauRefCol')}</th>
+                      <th className="py-2 px-3">{tb('remittanceTypeLabel')}</th>
+                      <th className="py-2 px-3">{tb('bankAccountLabel')}</th>
+                      <th className="py-2 px-3">{tb('billsCountLabel')}</th>
+                      <th className="py-2 px-3">{tb('totalFaceValueLabel')}</th>
+                      <th className="py-2 px-3 text-end">{t('colActions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {bordereauxList.map((brd) => (
+                      <tr key={brd.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {brd.bordereauNumber}
+                        </td>
+                        <td className="py-2 px-3">
+                          <Badge
+                            variant="outline"
+                            className={
+                              brd.bordereauType === 'escompte'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 text-[10px]'
+                                : 'bg-blue-50 text-blue-700 border-blue-200 text-[10px]'
+                            }
+                          >
+                            {brd.bordereauType === 'escompte'
+                              ? tb('typeEscompte')
+                              : tb('typeEncaissement')}
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 font-medium">{brd.bankName}</td>
+                        <td className="py-2 px-3 font-mono">{brd.billsCount}</td>
+                        <td className="py-2 px-3 font-mono font-bold">
+                          {brd.totalFaceValue.toLocaleString('fr-MA', {
+                            minimumFractionDigits: 2,
+                          })}{' '}
+                          MAD
+                        </td>
+                        <td className="py-2 px-3 text-end">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                window.open(`/api/treasury/bordereau/${brd.id}`, '_blank')
+                              }
+                              className="h-6 text-[10px] px-2 gap-1"
+                            >
+                              <Printer className="w-3 h-3" />
+                              PDF
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleExportBordereauEdi(brd, 'simt')}
+                              className="h-6 text-[10px] px-2 gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-300"
+                            >
+                              <Download className="w-3 h-3" />
+                              SIMT
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleExportBordereauEdi(brd, 'xml')}
+                              className="h-6 text-[10px] px-2 gap-1 text-indigo-700 border-indigo-200 hover:bg-indigo-50 dark:text-indigo-300"
+                            >
+                              <Code2 className="w-3 h-3" />
+                              XML
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Filter Tabs & Search */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
@@ -540,16 +735,27 @@ export function CommercialBillsPortfolioCard({
                       {(bill.status === 'in_portfolio' ||
                         bill.status === 'remitted_for_collection' ||
                         bill.status === 'discounted') && (
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            setSelectedBillForAction({ bill, actionType: 'clear' })
-                          }
-                          className="h-7 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          <CheckCircle2 className="w-3 h-3 me-1" />
-                          {t('clearBtn')}
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              setSelectedBillForAction({ bill, actionType: 'clear' })
+                            }
+                            className="h-7 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            <CheckCircle2 className="w-3 h-3 me-1" />
+                            {t('clearBtn')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSendWhatsAppAlert(bill, 'maturity_reminder')}
+                            title={t('whatsappReminderBtn')}
+                            className="h-7 text-[11px] px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-300"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                          </Button>
+                        </>
                       )}
 
                       {(bill.status === 'remitted_for_collection' ||
@@ -564,6 +770,18 @@ export function CommercialBillsPortfolioCard({
                         >
                           <AlertTriangle className="w-3 h-3 me-1" />
                           {t('bounceBtn')}
+                        </Button>
+                      )}
+
+                      {bill.status === 'bounced_unpaid' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSendWhatsAppAlert(bill, 'bounced_alert')}
+                          className="h-7 text-[11px] px-2 text-rose-700 border-rose-200 hover:bg-rose-50 dark:text-rose-300 gap-1"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          {t('whatsappBounceAlertBtn')}
                         </Button>
                       )}
                     </div>
@@ -625,8 +843,9 @@ export function CommercialBillsPortfolioCard({
           onClose={() => setShowBordereauModal(false)}
           selectedBills={selectedBillsForBordereau}
           bankAccounts={bankAccounts}
-          onSuccess={() => {
+          onSuccess={(newBordereau) => {
             setSelectedBillIds([]);
+            setBordereauxList((prev) => [newBordereau, ...prev]);
             loadBills();
           }}
         />
