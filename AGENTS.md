@@ -77,6 +77,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202611030001_groupage_split_billing_and_cost_allocation.sql` — Groupage Split-Billing & Cost Allocation Engine (`groupage_trip_cost_allocations` table, `trip_consignments` billing columns, `invoices` consignment links, RLS policies).
 - `supabase/migrations/202611040001_consignment_multidrop_and_epod.sql` — Multi-Drop Sequencing & Consignment-Level e-POD Engine (`trip_consignments` drop sequence, e-POD signatures, HMAC forensic hash, tracking token).
 - `supabase/migrations/202611050001_packing_list_ai_parser.sql` — AI Transport Order & Packing List Parser Engine (`trip_consignments` hs_code, `packing_list_parsing_logs` table, `shipping-documents` storage bucket).
+- `supabase/migrations/202611060001_commercial_bills_and_lcn.sql` — Commercial Bills, Promissory Notes & Moroccan LCN Engine (`commercial_bills` table, RLS policies, FIFO clearing link, `commercial-bills` bucket).
 
 
 

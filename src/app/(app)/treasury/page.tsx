@@ -25,6 +25,7 @@ import {
   X
 } from 'lucide-react';
 import { YearEndClosingWizard } from '@/features/accounting/components/YearEndClosingWizard';
+import { CommercialBillsPortfolioCard } from '@/features/treasury/components/CommercialBillsPortfolioCard';
 import { formatCurrency, groupBalancesByCurrency } from '@/lib/forex';
 import { useLanguage } from '@/components/language-provider';
 import { DEFAULT_BANK_ACCOUNTS, DEFAULT_CASH_BOXES, fallbackArray } from '@/lib/default-data';
@@ -381,6 +382,9 @@ export default function TreasuryPage() {
           )}
         </div>
       </div>
+
+      {/* Commercial Bills & LCN Portfolio Dashboard */}
+      <CommercialBillsPortfolioCard bankAccounts={bankAccounts} />
 
       {/* Search Bar */}
       <div className="relative">
