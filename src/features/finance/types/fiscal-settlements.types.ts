@@ -11,6 +11,7 @@ export type ExpenseCategory =
   | 'ferry'
   | 'port_customs'
   | 'fine'
+  | 'fuel_anomaly_deduction'
   | 'advance'
   | 'other';
 
@@ -49,12 +50,13 @@ export interface DriverSettlementStatement {
   total_ferry_expenses_mad: number;
   total_port_customs_mad: number;
   total_fines_mad: number;
+  total_fuel_anomalies_deduction_mad?: number;
   total_other_expenses_mad: number;
   total_driver_expenses_mad: number;
 
   // Reconciliation
   expenses_advances_balance_mad: number; // positive = company reimburses driver, negative = driver owes company
-  net_payout_mad: number; // gross_driver_earnings + expenses_advances_balance - total_fines
+  net_payout_mad: number; // gross_driver_earnings + expenses_advances_balance - total_fines - total_fuel_anomalies_deduction
 
   // Operational Metrics
   trips_count: number;
@@ -157,6 +159,21 @@ export interface CalculateDriverSettlementInput {
     deducted_from_settlement?: boolean;
     date?: string;
   }>;
+  confirmedFuelThefts?: Array<{
+    id: string | number;
+    loss_liters?: number;
+    financial_loss_mad: number;
+    location_name?: string;
+    date?: string;
+    deducted_from_settlement?: boolean;
+  }>;
+  unjustifiedFuelOverburn?: Array<{
+    tripId: number;
+    excessLiters: number;
+    pricePerLiterMad: number;
+    corridorCode?: string;
+    date?: string;
+  }>;
   otherExpenses?: Array<{
     id: string | number;
     amount: number;
@@ -181,11 +198,29 @@ export interface DriverSettlementCalculationResult {
 
   expensesVsAdvancesBalance: number; // positive: owed to driver, negative: driver owes company
   totalFinesToDeduct: number;
+  totalFuelAnomaliesDeduction: number;
   netPayout: number;
 
   tripsCount: number;
   totalDistanceKm: number;
   itemizedExpenses: ItemizedExpenseRecord[];
+}
+
+export interface AtomicTripClosingValidationInput {
+  tripId: number;
+  corridorCode: 'MA-ES-FR' | 'MA-MR-SN' | 'DOMESTIC-MA';
+  unsettledAdvancesCount: number;
+  unsettledAdvancesAmountMad: number;
+  unresolvedFuelAnomaliesCount: number;
+  ferryExpensesTotalMad: number;
+  customsTransitTotalMad: number;
+}
+
+export interface AtomicTripClosingValidationResult {
+  tripId: number;
+  canCloseAtomically: boolean;
+  blockingReasons: string[];
+  warnings: string[];
 }
 
 export interface CalculateTripPnlInput {

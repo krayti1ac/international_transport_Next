@@ -127,6 +127,25 @@ export async function generateDriverSettlementStatementAction(
 
     const fines = (finesData || []) as FinePenalty[];
 
+    // 7.5 استعلام وقائع شفط/شذوذ المحروقات المؤكدة على السائق خلال الفترة (من رادار المحروقات)
+    const { data: fuelTheftsData } = await supabase
+      .from('fuel_theft_incidents')
+      .select('*')
+      .eq('driver_id', input.driverId)
+      .gte('created_at', input.periodStart)
+      .lte('created_at', `${input.periodEnd}T23:59:59Z`);
+
+    const confirmedFuelThefts = ((fuelTheftsData || []) as any[])
+      .filter((inc) => inc.status !== 'dismissed' && inc.status !== 'false_positive')
+      .map((inc) => ({
+        id: inc.id,
+        loss_liters: Number(inc.detected_loss_liters || 0),
+        financial_loss_mad: Number(inc.financial_loss_mad || 0),
+        location_name: inc.location_name || 'رادار CAN-Bus للمحروقات',
+        date: inc.created_at,
+        deducted_from_settlement: Boolean(inc.deducted_from_settlement),
+      }));
+
     // 8. تشغيل المحرك المالي الصارم (Decimal.js)
     const calculation = FiscalSettlementsService.calculateDriverSettlement({
       driverId: input.driverId,
@@ -174,6 +193,7 @@ export async function generateDriverSettlementStatementAction(
         deducted_from_settlement: fn.deducted_from_settlement,
         date: fn.created_at,
       })),
+      confirmedFuelThefts,
     });
 
     const statementNumber = FiscalSettlementsService.generateStatementNumber(
@@ -192,6 +212,11 @@ export async function generateDriverSettlementStatementAction(
 
     let savedStatement: DriverSettlementStatement;
 
+    const combinedFinesAndFuelAnomaliesMad = new Decimal(calculation.totalFinesToDeduct)
+      .plus(new Decimal(calculation.totalFuelAnomaliesDeduction))
+      .toDecimalPlaces(2)
+      .toNumber();
+
     const payload = {
       driver_id: input.driverId,
       period_start: input.periodStart,
@@ -206,7 +231,7 @@ export async function generateDriverSettlementStatementAction(
       total_toll_expenses_mad: calculation.totalTolls,
       total_ferry_expenses_mad: calculation.totalFerries,
       total_port_customs_mad: calculation.totalPortCustoms,
-      total_fines_mad: calculation.totalFinesToDeduct,
+      total_fines_mad: combinedFinesAndFuelAnomaliesMad,
       total_other_expenses_mad: calculation.totalOtherExpenses,
       total_driver_expenses_mad: calculation.totalDriverExpenses,
       expenses_advances_balance_mad: calculation.expensesVsAdvancesBalance,
@@ -218,6 +243,11 @@ export async function generateDriverSettlementStatementAction(
       toll_expense_ids: tollRecords.map((t) => t.id),
       fine_ids: fines.map((f) => f.id),
       itemized_expenses: calculation.itemizedExpenses,
+      metadata: {
+        trafficFinesMad: calculation.totalFinesToDeduct,
+        fuelAnomaliesDeductionMad: calculation.totalFuelAnomaliesDeduction,
+        fuelTheftIncidentIds: confirmedFuelThefts.map((t) => t.id),
+      },
       notes: input.notes || null,
       updated_at: new Date().toISOString(),
     };
@@ -247,6 +277,8 @@ export async function generateDriverSettlementStatementAction(
       savedStatement = data as DriverSettlementStatement;
     }
 
+    savedStatement.total_fuel_anomalies_deduction_mad = calculation.totalFuelAnomaliesDeduction;
+
     await recordAuditLog({
       entityType: 'driver_settlement_statement',
       entityId: savedStatement.id,
@@ -256,6 +288,7 @@ export async function generateDriverSettlementStatementAction(
         statementNumber: savedStatement.statement_number,
         netPayout: calculation.netPayout,
         advancesVsExpenses: calculation.expensesVsAdvancesBalance,
+        fuelAnomaliesDeduction: calculation.totalFuelAnomaliesDeduction,
       },
     });
 
@@ -450,11 +483,17 @@ export async function getDriverSettlementsAction(filter?: {
 }
 
 /**
- * إغلاق ومصادقة الميزانية التشغيلية لرحلة دولية (Trip Fiscal P&L Closing)
+ * إغلاق ومصادقة الميزانية التشغيلية لرحلة دولية (Atomic Trip Fiscal P&L Closing)
+ * يمنع الإغلاق قبل تصفية السلف، البت في شذوذ الوقود، ومطابقة وصولات العبّارات والترانزيت الدولي
  */
 export async function closeTripFiscalPnlAction(
-  rawInput: z.infer<typeof CloseTripPnlSchema>
-): Promise<{ success: boolean; data?: TripFiscalClosing; error?: string }> {
+  rawInput: z.infer<typeof CloseTripPnlSchema> & { forceOverride?: boolean }
+): Promise<{
+  success: boolean;
+  data?: TripFiscalClosing;
+  blockingReasons?: string[];
+  error?: string;
+}> {
   try {
     const input = CloseTripPnlSchema.parse(rawInput);
     const supabase = await createClient();
@@ -470,12 +509,29 @@ export async function closeTripFiscalPnlAction(
       return { success: false, error: 'الرحلة المطلوبة غير موجودة' };
     }
 
-    // جلب الرسوم والمصاريف
-    const [tollsRes, ferriesRes, maintenanceRes] = await Promise.all([
-      supabase.from('trip_toll_expenses').select('amount_mad, amount_eur').eq('trip_id', trip.id),
-      supabase.from('ferry_expenses').select('amount').eq('trip_order_id', trip.id),
-      supabase.from('truck_maintenance').select('amount, cost').eq('trip_id', trip.id),
-    ]);
+    // جلب الرسوم والمصاريف والسلف وتنبيهات شذوذ الوقود
+    const [tollsRes, ferriesRes, maintenanceRes, advancesRes, fuelAnomaliesRes] =
+      await Promise.all([
+        supabase
+          .from('trip_toll_expenses')
+          .select('amount_mad, amount_eur')
+          .eq('trip_id', trip.id),
+        supabase.from('ferry_expenses').select('amount').eq('trip_order_id', trip.id),
+        supabase.from('truck_maintenance').select('amount, cost').eq('trip_id', trip.id),
+        trip.driver_id
+          ? supabase
+              .from('advances')
+              .select('id, amount, status')
+              .eq('driver_id', trip.driver_id)
+              .eq('status', 'pending')
+              .eq('is_deleted', false)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase
+          .from('fuel_theft_incidents')
+          .select('id, status')
+          .eq('trip_id', trip.id)
+          .eq('status', 'open'),
+      ]);
 
     const tollsCost = (tollsRes.data || []).reduce(
       (sum, t: any) => sum.plus(new Decimal(t.amount_mad || 0)),
@@ -498,13 +554,71 @@ export async function closeTripFiscalPnlAction(
       .plus(new Decimal(trip.transit_almeria_cost || 0))
       .plus(new Decimal(trip.marsa_maroc_cost || 0));
 
+    const customsTransitCost = new Decimal(trip.triptik_cost || 0)
+      .plus(new Decimal(trip.transit_almeria_cost || 0))
+      .plus(new Decimal(trip.marsa_maroc_cost || 0));
+
     const finalFerryCost = ferryCost.greaterThan(0) ? ferryCost : portFees;
+
+    // تحديد الممر الدولي للرحلة (MA-ES-FR / MA-MR-SN / DOMESTIC-MA)
+    const routeText = `${(trip as any).corridor || ''} ${trip.route || ''} ${
+      trip.route_export || ''
+    }`.toLowerCase();
+    let corridorCode: 'MA-ES-FR' | 'MA-MR-SN' | 'DOMESTIC-MA' = 'DOMESTIC-MA';
+    if (
+      routeText.includes('eu') ||
+      routeText.includes('espagne') ||
+      routeText.includes('spain') ||
+      routeText.includes('france') ||
+      routeText.includes('madrid') ||
+      routeText.includes('algeciras')
+    ) {
+      corridorCode = 'MA-ES-FR';
+    } else if (
+      routeText.includes('af') ||
+      routeText.includes('mauritanie') ||
+      routeText.includes('senegal') ||
+      routeText.includes('dakar') ||
+      routeText.includes('nouakchott') ||
+      routeText.includes('guerguerat')
+    ) {
+      corridorCode = 'MA-MR-SN';
+    }
+
+    const pendingAdvances = advancesRes.data || [];
+    const pendingAdvancesSum = pendingAdvances.reduce(
+      (acc: InstanceType<typeof Decimal>, a: any) => acc.plus(new Decimal(a.amount || 0)),
+      new Decimal(0)
+    );
+    const unresolvedFuelAnomaliesCount = (fuelAnomaliesRes.data || []).length;
+
+    // فحص الجاهزية الذرية للإغلاق المحاسبي (Atomic Pre-Closing Guard)
+    const readiness = FiscalSettlementsService.validateAtomicTripFiscalClosingReadiness({
+      tripId: trip.id,
+      corridorCode,
+      unsettledAdvancesCount: pendingAdvances.length,
+      unsettledAdvancesAmountMad: pendingAdvancesSum.toNumber(),
+      unresolvedFuelAnomaliesCount,
+      ferryExpensesTotalMad: finalFerryCost.toNumber(),
+      customsTransitTotalMad: customsTransitCost.greaterThan(0)
+        ? customsTransitCost.toNumber()
+        : finalFerryCost.toNumber(),
+    });
+
+    if (!readiness.canCloseAtomically && !rawInput.forceOverride) {
+      return {
+        success: false,
+        blockingReasons: readiness.blockingReasons,
+        error: readiness.blockingReasons.join(' | '),
+      };
+    }
 
     // عمولة / تكلفة السائق المقدرة (سلف أو مكافأة رحلة)
     const driverCost = new Decimal(trip.price || 0).times(new Decimal(0.05)); // 5% كمثال
 
-    const revenue = new Decimal(trip.price_export || 0)
-      .plus(new Decimal(trip.price_import || 0));
+    const revenue = new Decimal(trip.price_export || 0).plus(
+      new Decimal(trip.price_import || 0)
+    );
     const finalRevenue = revenue.greaterThan(0) ? revenue : new Decimal(trip.price || 0);
 
     const pnl = FiscalSettlementsService.calculateTripPnl({
@@ -513,7 +627,7 @@ export async function closeTripFiscalPnlAction(
       fuelCost: fuelCost.toNumber(),
       tollsCost: tollsCost.toNumber(),
       ferryCost: finalFerryCost.toNumber(),
-      customsPortsCost: 0,
+      customsPortsCost: customsTransitCost.toNumber(),
       driverCost: driverCost.toNumber(),
     });
 
@@ -537,7 +651,12 @@ export async function closeTripFiscalPnlAction(
       is_closed: true,
       closed_at: now,
       closed_by: userId,
-      metadata: { profitabilityTier: pnl.profitabilityTier, notes: input.notes },
+      metadata: {
+        profitabilityTier: pnl.profitabilityTier,
+        corridorCode,
+        atomicValidationPassed: readiness.canCloseAtomically,
+        notes: input.notes,
+      },
       updated_at: now,
     };
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useTransition, useCallback } from 'react';
+import Decimal from 'decimal.js';
 import { useLanguage } from '@/components/language-provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -558,7 +559,13 @@ export function FiscalSettlementsView() {
                           </td>
 
                           <td className="py-3 px-3 text-end font-mono font-black text-sm text-primary">
-                            {formatCurrency(stmt.net_payout_mad, 'MAD')}
+                            <div>{formatCurrency(stmt.net_payout_mad, 'MAD')}</div>
+                            {Number(stmt.total_fines_mad || 0) > 0 && (
+                              <div className="text-[10px] text-rose-600 font-semibold mt-0.5">
+                                -{formatCurrency(stmt.total_fines_mad, 'MAD')}{' '}
+                                {t('خصم مخالفات/وقود', 'Malus/Carburant', 'Multas/Combustible')}
+                              </div>
+                            )}
                           </td>
 
                           <td className="py-3 px-3 text-center">
@@ -709,13 +716,31 @@ export function FiscalSettlementsView() {
                 <tbody className="divide-y divide-border">
                   {trips.length > 0 ? (
                     trips.map((trip) => {
-                      const revenue = Number(trip.price_export || 0) + Number(trip.price_import || 0) || Number(trip.price || 0);
-                      const ferry = Number(trip.ferry_cost || 4500) + Number(trip.triptik_cost || 500);
-                      const estFuel = 6500;
-                      const estTolls = 2200;
-                      const totalCosts = estFuel + estTolls + ferry;
-                      const grossProfit = revenue - totalCosts;
-                      const marginPct = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0;
+                      const roundTripDec = new Decimal(trip.price_export || 0).plus(
+                        new Decimal(trip.price_import || 0)
+                      );
+                      const revenueDec = roundTripDec.greaterThan(0)
+                        ? roundTripDec
+                        : new Decimal(trip.price || 0);
+                      const ferryDec = new Decimal(trip.ferry_cost || 4500).plus(
+                        new Decimal(trip.triptik_cost || 500)
+                      );
+                      const estFuelDec = new Decimal(6500);
+                      const estTollsDec = new Decimal(2200);
+                      const totalCostsDec = estFuelDec.plus(estTollsDec).plus(ferryDec);
+                      const grossProfitDec = revenueDec.minus(totalCostsDec);
+                      const marginPct = revenueDec.greaterThan(0)
+                        ? grossProfitDec
+                            .dividedBy(revenueDec)
+                            .times(100)
+                            .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
+                            .toNumber()
+                        : 0;
+                      const revenue = revenueDec.toNumber();
+                      const ferry = ferryDec.toNumber();
+                      const estFuel = estFuelDec.toNumber();
+                      const estTolls = estTollsDec.toNumber();
+                      const grossProfit = grossProfitDec.toNumber();
 
                       return (
                         <tr key={trip.id} className="hover:bg-muted/20 transition-colors">
@@ -777,7 +802,7 @@ export function FiscalSettlementsView() {
                               className="h-7 px-2.5 text-xs gap-1"
                             >
                               <Lock className="w-3.5 h-3.5" />
-                              <span>{t('إغلاق الميزانية', 'Clôturer', 'Cerrar P&L')}</span>
+                              <span>{t('إغلاق ذري للميزانية', 'Clôture Atomique', 'Cierre Atómico P&L')}</span>
                             </Button>
                           </td>
                         </tr>

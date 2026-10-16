@@ -381,4 +381,100 @@ describe('FiscalSettlementsService — Strict Decimal.js Precision & Closed-Loop
       expect(num1).not.toBe(num2);
     });
   });
+
+  describe('Track C: Fuel Anomaly / Siphoning Deductions & Atomic Trip Fiscal Closing Guard', () => {
+    it('deducts confirmed fuel thefts and unjustified tractor fuel over-burn from driver net payout using Decimal.js', () => {
+      const input: CalculateDriverSettlementInput = {
+        driverId: 21,
+        baseSalary: 6000,
+        bonusPercentage: 5,
+        safetyScore: 88,
+        trips: [{ id: 301, price: 20000, distance_km: 2400 }], // Bonus = 1000 => Gross = 7000 MAD
+        advances: [{ id: 1, amount: 5000, date: '2026-10-02' }],
+        fuelExpenses: [{ id: 1, amount: 5000, date: '2026-10-03' }], // Balance = 0
+        tollExpenses: [],
+        ferryExpenses: [],
+        fines: [{ id: 10, amount: 400, fine_type: 'speeding', deducted_from_settlement: false }],
+        confirmedFuelThefts: [
+          {
+            id: 'THF-91',
+            loss_liters: 65,
+            financial_loss_mad: 858.0,
+            location_name: 'Larache Rest Area',
+            date: '2026-10-04',
+            deducted_from_settlement: false,
+          },
+        ],
+        unjustifiedFuelOverburn: [
+          {
+            tripId: 301,
+            excessLiters: 25,
+            pricePerLiterMad: 13.2, // 25 * 13.20 = 330.00 MAD
+            corridorCode: 'MA-ES-FR',
+            date: '2026-10-05',
+          },
+        ],
+      };
+
+      const result = FiscalSettlementsService.calculateDriverSettlement(input);
+
+      // Fuel Anomalies = 858.00 + 330.00 = 1188.00 MAD
+      expect(result.totalFuelAnomaliesDeduction).toBe(1188);
+      expect(result.totalFinesToDeduct).toBe(400);
+      // Net Payout = 7000 (gross) + 0 (balance) - 400 (fines) - 1188 (fuel anomalies) = 5412.00 MAD
+      expect(result.netPayout).toBe(5412);
+
+      const anomalyItems = result.itemizedExpenses.filter(
+        (e) => e.category === 'fuel_anomaly_deduction'
+      );
+      expect(anomalyItems).toHaveLength(2);
+      expect(anomalyItems[0].isAttributableToDriver).toBe(true);
+    });
+
+    it('blocks atomic trip fiscal closing when unsettled advances, unresolved fuel anomalies, or missing corridor ferry/transit receipts exist', () => {
+      // Case 1: Blocked on European corridor due to unsettled advances, open fuel anomaly, and missing ferry receipt
+      const blockedEu = FiscalSettlementsService.validateAtomicTripFiscalClosingReadiness({
+        tripId: 701,
+        corridorCode: 'MA-ES-FR',
+        unsettledAdvancesCount: 1,
+        unsettledAdvancesAmountMad: 2500,
+        unresolvedFuelAnomaliesCount: 1,
+        ferryExpensesTotalMad: 0,
+        customsTransitTotalMad: 500,
+      });
+
+      expect(blockedEu.canCloseAtomically).toBe(false);
+      expect(blockedEu.blockingReasons).toHaveLength(3);
+
+      // Case 2: Blocked on West African corridor due to missing Guerguerat / Mauritanian transit customs receipt
+      const blockedAf = FiscalSettlementsService.validateAtomicTripFiscalClosingReadiness({
+        tripId: 702,
+        corridorCode: 'MA-MR-SN',
+        unsettledAdvancesCount: 0,
+        unsettledAdvancesAmountMad: 0,
+        unresolvedFuelAnomaliesCount: 0,
+        ferryExpensesTotalMad: 0,
+        customsTransitTotalMad: 0,
+      });
+
+      expect(blockedAf.canCloseAtomically).toBe(false);
+      expect(blockedAf.blockingReasons).toHaveLength(1);
+      expect(blockedAf.blockingReasons[0]).toContain('MA-MR-SN');
+
+      // Case 3: Ready for atomic closing when all corridor and custody requirements are satisfied
+      const readyEu = FiscalSettlementsService.validateAtomicTripFiscalClosingReadiness({
+        tripId: 703,
+        corridorCode: 'MA-ES-FR',
+        unsettledAdvancesCount: 0,
+        unsettledAdvancesAmountMad: 0,
+        unresolvedFuelAnomaliesCount: 0,
+        ferryExpensesTotalMad: 7000,
+        customsTransitTotalMad: 1200,
+      });
+
+      expect(readyEu.canCloseAtomically).toBe(true);
+      expect(readyEu.blockingReasons).toHaveLength(0);
+    });
+  });
 });
+

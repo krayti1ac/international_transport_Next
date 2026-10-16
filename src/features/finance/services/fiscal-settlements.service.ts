@@ -190,11 +190,63 @@ export class FiscalSettlementsService {
       }
     });
 
+    // 9.5 تجميع خصومات شذوذ الوقود ووقائع الشفط المؤكدة وفروقات الاستهلاك غير المبررة (Decimal.js)
+    let totalFuelAnomaliesDeductionDec = new Decimal(0);
+
+    if (input.confirmedFuelThefts) {
+      input.confirmedFuelThefts.forEach((theft) => {
+        if (!theft.deducted_from_settlement) {
+          const lossMadDec = Decimal.max(0, new Decimal(theft.financial_loss_mad || 0));
+          if (lossMadDec.greaterThan(0)) {
+            totalFuelAnomaliesDeductionDec = totalFuelAnomaliesDeductionDec.plus(lossMadDec);
+            itemizedExpenses.push({
+              id: `fuel-theft-${theft.id}`,
+              category: 'fuel_anomaly_deduction',
+              amount: lossMadDec.toDecimalPlaces(2).toNumber(),
+              currency: 'MAD',
+              date: theft.date ? theft.date.split('T')[0] : new Date().toISOString().split('T')[0],
+              reference: `THEFT-#${theft.id}`,
+              description: `خصم واقعة شفط/نقص وقود معتمدة (${theft.location_name || 'رادار CAN-Bus'}${
+                theft.loss_liters ? ` - ${theft.loss_liters}L` : ''
+              })`,
+              isAttributableToDriver: true,
+            });
+          }
+        }
+      });
+    }
+
+    if (input.unjustifiedFuelOverburn) {
+      input.unjustifiedFuelOverburn.forEach((overburn) => {
+        const excessLitersDec = Decimal.max(0, new Decimal(overburn.excessLiters || 0));
+        const pricePerLiterDec = Decimal.max(0, new Decimal(overburn.pricePerLiterMad || 13.2));
+        const penaltyMadDec = excessLitersDec.times(pricePerLiterDec);
+
+        if (penaltyMadDec.greaterThan(0)) {
+          totalFuelAnomaliesDeductionDec = totalFuelAnomaliesDeductionDec.plus(penaltyMadDec);
+          itemizedExpenses.push({
+            id: `overburn-trip-${overburn.tripId}`,
+            category: 'fuel_anomaly_deduction',
+            amount: penaltyMadDec.toDecimalPlaces(2).toNumber(),
+            currency: 'MAD',
+            date: overburn.date || new Date().toISOString().split('T')[0],
+            reference: `OVERBURN-T${overburn.tripId}`,
+            description: `خصم هدر وقود غير مبرر لمحرك الجر (${excessLitersDec.toFixed(
+              2
+            )}L × ${pricePerLiterDec.toFixed(2)} MAD - رحلة #${overburn.tripId})`,
+            tripId: overburn.tripId,
+            isAttributableToDriver: true,
+          });
+        }
+      });
+    }
+
     // 10. صافي الصرف للسائق (Net Payout)
-    // netPayout = grossEarnings + expensesVsAdvancesBalance - totalFinesToDeduct
+    // netPayout = grossEarnings + expensesVsAdvancesBalance - totalFinesToDeduct - totalFuelAnomaliesDeduction
     const netPayoutDec = grossEarningsDec
       .plus(expensesVsAdvancesBalanceDec)
-      .minus(totalFinesToDeductDec);
+      .minus(totalFinesToDeductDec)
+      .minus(totalFuelAnomaliesDeductionDec);
 
     return {
       baseSalary: baseSalaryDec.toDecimalPlaces(2).toNumber(),
@@ -212,11 +264,73 @@ export class FiscalSettlementsService {
 
       expensesVsAdvancesBalance: expensesVsAdvancesBalanceDec.toDecimalPlaces(2).toNumber(),
       totalFinesToDeduct: totalFinesToDeductDec.toDecimalPlaces(2).toNumber(),
+      totalFuelAnomaliesDeduction: totalFuelAnomaliesDeductionDec.toDecimalPlaces(2).toNumber(),
       netPayout: netPayoutDec.toDecimalPlaces(2).toNumber(),
 
       tripsCount: input.trips.length,
       totalDistanceKm: totalDistanceDec.toDecimalPlaces(2).toNumber(),
       itemizedExpenses,
+    };
+  }
+
+  /**
+   * التحقق الذري المسبق قبل إغلاق الفترة المحاسبية للرحلة (Atomic Trip Fiscal Closing Guard)
+   * يمنع إغلاق الرحلة قبل تصفية السلف، البت في شذوذ الوقود، ومطابقة وصولات العبّارات والترانزيت الدولي
+   */
+  public static validateAtomicTripFiscalClosingReadiness(input: {
+    tripId: number;
+    corridorCode: 'MA-ES-FR' | 'MA-MR-SN' | 'DOMESTIC-MA';
+    unsettledAdvancesCount: number;
+    unsettledAdvancesAmountMad: number;
+    unresolvedFuelAnomaliesCount: number;
+    ferryExpensesTotalMad: number;
+    customsTransitTotalMad: number;
+  }): {
+    tripId: number;
+    canCloseAtomically: boolean;
+    blockingReasons: string[];
+    warnings: string[];
+  } {
+    const blockingReasons: string[] = [];
+    const warnings: string[] = [];
+
+    const unsettledAmtDec = new Decimal(input.unsettledAdvancesAmountMad || 0);
+    const ferryAmtDec = new Decimal(input.ferryExpensesTotalMad || 0);
+    const transitAmtDec = new Decimal(input.customsTransitTotalMad || 0);
+
+    // 1. Check unsettled driver advances
+    if (input.unsettledAdvancesCount > 0 || unsettledAmtDec.greaterThan(0)) {
+      blockingReasons.push(
+        `لا يمكن إغلاق الرحلة #${input.tripId} محاسبياً قبل تصفية عهدة السائق (${input.unsettledAdvancesCount} سلف معلقة بقيمة ${unsettledAmtDec.toFixed(2)} MAD).`
+      );
+    }
+
+    // 2. Check unresolved fuel anomalies / siphoning incidents
+    if (input.unresolvedFuelAnomaliesCount > 0) {
+      blockingReasons.push(
+        `يوجد (${input.unresolvedFuelAnomaliesCount}) تنبيه شذوذ محروقات أو إيصال OCR قيد المراجعة الجنائية للرحلة #${input.tripId} لم يُبت فيه بعد.`
+      );
+    }
+
+    // 3. Check mandatory Ferry receipt for European Corridor (MA-ES-FR)
+    if (input.corridorCode === 'MA-ES-FR' && ferryAmtDec.lessThanOrEqualTo(0)) {
+      blockingReasons.push(
+        `إغلاق محظور لممر أوروبا (MA-ES-FR): لم يتم تسجيل ومطابقة وصل تذكرة العبّارة البحرية الإلزامي (طنجة المتوسط / الجزيرة الخضراء) للرحلة #${input.tripId}.`
+      );
+    }
+
+    // 4. Check mandatory Border Transit / Customs clearance for West African Corridor (MA-MR-SN)
+    if (input.corridorCode === 'MA-MR-SN' && transitAmtDec.lessThanOrEqualTo(0)) {
+      blockingReasons.push(
+        `إغلاق محظور لممر غرب إفريقيا (MA-MR-SN): لم يتم تسجيل ومطابقة رسوم الترانزيت والعبور الجمركي الحدودي (الكركرات / موريتانيا) للرحلة #${input.tripId}.`
+      );
+    }
+
+    return {
+      tripId: input.tripId,
+      canCloseAtomically: blockingReasons.length === 0,
+      blockingReasons,
+      warnings,
     };
   }
 
