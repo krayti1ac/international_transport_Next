@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, Send, Phone, FileText, Clock, ExternalLink } from 'lucide-react';
+import { RefreshCw, Send, Phone, FileText, Clock, ExternalLink, Activity } from 'lucide-react';
 import { CardViewToggle, useCardViewMode } from '@/components/ui/card-view-toggle';
 import { useLanguage } from '@/components/language-provider';
+import { SmartDunningCashFlowView } from '@/features/finance/components/SmartDunningCashFlowView';
 
 interface ReminderLink {
   invoiceId: number;
@@ -26,6 +27,7 @@ interface ReminderLink {
 
 export default function WhatsAppRemindersScreen() {
   const { t, dir } = useLanguage();
+  const [activeTab, setActiveTab] = useState<'radar' | 'quick_links'>('radar');
   const [reminders, setReminders] = useState<ReminderLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -41,12 +43,12 @@ export default function WhatsAppRemindersScreen() {
     setLoading(true);
     try {
       const res = await fetch('/api/whatsapp-reminders', { cache: 'no-store' });
-      if (!res.ok) throw new Error(t('فشل في تحميل التذكيرات', 'Échec du chargement des rappels'));
+      if (!res.ok) throw new Error(t('فشل في تحميل التذكيرات', 'Échec du chargement des rappels', 'Error al cargar los recordatorios'));
       const data = (await res.json()) as ReminderLink[];
       setReminders(data);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('خطأ غير معروف', 'Erreur inconnue');
-      toast({ title: t('خطأ', 'Erreur'), description: message, variant: 'destructive' });
+      const message = error instanceof Error ? error.message : t('خطأ غير معروف', 'Erreur inconnue', 'Error desconocido');
+      toast({ title: t('خطأ', 'Erreur', 'Error'), description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -72,20 +74,46 @@ export default function WhatsAppRemindersScreen() {
         <div>
           <h1 className="text-2xl font-bold font-amiri text-foreground flex items-center gap-2">
             <Send className="w-6 h-6 text-primary" />
-            {t('تذكيرات واتساب - فواتير متأخرة', 'Rappels WhatsApp - Factures en retard')}
+            {t(
+              'أتمتة التحصيل الاستباقي وتذكيرات واتساب (Smart Dunning & PVI)',
+              'Relance Intelligente, PVI & Rappels WhatsApp',
+              'Reclamación Inteligente, PVI y Recordatorios WhatsApp'
+            )}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {t(
-              'توليد روابط واتساب لتذكير العملاء بالفواتير المتأخرة',
-              'Génération de liens WhatsApp pour rappeler les factures échues aux clients'
+              'رادار التدفقات النقدية المرجح بمؤشر سرعة السداد (PVI) وتصعيد المطالبات الثلاثي اللغات',
+              'Radar de trésorerie pondéré par PVI et escalade trilingue des créances échues',
+              'Radar de tesorería ponderado por PVI y escalado trilingüe de cobros vencidos'
             )}
           </p>
         </div>
-        <Button onClick={fetchReminders} variant="outline" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ms-2 ${loading ? 'animate-spin' : ''}`} />
-          {t('تحديث', 'Actualiser')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={activeTab === 'radar' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setActiveTab('radar')}
+            className="gap-1.5"
+          >
+            <Activity className="w-4 h-4" />
+            {t('رادار التحصيل الاستباقي و PVI', 'Radar Relance & PVI', 'Radar de Cobros y PVI')}
+          </Button>
+          <Button
+            variant={activeTab === 'quick_links' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setActiveTab('quick_links')}
+            className="gap-1.5"
+          >
+            <Send className="w-4 h-4" />
+            {t('روابط واتساب السريعة', 'Liens Rapides WhatsApp', 'Enlaces Rápidos WhatsApp')}
+          </Button>
+        </div>
       </div>
+
+      {activeTab === 'radar' ? (
+        <SmartDunningCashFlowView />
+      ) : (
+        <>
 
       <Card>
         <CardContent className="p-3">
@@ -235,6 +263,9 @@ export default function WhatsAppRemindersScreen() {
           ))}
         </div>
       )}
+        </>
+      )}
     </div>
   );
 }
+
