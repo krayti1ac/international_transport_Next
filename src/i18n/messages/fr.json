@@ -2606,6 +2606,46 @@
       "clearSelection": "Désélectionner",
       "selectAllPortfolio": "Sélectionner tous les effets en portefeuille"
     }
+  },
+  "fleetFuelBi": {
+    "title": "Tableau de Bord BI Avancé Carburant & Télémétrie Flotte",
+    "subtitle": "Analyse forensique Tracteur vs. Groupe Frigo (Carrier / Thermo King) et rapprochement reçus OCR vs. GPS",
+    "bentoTotalFuel": "Consommation Totale Flotte (CAN-Bus)",
+    "bentoTractorVsReefer": "Tracteur: {tractor}L | Frigo: {reefer}L",
+    "bentoCpk": "Coût Carburant au Kilomètre (CPK)",
+    "bentoNetSavings": "Économies / Surconsommation Nette",
+    "bentoSavingsPositive": "Économie réalisée vs. norme",
+    "bentoSavingsNegative": "Surconsommation au-dessus de la norme",
+    "bentoGeoRadar": "Radar Anomalies GPS & Reçus OCR",
+    "bentoGeoSub": "{geo} écarts GPS | {ocr} en révision manuelle",
+    "filterCorridorAll": "Tous les Corridors Internationaux",
+    "filterCorridorEu": "Corridor Europe (MA-ES-FR)",
+    "filterCorridorAf": "Corridor Afrique Ouest (MA-MR-SN)",
+    "filterCorridorMa": "Axes Nationaux (DOMESTIC-MA)",
+    "filterReeferOnly": "Trajets Frigorifiques Uniquement",
+    "refreshBtn": "Actualiser CAN-Bus",
+    "chartCorridorTitle": "Comparaison Norme vs. Réel Moteur Tracteur par Corridor (L/100km)",
+    "chartBaselineLegend": "Norme de Référence (L/100km)",
+    "chartActualLegend": "Consommation Réelle Tracteur (L/100km)",
+    "currencyCardTitle": "Répartition des Coûts par Devise (MAD / EUR)",
+    "madFuelLabel": "Ravitaillement National & Frontières (MAD)",
+    "eurFuelLabel": "Ravitaillement Europe Espagne/France (EUR)",
+    "leaderboardTitle": "Classement d'Efficacité Énergétique de la Flotte (Leaderboard)",
+    "colRank": "Rang",
+    "colTruckDriver": "Camion & Chauffeur",
+    "colCorridor": "Corridor",
+    "colTractorReeferSplit": "Part Tracteur / Frigo (Carrier / TK)",
+    "colBaselineVsActual": "Norme vs. Réel",
+    "colCpk": "Coût / Km (MAD / EUR)",
+    "colSavingsWaste": "Gain / Perte Financière",
+    "colGrade": "Note",
+    "anomalyRadarTitle": "Radar d'Audit Forensique des Reçus Stations (OCR) & Écarts GPS",
+    "approveReceiptBtn": "Valider Reçu Légitime",
+    "confirmFraudBtn": "Confirmer Anomalie / Imputer",
+    "statusPending": "En Révision Forensique",
+    "statusVerified": "Validé (Légitime)",
+    "statusFraud": "Fraude Confirmée"
   }
 }
+
 

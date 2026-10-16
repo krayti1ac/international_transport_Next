@@ -2606,6 +2606,46 @@
       "clearSelection": "إلغاء التحديد",
       "selectAllPortfolio": "تحديد كافة الأوراق في الحافظة"
     }
+  },
+  "fleetFuelBi": {
+    "title": "لوحة تحكم ذكاء الأعمال المتقدمة للأسطول والمحروقات (Fleet Fuel & Telematics BI)",
+    "subtitle": "تحليل جنائي لاستهلاك محرك الجر مقابل وحدات التبريد (Carrier / Thermo King) ومطابقة إيصالات OCR مع إحداثيات GPS",
+    "bentoTotalFuel": "إجمالي استهلاك الأسطول (CAN-Bus)",
+    "bentoTractorVsReefer": "الجر: {tractor}L | التبريد: {reefer}L",
+    "bentoCpk": "تكلفة الكيلومتر للوقود (CPK)",
+    "bentoNetSavings": "صافي وفورات / هدر الوقود",
+    "bentoSavingsPositive": "وفر مالي مقارنة بالمعياري",
+    "bentoSavingsNegative": "هدر مالي فوق المعياري",
+    "bentoGeoRadar": "رادار الشذوذ الجغرافي وإيصالات OCR",
+    "bentoGeoSub": "{geo} تباين GPS | {ocr} للمراجعة اليدوية",
+    "filterCorridorAll": "جميع الممرات الدولية",
+    "filterCorridorEu": "الممر الأوروبي (MA-ES-FR)",
+    "filterCorridorAf": "ممر غرب إفريقيا (MA-MR-SN)",
+    "filterCorridorMa": "المسارات الوطنية (DOMESTIC-MA)",
+    "filterReeferOnly": "رحلات السلسلة المبردة فقط (Frigo)",
+    "refreshBtn": "تحديث قراءات CAN-Bus",
+    "chartCorridorTitle": "مقارنة الاستهلاك المعياري بالفعلي لمحرك الجر حسب الممر الدولي (L/100km)",
+    "chartBaselineLegend": "المعدل المعياري (L/100km)",
+    "chartActualLegend": "الاستهلاك الفعلي للجر (L/100km)",
+    "currencyCardTitle": "توزيع تكاليف الوقود حسب العملة (MAD / EUR)",
+    "madFuelLabel": "التزود المحلي والحدودي (MAD)",
+    "eurFuelLabel": "التزود الأوروبي إسبانيا/فرنسا (EUR)",
+    "leaderboardTitle": "مصفوفة ترتيب كفاءة الأسطول والسائقين (Fleet Efficiency Leaderboard)",
+    "colRank": "الترتيب",
+    "colTruckDriver": "الشاحنة والسائق",
+    "colCorridor": "الممر الدولي",
+    "colTractorReeferSplit": "فصل الجر / التبريد (Carrier / TK)",
+    "colBaselineVsActual": "المعياري مقابل الفعلي",
+    "colCpk": "تكلفة الكيلومتر (MAD / EUR)",
+    "colSavingsWaste": "الوفر / الهدر المالي",
+    "colGrade": "التصنيف",
+    "anomalyRadarTitle": "رادار التدقيق الجنائي لإيصالات المحطات (OCR) وتباين إحداثيات GPS",
+    "approveReceiptBtn": "اعتماد الإيصال كشرعي",
+    "confirmFraudBtn": "تأكيد مخالفة / خصم",
+    "statusPending": "قيد المراجعة الجنائية",
+    "statusVerified": "تم الاعتماد (شرعي)",
+    "statusFraud": "مخالفة مؤكدة"
   }
 }
+
 

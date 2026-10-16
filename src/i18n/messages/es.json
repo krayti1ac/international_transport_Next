@@ -2606,6 +2606,46 @@
       "clearSelection": "Deseleccionar",
       "selectAllPortfolio": "Seleccionar todos los efectos en cartera"
     }
+  },
+  "fleetFuelBi": {
+    "title": "Panel BI Avanzado de Combustible y Telemetría de Flota",
+    "subtitle": "Análisis forense Tractora vs. Equipo Frigorífico (Carrier / Thermo King) y conciliación recibos OCR vs. GPS",
+    "bentoTotalFuel": "Consumo Total Flota (CAN-Bus)",
+    "bentoTractorVsReefer": "Tractora: {tractor}L | Frigo: {reefer}L",
+    "bentoCpk": "Coste Combustible por Kilómetro (CPK)",
+    "bentoNetSavings": "Ahorro / Sobreconsumo Neto",
+    "bentoSavingsPositive": "Ahorro financiero frente a norma",
+    "bentoSavingsNegative": "Sobreconsumo por encima de norma",
+    "bentoGeoRadar": "Radar Anomalías GPS y Recibos OCR",
+    "bentoGeoSub": "{geo} desvíos GPS | {ocr} revisión manual",
+    "filterCorridorAll": "Todos los Corredores Internacionales",
+    "filterCorridorEu": "Corredor Europa (MA-ES-FR)",
+    "filterCorridorAf": "Corredor África Occidental (MA-MR-SN)",
+    "filterCorridorMa": "Rutas Nacionales (DOMESTIC-MA)",
+    "filterReeferOnly": "Solo Viajes Frigoríficos (Frigo)",
+    "refreshBtn": "Actualizar CAN-Bus",
+    "chartCorridorTitle": "Comparativa Norma vs. Real Motor Tractora por Corredor (L/100km)",
+    "chartBaselineLegend": "Norma de Referencia (L/100km)",
+    "chartActualLegend": "Consumo Real Tractora (L/100km)",
+    "currencyCardTitle": "Desglose de Costes por Divisa (MAD / EUR)",
+    "madFuelLabel": "Repostaje Nacional y Fronteras (MAD)",
+    "eurFuelLabel": "Repostaje Europa España/Francia (EUR)",
+    "leaderboardTitle": "Clasificación de Eficiencia Energética de la Flota (Leaderboard)",
+    "colRank": "Posición",
+    "colTruckDriver": "Camión y Conductor",
+    "colCorridor": "Corredor",
+    "colTractorReeferSplit": "Desglose Tractora / Frigo (Carrier / TK)",
+    "colBaselineVsActual": "Norma vs. Real",
+    "colCpk": "Coste / Km (MAD / EUR)",
+    "colSavingsWaste": "Ahorro / Pérdida",
+    "colGrade": "Calificación",
+    "anomalyRadarTitle": "Radar de Auditoría Forense de Recibos de Estaciones (OCR) y Desvíos GPS",
+    "approveReceiptBtn": "Aprobar Recibo Legítimo",
+    "confirmFraudBtn": "Confirmar Fraude / Cargo",
+    "statusPending": "En Revisión Forense",
+    "statusVerified": "Validado (Legítimo)",
+    "statusFraud": "Fraude Confirmado"
   }
 }
+
 

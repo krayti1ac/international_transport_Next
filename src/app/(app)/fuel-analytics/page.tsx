@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/components/language-provider';
 import { CanBusTelematicsMonitor } from '@/features/fleet/components/CanBusTelematicsMonitor';
 import { FuelReconciliationDashboardView } from '@/features/fleet/components/FuelReconciliationDashboardView';
-import { FleetFuelAnalyticsDashboardView } from '@/features/fleet/components/FleetFuelAnalyticsDashboardView';
+import { FleetFuelBiDashboardView } from '@/features/fleet/components/FleetFuelBiDashboardView';
 
 export default function FleetFuelAnalyticsPage() {
   const { t, dir } = useLanguage();
@@ -124,7 +124,7 @@ export default function FleetFuelAnalyticsPage() {
       </div>
 
       {activeTab === 'bi_analytics' ? (
-        <FleetFuelAnalyticsDashboardView />
+        <FleetFuelBiDashboardView />
       ) : activeTab === 'card_reconciliation' ? (
         <FuelReconciliationDashboardView />
       ) : activeTab === 'telematics' ? (
