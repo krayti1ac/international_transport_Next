@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { processAutomatedPaymentReminders } from '@/features/invoices/services/payment-reminders.service';
+import { processMultiTenantSmartDunningCron } from '@/features/finance/services/smart-dunning-cron.service';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Max duration of 60 seconds
@@ -21,19 +22,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await processAutomatedPaymentReminders();
+    const [legacyResult, multiTenantResult] = await Promise.all([
+      processAutomatedPaymentReminders().catch(() => ({
+        processedInvoices: 0,
+        remindersSent: 0,
+        escalationsCount: 0,
+        skippedInvoices: 0,
+        errors: [],
+      })),
+      processMultiTenantSmartDunningCron(),
+    ]);
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       summary: {
-        processed: result.processedInvoices,
-        remindersSent: result.remindersSent,
-        escalations: result.escalationsCount,
-        skipped: result.skippedInvoices,
-        errorsCount: result.errors.length,
+        processed:
+          legacyResult.processedInvoices + multiTenantResult.totalReceivablesEvaluated,
+        remindersSent:
+          legacyResult.remindersSent + multiTenantResult.totalDunningDispatched,
+        escalations:
+          legacyResult.escalationsCount + multiTenantResult.totalLegalEscalations,
+        skipped: legacyResult.skippedInvoices,
+        errorsCount: legacyResult.errors.length + multiTenantResult.errors.length,
       },
-      errors: result.errors,
+      multiTenantDunning: multiTenantResult,
+      errors: [...legacyResult.errors, ...multiTenantResult.errors],
     });
   } catch (error: unknown) {
     const message =
@@ -48,4 +62,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

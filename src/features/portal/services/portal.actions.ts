@@ -9,6 +9,11 @@ import { getCurrentUser } from '@/lib/rbac.server';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
 import { recordAuditLog } from '@/lib/audit.server';
 import { dispatchTripLifecycleNotifications } from '@/features/trips/services/notification-dispatcher';
+import { SmartDunningCashFlowService } from '@/features/finance/services/smart-dunning-cashflow.service';
+import type {
+  HistoricalSettledInvoiceInput,
+  OpenReceivableInput,
+} from '@/features/finance/types/smart-dunning-cashflow.types';
 import type {
   ClientPortalData,
   PortalLookupResult,
@@ -20,6 +25,7 @@ import type {
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 const memoryBookingsStore = new Map<number, BookingRequest>();
+const memoryFreezeOverrides = new Map<number, { reason: string; grantedAt: string }>();
 
 const bookingInputSchema = z.object({
   routeFrom: z.string().min(2, 'مدينة الانطلاق مطلوبة'),
@@ -329,6 +335,141 @@ export async function createBookingRequestAction(
     } else {
       const defaultClient = DEFAULT_CLIENTS.find((c) => c.id === clientId);
       if (defaultClient) clientName = defaultClient.name;
+    }
+
+    // 1.5 حارس تجميد الحجوزات التلقائي (Booking Freeze Guard — Stage 4: final_legal_mise_en_demeure)
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const [clientInvoicesRes, clientBillsRes, overrideLogRes] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select('id, invoice_number, client_id, issue_date, due_date, total_amount, paid_amount, currency, status, updated_at')
+        .or(`client_id.eq.${clientId},client_id.eq.${String(clientId)}`),
+      supabase
+        .from('commercial_bills')
+        .select('id, bill_number, client_id, issue_date, maturity_date, amount, currency, status')
+        .eq('client_id', clientId)
+        .in('status', ['portfolio', 'remitted_for_collection', 'remitted_for_discount', 'bounced_unpaid']),
+      supabase
+        .from('audit_logs')
+        .select('id')
+        .eq('entity_type', 'booking_freeze_override')
+        .eq('entity_id', String(clientId))
+        .limit(1),
+    ]);
+
+    const settledForGuard: HistoricalSettledInvoiceInput[] = [];
+    const openForGuard: OpenReceivableInput[] = [];
+
+    if (Array.isArray(clientInvoicesRes.data)) {
+      for (const inv of clientInvoicesRes.data) {
+        const issueDate = inv.issue_date
+          ? String(inv.issue_date).slice(0, 10)
+          : SmartDunningCashFlowService.addDaysUtc(todayIso, -30);
+        const dueDate = inv.due_date
+          ? String(inv.due_date).slice(0, 10)
+          : SmartDunningCashFlowService.addDaysUtc(issueDate, 30);
+        const currency = String(inv.currency || 'MAD').toUpperCase() === 'EUR' ? 'EUR' : 'MAD';
+
+        if (inv.status === 'paid') {
+          settledForGuard.push({
+            invoiceId: inv.id,
+            clientId,
+            issueDate,
+            dueDate,
+            settledDate: inv.updated_at ? String(inv.updated_at).slice(0, 10) : dueDate,
+            agreedTermsDays: Math.max(1, SmartDunningCashFlowService.diffDaysUtc(issueDate, dueDate)),
+            amount: String(inv.total_amount ?? '0'),
+            currency,
+          });
+        } else if (inv.status !== 'cancelled') {
+          openForGuard.push({
+            id: `INV-${inv.id}`,
+            documentNumber: String(inv.invoice_number || `INV-${inv.id}`),
+            documentType: 'invoice',
+            clientId,
+            clientName,
+            issueDate,
+            contractualDueDate: dueDate,
+            agreedTermsDays: Math.max(1, SmartDunningCashFlowService.diffDaysUtc(issueDate, dueDate)),
+            currency,
+            totalAmount: String(inv.total_amount ?? '0'),
+            paidAmount: String(inv.paid_amount ?? '0'),
+          });
+        }
+      }
+    }
+
+    if (Array.isArray(clientBillsRes.data)) {
+      for (const bill of clientBillsRes.data) {
+        const issueDate = bill.issue_date
+          ? String(bill.issue_date).slice(0, 10)
+          : SmartDunningCashFlowService.addDaysUtc(todayIso, -20);
+        const maturityDate = bill.maturity_date
+          ? String(bill.maturity_date).slice(0, 10)
+          : SmartDunningCashFlowService.addDaysUtc(issueDate, 30);
+        const currency = String(bill.currency || 'MAD').toUpperCase() === 'EUR' ? 'EUR' : 'MAD';
+
+        openForGuard.push({
+          id: `LCN-${bill.id}`,
+          documentNumber: String(bill.bill_number || `LCN-${bill.id}`),
+          documentType: 'lcn_bill',
+          clientId,
+          clientName,
+          issueDate,
+          contractualDueDate: maturityDate,
+          agreedTermsDays: Math.max(1, SmartDunningCashFlowService.diffDaysUtc(issueDate, maturityDate)),
+          currency,
+          totalAmount: String(bill.amount ?? '0'),
+          paidAmount: '0',
+        });
+      }
+    }
+
+    const hasActiveAdminOverride =
+      Boolean(input.adminOverrideApproved) ||
+      memoryFreezeOverrides.has(clientId) ||
+      Boolean(Array.isArray(overrideLogRes.data) && overrideLogRes.data.length > 0);
+
+    const freezeEval = SmartDunningCashFlowService.evaluateClientBookingFreezeGuard({
+      clientId,
+      clientName,
+      referenceDate: todayIso,
+      historicalSettledInvoices: settledForGuard,
+      openReceivables: openForGuard,
+      hasActiveAdminOverride,
+    });
+
+    if (freezeEval.isFrozen) {
+      await recordAuditLog({
+        entityType: 'booking_freeze_guard',
+        entityId: String(clientId),
+        actionType: 'security_alert',
+        reason: freezeEval.reasonAr,
+        newData: {
+          clientId,
+          clientName,
+          blockingDocuments: freezeEval.blockingDocuments,
+          overdueConsolidatedMad: freezeEval.overdueConsolidatedMad,
+          clientPviScore: freezeEval.clientPviScore,
+          escalationStage: freezeEval.escalationStage,
+        },
+      }).catch(() => {});
+
+      const localizedError =
+        input.locale === 'fr'
+          ? freezeEval.reasonFr
+          : input.locale === 'es'
+          ? freezeEval.reasonEs
+          : freezeEval.reasonAr;
+
+      return {
+        success: false,
+        bookingFrozen: true,
+        blockingDocuments: freezeEval.blockingDocuments,
+        overdueConsolidatedMad: freezeEval.overdueConsolidatedMad,
+        clientPviScore: freezeEval.clientPviScore,
+        error: localizedError,
+      };
     }
 
     // 2. الكشف التلقائي عن الممر اللوجستي (European vs African)
@@ -719,5 +860,53 @@ export async function createBookingRequest(
 ): Promise<CreateBookingResult> {
   return createBookingRequestAction(input);
 }
+
+/**
+ * إصدار استثناء إداري موثق (Administrative Override) لفك تجميد الحجز عن عميل في مرحلة Mise en Demeure
+ * ويُسجل إلزامياً في سجل التدقيق الجنائي (audit_logs).
+ */
+export async function grantBookingFreezeOverrideAction(input: {
+  clientId: number;
+  reason: string;
+}): Promise<{
+  success: boolean;
+  clientId: number;
+  grantedAt: string;
+  error?: string;
+}> {
+  if (!input.clientId || !input.reason || input.reason.trim().length < 5) {
+    return {
+      success: false,
+      clientId: input.clientId || 0,
+      grantedAt: '',
+      error: 'يجب تحديد رقم العميل وسبب الاستثناء الإداري بشكل مفصل (5 أحرف على الأقل)',
+    };
+  }
+
+  const grantedAt = new Date().toISOString();
+  memoryFreezeOverrides.set(input.clientId, {
+    reason: input.reason.trim(),
+    grantedAt,
+  });
+
+  await recordAuditLog({
+    entityType: 'booking_freeze_override',
+    entityId: String(input.clientId),
+    actionType: 'security_alert',
+    reason: `[استثناء إداري لفك تجميد الحجز] العميل #${input.clientId}: ${input.reason.trim()}`,
+    newData: {
+      clientId: input.clientId,
+      overrideReason: input.reason.trim(),
+      grantedAt,
+    },
+  }).catch(() => {});
+
+  return {
+    success: true,
+    clientId: input.clientId,
+    grantedAt,
+  };
+}
+
 
 

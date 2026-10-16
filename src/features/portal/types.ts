@@ -51,12 +51,19 @@ export interface CreateBookingInput {
   deliveryAddress?: string | null;
   deliveryGpsUrl?: string | null;
   specialInstructions?: string | null;
+  locale?: 'ar' | 'fr' | 'es';
+  adminOverrideApproved?: boolean;
 }
 
 export interface CreateBookingResult {
   success: boolean;
   booking?: BookingRequest;
   error?: string;
+  bookingFrozen?: boolean;
+  blockingDocuments?: string[];
+  overdueConsolidatedMad?: string;
+  clientPviScore?: string;
 }
+
 
 

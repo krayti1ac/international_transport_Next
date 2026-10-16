@@ -8,6 +8,7 @@ import Decimal from 'decimal.js';
 import type {
   AgingBucketKey,
   AgingBucketSummary,
+  BookingFreezeGuardEvaluation,
   CashFlowHorizonPoint,
   ClientPviProfile,
   DunningEscalationStage,
@@ -654,5 +655,110 @@ export class SmartDunningCashFlowService {
       receivables: evaluatedReceivables.sort((a, b) => b.daysOverdue - a.daysOverdue),
     };
   }
+
+  /**
+   * التحقق مما إذا كانت الوثيقة تستحق إرسال إشعار آلي مجدول في دورة الـ Cron اليومية
+   */
+  public static shouldDispatchScheduledDunning(
+    daysOverdue: number,
+    escalationStage: DunningEscalationStage
+  ): boolean {
+    if (daysOverdue === -3 || daysOverdue === 0) return true;
+    if (daysOverdue === 7 || daysOverdue === 15 || daysOverdue === 21) return true;
+    if (daysOverdue === 31 || daysOverdue === 45) return true;
+    if (
+      escalationStage === 'final_legal_mise_en_demeure' &&
+      (daysOverdue === 46 || daysOverdue === 61 || daysOverdue === 75 || daysOverdue === 90 || (daysOverdue > 60 && daysOverdue % 15 === 0))
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * حارس تجميد الحجوزات التلقائي (Booking Freeze Guard):
+   * يفحص ما إذا كان العميل قد دخل في المرحلة الرابعة من التصعيد (final_legal_mise_en_demeure)
+   * ويمنع تمرير حجوزات شحن جديدة لحين تسوية الذمة المالية أو وجود استثناء إداري موثق.
+   */
+  public static evaluateClientBookingFreezeGuard(params: {
+    clientId: number;
+    clientName: string;
+    referenceDate: string;
+    exchangeRateEurToMad?: number | string;
+    historicalSettledInvoices: HistoricalSettledInvoiceInput[];
+    openReceivables: OpenReceivableInput[];
+    hasActiveAdminOverride?: boolean;
+  }): BookingFreezeGuardEvaluation {
+    const clientOpen = params.openReceivables.filter((r) => r.clientId === params.clientId);
+    const clientHist = params.historicalSettledInvoices.filter(
+      (h) => h.clientId === params.clientId
+    );
+
+    const dashboard = this.buildSmartDunningDashboard({
+      referenceDate: params.referenceDate,
+      exchangeRateEurToMad: params.exchangeRateEurToMad || '10.85',
+      historicalSettledInvoices: clientHist,
+      openReceivables: clientOpen,
+    });
+
+    const profile = dashboard.clientProfiles.find((p) => p.clientId === params.clientId);
+    const pviScore = profile?.pviScore || '1.00';
+    const behaviorTier = profile?.behaviorTier || 'on_time';
+    const overdueConsolidatedMad = profile?.overdueConsolidatedMad || '0.00';
+    const maxDaysOverdue = profile?.maxDaysOverdue || 0;
+
+    const legalReceivables = dashboard.receivables.filter(
+      (r) =>
+        r.clientId === params.clientId &&
+        r.escalationStage === 'final_legal_mise_en_demeure' &&
+        r.daysOverdue > 0
+    );
+
+    const blockingDocuments = legalReceivables.map((r) => r.documentNumber);
+    const hasLegalBlock = blockingDocuments.length > 0;
+    const overrideApplied = Boolean(params.hasActiveAdminOverride && hasLegalBlock);
+    const isFrozen = hasLegalBlock && !overrideApplied;
+
+    const escalationStage: DunningEscalationStage = hasLegalBlock
+      ? 'final_legal_mise_en_demeure'
+      : profile?.recommendedEscalationStage || 'gentle_reminder';
+
+    const docsStr = blockingDocuments.join(', ');
+
+    const reasonAr = isFrozen
+      ? `تم تجميد طلبات الحجز آلياً للعميل (${params.clientName}) بسبب دخول الوثائق [${docsStr}] في مرحلة الإنذار القانوني النهائي (Mise en Demeure — متأخرات بقيمة ${overdueConsolidatedMad} MAD / مؤشر PVI ${pviScore}x). يرجى تسوية الذمة المالية أو طلب استثناء إداري موثق.`
+      : overrideApplied
+      ? `تم السماح بالحجز بموجب استثناء إداري موثق للعميل (${params.clientName}).`
+      : 'الوضعية الائتمانية للعميل سليمة ومسموح بالحجز.';
+
+    const reasonFr = isFrozen
+      ? `Réservations gelées automatiquement pour le client (${params.clientName}) suite au passage des titres [${docsStr}] en Mise en Demeure (Arriérés : ${overdueConsolidatedMad} MAD / PVI ${pviScore}x). Veuillez régulariser le solde ou solliciter une dérogation administrative.`
+      : overrideApplied
+      ? `Réservation autorisée sous dérogation administrative auditée pour (${params.clientName}).`
+      : 'Situation financière conforme — Réservation autorisée.';
+
+    const reasonEs = isFrozen
+      ? `Reservas bloqueadas automáticamente para el cliente (${params.clientName}) debido a que los documentos [${docsStr}] se encuentran en Requerimiento Legal / Mise en Demeure (Deuda vencida: ${overdueConsolidatedMad} MAD / PVI ${pviScore}x). Regularice el saldo o solicite una autorización administrativa.`
+      : overrideApplied
+      ? `Reserva autorizada mediante excepción administrativa auditada para (${params.clientName}).`
+      : 'Situación crediticia conforme — Reserva autorizada.';
+
+    return {
+      clientId: params.clientId,
+      clientName: params.clientName,
+      isFrozen,
+      overrideApplied,
+      clientPviScore: pviScore,
+      behaviorTier,
+      escalationStage,
+      blockingDocuments,
+      overdueConsolidatedMad,
+      maxDaysOverdue,
+      reasonAr,
+      reasonFr,
+      reasonEs,
+    };
+  }
 }
+
 

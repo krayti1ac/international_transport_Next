@@ -167,3 +167,42 @@ export interface TriggerSmartDunningResult {
   error?: string;
 }
 
+export interface BookingFreezeGuardEvaluation {
+  clientId: number;
+  clientName: string;
+  isFrozen: boolean;
+  overrideApplied: boolean;
+  clientPviScore: string;
+  behaviorTier: PaymentBehaviorTier;
+  escalationStage: DunningEscalationStage;
+  blockingDocuments: string[];
+  overdueConsolidatedMad: string;
+  maxDaysOverdue: number;
+  reasonAr: string;
+  reasonFr: string;
+  reasonEs: string;
+}
+
+export interface TenantDunningCronSummary {
+  companyId: number;
+  companyName: string;
+  receivablesEvaluated: number;
+  dunningDispatched: number;
+  legalEscalationsCount: number;
+  frozenClientIds: number[];
+  totalOverdueConsolidatedMad: string;
+}
+
+export interface MultiTenantDunningCronResult {
+  success: boolean;
+  referenceDate: string;
+  totalTenantsProcessed: number;
+  totalReceivablesEvaluated: number;
+  totalDunningDispatched: number;
+  totalLegalEscalations: number;
+  frozenClientIds: number[];
+  tenantSummaries: TenantDunningCronSummary[];
+  errors: Array<{ companyId: number; receivableId?: string; error: string }>;
+}
+
+

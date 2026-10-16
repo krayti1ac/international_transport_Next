@@ -202,4 +202,171 @@ describe('SmartDunningCashFlowService — Track D (PVI, Aging Buckets & Multi-Cu
     expect(horizon30?.lcnExpectedMad).toBe('50000.00');
     expect(horizon30?.nominalConsolidatedMad).toBe('71700.00');
   });
+
+  it('enforces Booking Freeze Guard for Stage 4 (final_legal_mise_en_demeure) and respects audited admin overrides', () => {
+    const blockedEval = SmartDunningCashFlowService.evaluateClientBookingFreezeGuard({
+      clientId: 104,
+      clientName: 'Atlas Agro-Export Souss',
+      referenceDate: '2026-10-16',
+      exchangeRateEurToMad: '10.85',
+      historicalSettledInvoices: [
+        {
+          invoiceId: 'H-401',
+          clientId: 104,
+          issueDate: '2026-05-01',
+          settledDate: '2026-06-22', // 52 days vs 30 -> PVI = 1.73 (high_risk_delinquent)
+          agreedTermsDays: 30,
+          amount: '64000.00',
+          currency: 'MAD',
+        },
+      ],
+      openReceivables: [
+        {
+          id: 'INV-790',
+          documentNumber: 'FAC-2026-0790',
+          documentType: 'invoice',
+          clientId: 104,
+          clientName: 'Atlas Agro-Export Souss',
+          issueDate: '2026-08-01',
+          contractualDueDate: '2026-08-31', // 46 days overdue on 2026-10-16 + high_risk_delinquent -> final_legal_mise_en_demeure
+          agreedTermsDays: 30,
+          currency: 'MAD',
+          totalAmount: '92000.00',
+          paidAmount: '0.00',
+        },
+      ],
+      hasActiveAdminOverride: false,
+    });
+
+    expect(blockedEval.isFrozen).toBe(true);
+    expect(blockedEval.overrideApplied).toBe(false);
+    expect(blockedEval.escalationStage).toBe('final_legal_mise_en_demeure');
+    expect(blockedEval.blockingDocuments).toContain('FAC-2026-0790');
+    expect(blockedEval.overdueConsolidatedMad).toBe('92000.00');
+    expect(blockedEval.reasonAr).toContain('Mise en Demeure');
+    expect(blockedEval.reasonFr).toContain('Mise en Demeure');
+    expect(blockedEval.reasonEs).toContain('Mise en Demeure');
+
+    // Now test with documented administrative override
+    const overriddenEval = SmartDunningCashFlowService.evaluateClientBookingFreezeGuard({
+      clientId: 104,
+      clientName: 'Atlas Agro-Export Souss',
+      referenceDate: '2026-10-16',
+      exchangeRateEurToMad: '10.85',
+      historicalSettledInvoices: [
+        {
+          invoiceId: 'H-401',
+          clientId: 104,
+          issueDate: '2026-05-01',
+          settledDate: '2026-06-22',
+          agreedTermsDays: 30,
+          amount: '64000.00',
+          currency: 'MAD',
+        },
+      ],
+      openReceivables: [
+        {
+          id: 'INV-790',
+          documentNumber: 'FAC-2026-0790',
+          documentType: 'invoice',
+          clientId: 104,
+          clientName: 'Atlas Agro-Export Souss',
+          issueDate: '2026-08-01',
+          contractualDueDate: '2026-08-31',
+          agreedTermsDays: 30,
+          currency: 'MAD',
+          totalAmount: '92000.00',
+          paidAmount: '0.00',
+        },
+      ],
+      hasActiveAdminOverride: true,
+    });
+
+    expect(overriddenEval.isFrozen).toBe(false);
+    expect(overriddenEval.overrideApplied).toBe(true);
+    expect(overriddenEval.blockingDocuments).toContain('FAC-2026-0790');
+  });
+
+  it('executes Multi-Tenant Cron Dunning Worker with strict tenant isolation and scheduled milestone detection', async () => {
+    const { processMultiTenantSmartDunningCron } = await import(
+      '../services/smart-dunning-cron.service'
+    );
+
+    const cronRes = await processMultiTenantSmartDunningCron({
+      referenceDate: '2026-10-16',
+      exchangeRateEurToMad: '10.85',
+      dryRun: true,
+      injectedTenants: [
+        {
+          companyId: 1,
+          companyName: 'Trans Bodanon International',
+          settledInvoices: [],
+          openReceivables: [
+            // T-3 days before maturity (2026-10-19) -> gentle_reminder milestone
+            {
+              id: 'T1-INV-1',
+              documentNumber: 'FAC-T1-001',
+              documentType: 'invoice',
+              clientId: 501,
+              clientName: 'Mercadona Valencia',
+              issueDate: '2026-09-19',
+              contractualDueDate: '2026-10-19',
+              agreedTermsDays: 30,
+              currency: 'EUR',
+              totalAmount: '3000.00',
+              paidAmount: '0.00',
+            },
+            // 75 days overdue (due 2026-08-02) -> final_legal_mise_en_demeure milestone (75 % 15 === 0)
+            {
+              id: 'T1-LCN-2',
+              documentNumber: 'LCN-T1-002',
+              documentType: 'lcn_bill',
+              clientId: 502,
+              clientName: 'Delta Export Agadir',
+              issueDate: '2026-07-03',
+              contractualDueDate: '2026-08-02',
+              agreedTermsDays: 30,
+              currency: 'MAD',
+              totalAmount: '80000.00',
+              paidAmount: '0.00',
+            },
+          ],
+        },
+        {
+          companyId: 2,
+          companyName: 'Maghreb Reefer Logistics',
+          settledInvoices: [],
+          openReceivables: [
+            // 7 days overdue (due 2026-10-09) -> overdue_notice_1 milestone
+            {
+              id: 'T2-INV-1',
+              documentNumber: 'FAC-T2-101',
+              documentType: 'invoice',
+              clientId: 601,
+              clientName: 'Rungis Import SAS',
+              issueDate: '2026-09-09',
+              contractualDueDate: '2026-10-09',
+              agreedTermsDays: 30,
+              currency: 'EUR',
+              totalAmount: '1000.00',
+              paidAmount: '0.00',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(cronRes.success).toBe(true);
+    expect(cronRes.totalTenantsProcessed).toBe(2);
+    expect(cronRes.totalReceivablesEvaluated).toBe(3);
+    expect(cronRes.totalDunningDispatched).toBe(3);
+    expect(cronRes.totalLegalEscalations).toBe(1);
+    expect(cronRes.frozenClientIds).toEqual([502]);
+
+    expect(cronRes.tenantSummaries[0].companyId).toBe(1);
+    expect(cronRes.tenantSummaries[0].totalOverdueConsolidatedMad).toBe('80000.00');
+    expect(cronRes.tenantSummaries[1].companyId).toBe(2);
+    expect(cronRes.tenantSummaries[1].totalOverdueConsolidatedMad).toBe('10850.00');
+  });
 });
+
