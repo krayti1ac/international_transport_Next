@@ -60,6 +60,7 @@ import {
   getCompanyDevicesAction,
   toggleDeviceStatusAction,
   testCompanyEmailConnectionAction,
+  testCompanyTelegramConnectionAction,
 } from '../services/company.actions';
 import type { Company, CompanyDevice, MailProviderType } from '@/types/database';
 
@@ -332,10 +333,19 @@ export function SuperAdminCompaniesView() {
     message?: string;
     error?: string;
   } | null>(null);
+  const [editTelegramChatId, setEditTelegramChatId] = useState('');
+  const [editAlertPhone, setEditAlertPhone] = useState('');
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [telegramTestResult, setTelegramTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
 
   // Email settings in Create Form
   const [createMailProvider, setCreateMailProvider] = useState<MailProviderType>('cpanel');
   const [createEmailPassword, setCreateEmailPassword] = useState('');
+  const [createTelegramChatId, setCreateTelegramChatId] = useState('');
 
   // Modal Devices
   const [devicesModalOpen, setDevicesModalOpen] = useState(false);
@@ -528,10 +538,57 @@ export function SuperAdminCompaniesView() {
     setEditImapPort(String(comp.imap_port || 993));
     setEditEmailUser(comp.email_user || (domainClean ? `operations@${domainClean}` : ''));
     setEditEmailPassword(comp.email_password || (comp.has_email_password ? '••••••••' : ''));
+    setEditTelegramChatId(comp.telegram_chat_id || (comp.id === 1 ? '-100192837465' : ''));
+    setEditAlertPhone(comp.alert_phone || (comp.id === 1 ? '212694585307' : ''));
     setShowEditPassword(false);
     setConnectionTestResult(null);
+    setTelegramTestResult(null);
 
     setEditModalOpen(true);
+  };
+
+  // Test Telegram Instant Alert
+  const handleTestTelegramConnection = async () => {
+    if (!editTelegramChatId.trim()) {
+      toast({
+        title: 'معرف تيليجرام مطلوب',
+        description: 'يرجى إدخال معرف مجموعة تيليجرام (telegram_chat_id) للاختبار',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingTelegram(true);
+    setTelegramTestResult(null);
+
+    const res = await testCompanyTelegramConnectionAction({
+      companyId: editingCompany?.id || null,
+      companyName: editName.trim() || editingCompany?.name || 'Trans Bodanon TMS',
+      telegram_chat_id: editTelegramChatId.trim(),
+    });
+
+    setTestingTelegram(false);
+
+    if (res.success) {
+      setTelegramTestResult({
+        success: true,
+        message: res.message || '✅ تم إرسال إشعار الاختبار عبر تيليجرام بنجاح!',
+      });
+      toast({
+        title: '✅ نجاح اختبار تيليجرام',
+        description: res.message,
+      });
+    } else {
+      setTelegramTestResult({
+        success: false,
+        error: res.error || 'تعذر إرسال إشعار الاختبار عبر تيليجرام',
+      });
+      toast({
+        title: 'فشل اختبار تيليجرام',
+        description: res.error,
+        variant: 'destructive',
+      });
+    }
   };
 
   // Test Email Connection Handshake
@@ -624,6 +681,8 @@ export function SuperAdminCompaniesView() {
               imap_port: parseInt(editImapPort, 10) || 993,
               email_user: editEmailUser.trim() || null,
               has_email_password: Boolean(editEmailPassword && editEmailPassword.trim() !== ''),
+              telegram_chat_id: editTelegramChatId.trim() || null,
+              alert_phone: editAlertPhone.trim() || null,
               ...subData,
             }
           : c
@@ -644,6 +703,8 @@ export function SuperAdminCompaniesView() {
       imap_port: parseInt(editImapPort, 10) || 993,
       email_user: editEmailUser.trim() || null,
       email_password: editEmailPassword || undefined,
+      telegram_chat_id: editTelegramChatId.trim() || null,
+      alert_phone: editAlertPhone.trim() || null,
       ...subData,
     });
     setUpdating(false);
@@ -797,6 +858,7 @@ export function SuperAdminCompaniesView() {
       email_domain: cleanDomain,
       mail_provider: createMailProvider,
       email_password: createEmailPassword.trim() || undefined,
+      telegram_chat_id: createTelegramChatId.trim() || null,
     });
 
     setSubmitting(false);
@@ -2225,6 +2287,82 @@ export function SuperAdminCompaniesView() {
                       </div>
                     )}
                   </div>
+
+                  {/* Multi-Tenant Telegram Bot & Alert Channels */}
+                  <div className="pt-3 border-t border-primary/10 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                          <Send className="w-3.5 h-3.5 text-sky-500" />
+                          <span>قناة بوت تيليجرام وتنبيهات الشركة (Telegram Bot & Alerts)</span>
+                        </span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          معرف جروب تيليجرام الخاص بعمليات الشركة لاستقبال التقارير وتفعيل أوامر /track و /reefer
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={testingTelegram}
+                        onClick={handleTestTelegramConnection}
+                        className="rounded-xl h-8 px-3 text-xs gap-1.5 font-bold bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 shrink-0"
+                      >
+                        {testingTelegram ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        <span>{testingTelegram ? 'جاري إرسال الاختبار...' : 'اختبار إشعار تيليجرام فوري'}</span>
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground">
+                          معرف جروب تيليجرام (telegram_chat_id)
+                        </label>
+                        <Input
+                          value={editTelegramChatId}
+                          onChange={(e) => setEditTelegramChatId(e.target.value)}
+                          placeholder="-100192837465"
+                          dir="ltr"
+                          className="rounded-xl h-9 font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground">
+                          رقم واتساب تنبيهات الإدارة (alert_phone)
+                        </label>
+                        <Input
+                          value={editAlertPhone}
+                          onChange={(e) => setEditAlertPhone(e.target.value)}
+                          placeholder="212694585307"
+                          dir="ltr"
+                          className="rounded-xl h-9 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {telegramTestResult && (
+                      <div
+                        className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+                          telegramTestResult.success
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                        }`}
+                      >
+                        {telegramTestResult.success ? (
+                          <CheckCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+                        ) : (
+                          <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                        )}
+                        <span className="leading-snug">
+                          {telegramTestResult.message || telegramTestResult.error}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Submit buttons */}
@@ -2365,13 +2503,20 @@ export function SuperAdminCompaniesView() {
                       </button>
                     ))}
                   </div>
-                  <div className="pt-2">
+                  <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <Input
                       type="password"
                       value={createEmailPassword}
                       onChange={(e) => setCreateEmailPassword(e.target.value)}
-                      placeholder="كلمة مرور خادم البريد (اختياري - يمكن تعيينها لاحقاً)"
+                      placeholder="كلمة مرور خادم البريد (اختياري)"
                       className="rounded-xl h-9 text-xs"
+                    />
+                    <Input
+                      value={createTelegramChatId}
+                      onChange={(e) => setCreateTelegramChatId(e.target.value)}
+                      placeholder="معرف تيليجرام الشركة (-100192837465)"
+                      dir="ltr"
+                      className="rounded-xl h-9 font-mono text-xs"
                     />
                   </div>
                 </div>

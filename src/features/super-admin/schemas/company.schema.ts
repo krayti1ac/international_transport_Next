@@ -27,6 +27,9 @@ export const createCompanySchema = z.object({
   imap_port: z.coerce.number().int().min(1).max(65535).default(993).optional().nullable(),
   email_user: z.string().trim().optional().nullable(),
   email_password: z.string().trim().optional().nullable(),
+  alert_phone: z.string().trim().optional().nullable(),
+  alert_email: z.string().trim().optional().nullable(),
+  telegram_chat_id: z.string().trim().optional().nullable(),
 });
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
@@ -58,6 +61,9 @@ export const updateCompanySchema = z.object({
   imap_port: z.coerce.number().int().min(1).max(65535).optional().nullable(),
   email_user: z.string().trim().optional().nullable(),
   email_password: z.string().trim().optional().nullable(),
+  alert_phone: z.string().trim().optional().nullable(),
+  alert_email: z.string().trim().optional().nullable(),
+  telegram_chat_id: z.string().trim().optional().nullable(),
 });
 
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
@@ -84,6 +90,17 @@ export const updateCompanyEmailSettingsSchema = z.object({
   imap_port: z.coerce.number().int().min(1).max(65535).default(993).optional().nullable(),
   email_user: z.string().trim().optional().nullable(),
   email_password: z.string().trim().optional().nullable(),
+  alert_phone: z.string().trim().optional().nullable(),
+  alert_email: z.string().trim().optional().nullable(),
+  telegram_chat_id: z.string().trim().optional().nullable(),
 });
 
 export type UpdateCompanyEmailSettingsInput = z.infer<typeof updateCompanyEmailSettingsSchema>;
+
+export const testTelegramConnectionSchema = z.object({
+  companyId: z.number().int().positive().optional().nullable(),
+  companyName: z.string().trim().optional().nullable(),
+  telegram_chat_id: z.string().trim().min(2, 'معرف محادثة تيليجرام (Chat ID) مطلوب للاختبار'),
+});
+
+export type TestTelegramConnectionInput = z.infer<typeof testTelegramConnectionSchema>;

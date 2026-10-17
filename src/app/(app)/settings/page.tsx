@@ -26,12 +26,14 @@ import {
   Wifi,
   CheckCheck,
   ShieldAlert,
+  Send,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/language-provider';
 import { useAuth } from '@/components/auth-provider';
 import {
   testCompanyEmailConnectionAction,
+  testCompanyTelegramConnectionAction,
   updateCompanyEmailSettingsAction,
 } from '@/features/super-admin/services/company.actions';
 import type { MailProviderType } from '@/types/database';
@@ -71,6 +73,9 @@ function SettingsContent() {
     email_user: string;
     email_password: string;
     has_email_password: boolean;
+    alert_phone: string;
+    alert_email: string;
+    telegram_chat_id: string;
   }>({
     email_domain: '',
     mail_provider: 'cpanel',
@@ -81,10 +86,19 @@ function SettingsContent() {
     email_user: '',
     email_password: '',
     has_email_password: false,
+    alert_phone: '',
+    alert_email: '',
+    telegram_chat_id: '',
   });
   const [showMailPassword, setShowMailPassword] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [telegramTestResult, setTelegramTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
   const [savingMail, setSavingMail] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +139,9 @@ function SettingsContent() {
             email_user: compData.email_user || (domainClean ? `operations@${domainClean}` : ''),
             email_password: compData.email_password ? '••••••••' : '',
             has_email_password: Boolean(compData.email_password),
+            alert_phone: compData.alert_phone || (targetCompanyId === 1 ? '212694585307' : ''),
+            alert_email: compData.alert_email || compData.email_user || '',
+            telegram_chat_id: compData.telegram_chat_id || (targetCompanyId === 1 ? '-100192837465' : ''),
           });
         }
       } catch (cErr) {
@@ -314,6 +331,61 @@ function SettingsContent() {
     }
   };
 
+  const handleTestTenantTelegramConnection = async () => {
+    const targetCompanyId = companyId || user?.company_id || 1;
+    if (!emailSettings.telegram_chat_id.trim()) {
+      toast({
+        title: t(
+          'معرف محادثة تيليجرام مطلوب',
+          'ID de discussion Telegram requis',
+          'ID de chat de Telegram obligatorio'
+        ),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingTelegram(true);
+    setTelegramTestResult(null);
+
+    const res = await testCompanyTelegramConnectionAction({
+      companyId: targetCompanyId,
+      companyName: settings.company_name || company?.name || 'Trans Bodanon TMS',
+      telegram_chat_id: emailSettings.telegram_chat_id.trim(),
+    });
+
+    setTestingTelegram(false);
+
+    if (res.success) {
+      setTelegramTestResult({
+        success: true,
+        message: res.message || '✅ تم إرسال إشعار الاختبار عبر تيليجرام بنجاح!',
+      });
+      toast({
+        title: t(
+          '✅ تم إرسال إشعار تيليجرام',
+          '✅ Notification Telegram envoyée',
+          '✅ Notificación de Telegram enviada'
+        ),
+        description: res.message,
+      });
+    } else {
+      setTelegramTestResult({
+        success: false,
+        error: res.error || 'تعذر إرسال إشعار الاختبار عبر تيليجرام',
+      });
+      toast({
+        title: t(
+          'فشل اختبار تيليجرام',
+          'Échec du test Telegram',
+          'Error en la prueba de Telegram'
+        ),
+        description: res.error,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSaveTenantEmailSettings = async () => {
     const targetCompanyId = companyId || user?.company_id || 1;
     setSavingMail(true);
@@ -327,6 +399,9 @@ function SettingsContent() {
         imap_port: parseInt(emailSettings.imap_port, 10) || 993,
         email_user: emailSettings.email_user || null,
         email_password: emailSettings.email_password || undefined,
+        alert_phone: emailSettings.alert_phone || null,
+        alert_email: emailSettings.alert_email || null,
+        telegram_chat_id: emailSettings.telegram_chat_id || null,
       });
 
       if (!res.success) {
@@ -990,6 +1065,100 @@ function SettingsContent() {
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Telegram Bot & Alert Channels Section */}
+                <div className="p-3.5 rounded-xl bg-sky-500/5 border border-sky-500/20 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                        <Send className="w-3.5 h-3.5 text-sky-500" />
+                        <span>
+                          {t(
+                            'قناة بوت تيليجرام السحابية وتنبيهات الإدارة (Telegram Bot & Alerts)',
+                            'Canal Telegram Bot & Alertes Direction',
+                            'Canal Telegram Bot y Alertas de Dirección'
+                          )}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {t(
+                          'معرف مجموعة عمليات الشركة لاستقبال إشعارات الرحلات والتقارير الصباحية وتفعيل أوامر /track و /reefer',
+                          'ID du groupe Telegram pour recevoir les alertes et utiliser /track et /reefer',
+                          'ID del grupo de Telegram para recibir alertas y usar /track y /reefer'
+                        )}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={testingTelegram}
+                      onClick={handleTestTenantTelegramConnection}
+                      className="rounded-xl h-8 px-3 text-xs gap-1.5 font-bold bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-500/30 shrink-0"
+                    >
+                      {testingTelegram ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {testingTelegram
+                          ? t('جاري إرسال الاختبار...', 'Envoi du test...', 'Enviando prueba...')
+                          : t('اختبار إشعار تيليجرام فوري', 'Tester notification Telegram', 'Probar notificación Telegram')}
+                      </span>
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-foreground">
+                        {t('معرف مجموعة تيليجرام (telegram_chat_id)', 'Telegram Chat ID du groupe', 'Telegram Chat ID del grupo')}
+                      </label>
+                      <Input
+                        value={emailSettings.telegram_chat_id}
+                        onChange={(e) =>
+                          setEmailSettings({ ...emailSettings, telegram_chat_id: e.target.value })
+                        }
+                        placeholder="-100192837465"
+                        dir="ltr"
+                        className="rounded-xl h-10 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-foreground">
+                        {t('رقم واتساب تنبيهات الإدارة (alert_phone)', 'Numéro WhatsApp Direction', 'Número WhatsApp Dirección')}
+                      </label>
+                      <Input
+                        value={emailSettings.alert_phone}
+                        onChange={(e) =>
+                          setEmailSettings({ ...emailSettings, alert_phone: e.target.value })
+                        }
+                        placeholder="212694585307"
+                        dir="ltr"
+                        className="rounded-xl h-10 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {telegramTestResult && (
+                    <div
+                      className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+                        telegramTestResult.success
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                      }`}
+                    >
+                      {telegramTestResult.success ? (
+                        <CheckCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+                      ) : (
+                        <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                      )}
+                      <span className="leading-snug">
+                        {telegramTestResult.message || telegramTestResult.error}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Test Connection Banner */}

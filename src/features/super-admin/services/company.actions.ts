@@ -8,14 +8,17 @@ import {
   updateCompanySchema,
   testEmailConnectionSchema,
   updateCompanyEmailSettingsSchema,
+  testTelegramConnectionSchema,
   type CreateCompanyInput,
   type UpdateCompanyInput,
   type TestEmailConnectionInput,
   type UpdateCompanyEmailSettingsInput,
+  type TestTelegramConnectionInput,
 } from '../schemas/company.schema';
 import type { Company, CompanyDevice } from '@/types/database';
 import { generateLicenseNumber } from '@/lib/license';
 import { requireSuperAdmin } from '@/lib/rbac.server';
+import { sendTelegramAlert } from '@/lib/telegram';
 import nodemailer from 'nodemailer';
 import imaps from 'imap-simple';
 
@@ -138,6 +141,9 @@ export async function getCompaniesAction(): Promise<{
       email_user: comp.email_user || null,
       has_email_password: Boolean(comp.email_password),
       email_password: comp.email_password ? '••••••••' : null,
+      alert_phone: comp.alert_phone || null,
+      alert_email: comp.alert_email || null,
+      telegram_chat_id: comp.telegram_chat_id || null,
     }));
 
     return { success: true, data: enrichedCompanies };
@@ -329,6 +335,9 @@ export async function createCompanyAction(
       imap_port: parsed.data.imap_port || 993,
       email_user: parsed.data.email_user?.trim() || `operations@${cleanDomain}`,
       ...(parsed.data.email_password?.trim() ? { email_password: parsed.data.email_password.trim() } : {}),
+      ...(parsed.data.alert_phone !== undefined ? { alert_phone: parsed.data.alert_phone?.trim() || null } : {}),
+      ...(parsed.data.alert_email !== undefined ? { alert_email: parsed.data.alert_email?.trim() || null } : {}),
+      ...(parsed.data.telegram_chat_id !== undefined ? { telegram_chat_id: parsed.data.telegram_chat_id?.trim() || null } : {}),
       is_active: true,
     };
 
@@ -485,6 +494,9 @@ export async function updateCompanyAction(
       ...(parsed.data.imap_port !== undefined ? { imap_port: parsed.data.imap_port || 993 } : {}),
       ...(parsed.data.email_user !== undefined ? { email_user: parsed.data.email_user?.trim() || null } : {}),
       ...(shouldUpdatePassword ? { email_password: parsed.data.email_password!.trim() } : {}),
+      ...(parsed.data.alert_phone !== undefined ? { alert_phone: parsed.data.alert_phone?.trim() || null } : {}),
+      ...(parsed.data.alert_email !== undefined ? { alert_email: parsed.data.alert_email?.trim() || null } : {}),
+      ...(parsed.data.telegram_chat_id !== undefined ? { telegram_chat_id: parsed.data.telegram_chat_id?.trim() || null } : {}),
       ...(parsed.data.is_active !== undefined ? { is_active: parsed.data.is_active } : {}),
     };
 
@@ -1055,6 +1067,15 @@ export async function updateCompanyEmailSettingsAction(
       imap_host: parsed.data.imap_host?.trim() || null,
       imap_port: parsed.data.imap_port || 993,
       email_user: parsed.data.email_user?.trim() || null,
+      ...(parsed.data.alert_phone !== undefined
+        ? { alert_phone: parsed.data.alert_phone?.trim() || null }
+        : {}),
+      ...(parsed.data.alert_email !== undefined
+        ? { alert_email: parsed.data.alert_email?.trim() || null }
+        : {}),
+      ...(parsed.data.telegram_chat_id !== undefined
+        ? { telegram_chat_id: parsed.data.telegram_chat_id?.trim() || null }
+        : {}),
     };
 
     if (
@@ -1080,6 +1101,102 @@ export async function updateCompanyEmailSettingsAction(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };
+  }
+}
+
+/**
+ * اختبار إرسال إشعار تيليجرام فوري لمحادثة أو مجموعة عمليات الشركة
+ */
+export async function testCompanyTelegramConnectionAction(
+  rawInput: TestTelegramConnectionInput
+): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const parsed = testTelegramConnectionSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message || 'معرف محادثة تيليجرام غير صالح',
+      };
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'غير مصرح — يرجى تسجيل الدخول' };
+    }
+
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('role, company_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isSuper = userProfile?.role === 'super_admin';
+    const isCompanyAdmin =
+      userProfile?.role === 'admin' &&
+      (!parsed.data.companyId || userProfile?.company_id === parsed.data.companyId);
+
+    if (!isSuper && !isCompanyAdmin) {
+      return {
+        success: false,
+        error: 'غير مصرح لك باختبار قناة تيليجرام لهذه الشركة',
+      };
+    }
+
+    const siteUrl =
+      process.env.NEXT_PUBLIC_APP_URL || 'https://app.transbodanon.ma';
+    const compLabel = parsed.data.companyName?.trim() || 'Trans Bodanon TMS';
+
+    const testHtml =
+      `🛰️ <b>اختبار مصافحة قناة تيليجرام الفورية | ${compLabel}</b>\n\n` +
+      `✅ تم ربط مجموعة العمليات بنجاح مع محرك التنبيهات السحابي متعدد المستأجرين.\n` +
+      `• <b>معرف المحادثة (Chat ID):</b> <code>${parsed.data.telegram_chat_id}</code>\n` +
+      `• <b>الأوامر التفاعلية المفعّلة:</b> <code>/track [ID/CMR]</code> و <code>/reefer [ID/CMR]</code>\n\n` +
+      `<i>Trans Bodanon Omnichannel Dispatch Engine</i>`;
+
+    const dispatchRes = await sendTelegramAlert({
+      chatId: parsed.data.telegram_chat_id,
+      message: testHtml,
+      inlineButtons: [
+        [
+          {
+            text: '📊 فتح لوحة التحكم التنفيذية',
+            url: `${siteUrl}/dashboard`,
+          },
+        ],
+      ],
+      auditEntity: {
+        type: 'company_telegram_test',
+        id: parsed.data.companyId || 1,
+      },
+    });
+
+    if (!dispatchRes.success) {
+      return {
+        success: false,
+        error: dispatchRes.error || 'تعذر إرسال رسالة الاختبار عبر بوت تيليجرام',
+      };
+    }
+
+    return {
+      success: true,
+      message: dispatchRes.safetyRedirected
+        ? `✅ تم إرسال إشعار الاختبار بنجاح (وضع المحاكاة الآمن نشط — حُوّل إلى ${dispatchRes.effectiveChatId})`
+        : `✅ تم إرسال إشعار الاختبار الفوري بنجاح إلى المحادثة (${dispatchRes.effectiveChatId})!`,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      error: `فشل اختبار إشعار تيليجرام: ${msg}`,
+    };
   }
 }
 
