@@ -9,12 +9,19 @@ export type UserRole =
 
 export type MailProviderType = 'cpanel' | 'hostinger' | 'ovh' | 'custom';
 
+export type CompanyCorridorScope = 'european_only' | 'african_only' | 'dual';
+
+export type SupportedCompanyCurrency = 'MAD' | 'EUR' | 'MRU' | 'XOF';
+
 export interface Company {
   id: number;
   name: string;
   ice?: string | null;
   logo_url?: string | null;
   currency: string;
+  corridor_scope?: CompanyCorridorScope | null;
+  enabled_currencies?: SupportedCompanyCurrency[] | string[] | null;
+  multi_currency_enabled?: boolean | null;
   is_active: boolean;
   subscription_cost?: number | string;
   subscription_start_date?: string | null;

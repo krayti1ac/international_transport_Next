@@ -28,13 +28,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "النقل الدولي - International Transport",
-  description: "نظام إدارة عمليات النقل الدولي واللوجستيك",
+  title: "TransSalges - نظام إدارة النقل الدولي واللوجستيك",
+  description: "نظام TransSalges المتكامل لإدارة عمليات النقل الدولي واللوجستيك العابر للحدود",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Trans Bodanon",
+    title: "TransSalges",
   },
   icons: {
     icon: [

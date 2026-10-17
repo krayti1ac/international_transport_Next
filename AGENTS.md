@@ -80,6 +80,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `supabase/migrations/202611060001_commercial_bills_and_lcn.sql` — Commercial Bills, Promissory Notes & Moroccan LCN Engine (`commercial_bills` table, RLS policies, FIFO clearing link, `commercial-bills` bucket).
 - `supabase/migrations/202611070001_remittance_bordereaux.sql` — Bank Remittance Bordereau & LCN Export Gateway (`remittance_bordereaux` table, RLS policies, indexes).
 - `supabase/migrations/202611080001_add_telegram_multi_tenant.sql` — Multi-Tenant Telegram Bot & Alert Channels (`companies` alert_phone/alert_email/telegram_chat_id, `clients` & `drivers` telegram_chat_id, indexes).
+- `supabase/migrations/202611090001_company_corridor_and_currency_customization.sql` — Tenant Corridor Scope (`european_only`, `african_only`, `dual`) & Multi-Currency Ledger Configuration (`enabled_currencies`, `multi_currency_enabled` on `companies` and `system_settings`).
 
 
 

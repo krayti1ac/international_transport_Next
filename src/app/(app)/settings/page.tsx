@@ -27,6 +27,10 @@ import {
   CheckCheck,
   ShieldAlert,
   Send,
+  Compass,
+  Ship,
+  Globe2,
+  Coins,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/language-provider';
@@ -36,7 +40,7 @@ import {
   testCompanyTelegramConnectionAction,
   updateCompanyEmailSettingsAction,
 } from '@/features/super-admin/services/company.actions';
-import type { MailProviderType } from '@/types/database';
+import type { MailProviderType, CompanyCorridorScope } from '@/types/database';
 
 function SettingsContent() {
   const router = useRouter();
@@ -58,6 +62,9 @@ function SettingsContent() {
     company_name: '',
     ice: '',
     currency: 'MAD',
+    corridor_scope: 'dual' as CompanyCorridorScope,
+    enabled_currencies: ['MAD', 'EUR', 'MRU', 'XOF'] as string[],
+    multi_currency_enabled: true,
     logo_url: null as string | null,
     owner_profit_share: '0',
     default_bank_account_id: '',
@@ -158,10 +165,33 @@ function SettingsContent() {
         console.warn('Could not fetch system_settings:', error.message);
       }
 
+      const resolvedCorridorScope = (fetchedCompany?.corridor_scope ||
+        data?.corridor_scope ||
+        company?.corridor_scope ||
+        'dual') as CompanyCorridorScope;
+
+      const resolvedEnabledCurrencies =
+        Array.isArray(fetchedCompany?.enabled_currencies) && fetchedCompany.enabled_currencies.length > 0
+          ? fetchedCompany.enabled_currencies
+          : Array.isArray(data?.enabled_currencies) && data.enabled_currencies.length > 0
+            ? data.enabled_currencies
+            : Array.isArray(company?.enabled_currencies) && company.enabled_currencies.length > 0
+              ? company.enabled_currencies
+              : ['MAD', 'EUR', 'MRU', 'XOF'];
+
+      const resolvedMultiCurrency =
+        fetchedCompany?.multi_currency_enabled ??
+        data?.multi_currency_enabled ??
+        company?.multi_currency_enabled ??
+        true;
+
       setSettings({
         company_name: fetchedCompany?.name || data?.company_name || company?.name || '',
         ice: fetchedCompany?.ice || company?.ice || '',
         currency: fetchedCompany?.currency || company?.currency || 'MAD',
+        corridor_scope: resolvedCorridorScope,
+        enabled_currencies: resolvedEnabledCurrencies,
+        multi_currency_enabled: Boolean(resolvedMultiCurrency),
         logo_url: fetchedCompany?.logo_url ?? data?.logo_url ?? company?.logo_url ?? null,
         owner_profit_share: data?.owner_profit_share?.toString() || '0',
         default_bank_account_id: data?.default_bank_account_id?.toString() || '',
@@ -185,24 +215,46 @@ function SettingsContent() {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem('app_default_tva_rate', settings.default_tva_rate || '20');
+        localStorage.setItem('app_corridor_scope', settings.corridor_scope || 'dual');
+        localStorage.setItem(
+          'app_enabled_currencies',
+          JSON.stringify(
+            settings.enabled_currencies.length > 0 ? settings.enabled_currencies : [settings.currency || 'MAD']
+          )
+        );
       }
 
       const targetCompanyId = companyId || user?.company_id || 1;
 
       // 1. Save to companies table
       try {
+        const companyPayload: Record<string, any> = {
+          name: settings.company_name,
+          ice: settings.ice,
+          currency: settings.currency,
+          corridor_scope: settings.corridor_scope || 'dual',
+          enabled_currencies:
+            settings.enabled_currencies.length > 0 ? settings.enabled_currencies : [settings.currency || 'MAD'],
+          multi_currency_enabled: settings.multi_currency_enabled,
+          logo_url: settings.logo_url || null,
+        };
+
         const { error: compUpdateErr } = await supabase
           .from('companies')
-          .update({
-            name: settings.company_name,
-            ice: settings.ice,
-            currency: settings.currency,
-            logo_url: settings.logo_url || null,
-          })
+          .update(companyPayload)
           .eq('id', targetCompanyId);
 
         if (compUpdateErr) {
-          console.warn('Could not update companies table:', compUpdateErr.message);
+          // Fallback to base columns if migration not yet applied on remote DB
+          await supabase
+            .from('companies')
+            .update({
+              name: settings.company_name,
+              ice: settings.ice,
+              currency: settings.currency,
+              logo_url: settings.logo_url || null,
+            })
+            .eq('id', targetCompanyId);
         }
       } catch (cSaveErr) {
         console.warn('Failed saving to companies:', cSaveErr);
@@ -216,19 +268,22 @@ function SettingsContent() {
         owner_profit_share: parseFloat(settings.owner_profit_share) || 0,
         default_bank_account_id: settings.default_bank_account_id ? parseInt(settings.default_bank_account_id) : null,
         default_tva_rate: parseFloat(settings.default_tva_rate) || 20,
+        corridor_scope: settings.corridor_scope || 'dual',
+        enabled_currencies:
+          settings.enabled_currencies.length > 0 ? settings.enabled_currencies : [settings.currency || 'MAD'],
+        multi_currency_enabled: settings.multi_currency_enabled,
         updated_at: new Date().toISOString(),
       };
 
       let { error } = await supabase.from('system_settings').upsert(payload);
 
       // If a column is not in Supabase schema cache, fallback to saving without it
-      if (error && error.code === 'PGRST204') {
-        const offending = (error.message?.match(/'([^']+)'/) || [])[1];
-        if (offending && offending in payload) {
-          delete (payload as any)[offending];
-          const retryResult = await supabase.from('system_settings').upsert(payload);
-          error = retryResult.error;
-        }
+      if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+        delete payload.corridor_scope;
+        delete payload.enabled_currencies;
+        delete payload.multi_currency_enabled;
+        const retryResult = await supabase.from('system_settings').upsert(payload);
+        error = retryResult.error;
       }
 
       // Legacy fallback for default_tva_rate
@@ -350,7 +405,7 @@ function SettingsContent() {
 
     const res = await testCompanyTelegramConnectionAction({
       companyId: targetCompanyId,
-      companyName: settings.company_name || company?.name || 'Trans Bodanon TMS',
+      companyName: settings.company_name || company?.name || 'TransSalges',
       telegram_chat_id: emailSettings.telegram_chat_id.trim(),
     });
 
@@ -795,14 +850,406 @@ function SettingsContent() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">{t('العملة الافتراضية للشركة', 'Devise par défaut', 'Moneda predeterminada de la empresa')}</label>
-                  <Input
+                  <label className="text-sm font-medium text-foreground">
+                    {t('العملة الأساسية الافتراضية للشركة', 'Devise de base par défaut', 'Moneda base predeterminada')}
+                  </label>
+                  <select
                     value={settings.currency}
-                    onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
-                    placeholder="MAD"
+                    onChange={(e) => {
+                      const nextCurr = e.target.value;
+                      setSettings((prev) => ({
+                        ...prev,
+                        currency: nextCurr,
+                        enabled_currencies: prev.enabled_currencies.includes(nextCurr)
+                          ? prev.enabled_currencies
+                          : [...prev.enabled_currencies, nextCurr],
+                      }));
+                    }}
                     dir="ltr"
-                  />
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="MAD">MAD — الدرهم المغربي (Dirham Marocain)</option>
+                    <option value="EUR">EUR — اليورو الأوروبي (Euro Européen)</option>
+                    <option value="MRU">MRU — الأوقية الموريتانية (Ouguiya Mauritanien)</option>
+                    <option value="XOF">XOF — فرنك غرب إفريقيا سيفا (Franc CFA BCEAO)</option>
+                  </select>
                 </div>
+              </div>
+
+              {/* 1. التخصيص الجغرافي والتشغيلي للممرات (Corridors Customization) */}
+              <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-3">
+                <div className="flex items-center gap-2">
+                  <Compass className="w-5 h-5 text-primary shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-sm text-foreground">
+                      {t(
+                        '1. التخصيص الجغرافي والتشغيلي للممرات (Corridors Customization)',
+                        '1. Personnalisation géographique et opérationnelle des corridors',
+                        '1. Personalización geográfica y operativa de corredores'
+                      )}
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t(
+                        'حدد نطاق الممرات الدولية لنشاط شركتك لتكييف حساب رسوم العبّارات والمعابر آلياً',
+                        "Définissez le périmètre des corridors internationaux de votre entreprise",
+                        'Defina el alcance de los corredores internacionales de su empresa'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* الممر الأوروبي فقط */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        corridor_scope: 'european_only',
+                      }))
+                    }
+                    className={`p-3 rounded-xl border-2 text-start transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      settings.corridor_scope === 'european_only'
+                        ? 'border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/20'
+                        : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400">
+                          <Ship className="w-4 h-4" />
+                          {t('الممر الأوروبي فقط', 'Corridor Européen seul', 'Solo Corredor Europeo')}
+                        </span>
+                        {settings.corridor_scope === 'european_only' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-600 text-white rounded-full">
+                            {t('مفعّل', 'Actif', 'Activo')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {t(
+                          'تخصص حصري بين المغرب وإسبانيا/فرنسا وأوروبا، مع الاحتساب الآلي لرسوم العبّارات والموانئ (طنجة المتوسط، الجزيرة الخضراء، ألميريا).',
+                          'Maroc ↔ Espagne/France/Europe avec calcul automatique des frais de ferry et ports (Tanger Med, Algésiras, Almería).',
+                          'Marruecos ↔ España/Francia/Europa con cálculo automático de tarifas de ferry y puertos (Tánger Med, Algeciras, Almería).'
+                        )}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* الممر الإفريقي البري فقط */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        corridor_scope: 'african_only',
+                      }))
+                    }
+                    className={`p-3 rounded-xl border-2 text-start transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      settings.corridor_scope === 'african_only'
+                        ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/20'
+                        : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400">
+                          <Compass className="w-4 h-4" />
+                          {t('الممر الإفريقي البري فقط', 'Corridor Africain seul', 'Solo Corredor Africano')}
+                        </span>
+                        {settings.corridor_scope === 'african_only' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-600 text-white rounded-full">
+                            {t('مفعّل', 'Actif', 'Activo')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {t(
+                          'خطوط التجارة نحو موريتانيا والسنغال وجنوب الصحراء، مع تجاوز العبّارات البحرية وتفعيل رسوم الكركارات وعبّارة روصو والبطاقة البنية (ECOWAS).',
+                          'Axes Mauritanie, Sénégal et Afrique subsaharienne (Guerguerat, bac de Rosso, Carte Brune CEDEAO).',
+                          'Rutas hacia Mauritania, Senegal y África subsahariana (Guerguerat, ferry de Rosso, Carta Marrón CEDEAO).'
+                        )}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* الممر المزدوج (الممرّين معاً) */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        corridor_scope: 'dual',
+                      }))
+                    }
+                    className={`p-3 rounded-xl border-2 text-start transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      settings.corridor_scope === 'dual'
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/20'
+                        : 'border-border bg-card hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          <Globe2 className="w-4 h-4" />
+                          {t('الممر المزدوج (الممرّين معاً)', 'Double Corridor (EU + Afrique)', 'Doble Corredor (UE + África)')}
+                        </span>
+                        {settings.corridor_scope === 'dual' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-600 text-white rounded-full">
+                            {t('مفعّل', 'Actif', 'Activo')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {t(
+                          'الجمع بين الممرين الأوروبي والإفريقي في آنٍ واحد من نفس لوحة التحكم مع فصل دقيق في تحليل الربحية (P&L) لكل مسار.',
+                          'Gestion simultanée des corridors Nord (Europe) et Sud (Afrique) avec séparation analytique P&L.',
+                          'Gestión simultánea de los corredores Norte (Europa) y Sur (África) con separación analítica de P&L.'
+                        )}
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. التخصيص المالي والعملات (Multi-Currency Customization) */}
+              <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-amber-500 shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground">
+                        {t(
+                          '2. التخصيص المالي والعملات (Multi-Currency Customization)',
+                          '2. Personnalisation financière et multi-devises',
+                          '2. Personalización financiera y multimoneda'
+                        )}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t(
+                          'اختر العملات المفعلة في الفواتير والخزينة ومحرك فروق أسعار الصرف المحققة (Realized Forex Gain/Loss) بدقة Decimal.js',
+                          'Sélectionnez les devises actives et le moteur de change réalisé (Realized Forex) avec précision Decimal.js',
+                          'Seleccione las monedas activas y el motor de diferencias cambiarias (Realized Forex) con precisión Decimal.js'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Currency Presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        currency: 'MAD',
+                        enabled_currencies: ['MAD'],
+                        multi_currency_enabled: false,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      settings.enabled_currencies.length === 1 && settings.enabled_currencies[0] === 'MAD'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    🇲🇦 {t('الدرهم المغربي (MAD) حصرياً', 'MAD uniquement', 'Solo MAD')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        currency: 'EUR',
+                        enabled_currencies: ['EUR'],
+                        multi_currency_enabled: false,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      settings.enabled_currencies.length === 1 && settings.enabled_currencies[0] === 'EUR'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    🇪🇺 {t('اليورو (EUR) حصرياً', 'EUR uniquement', 'Solo EUR')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        enabled_currencies: ['MAD', 'EUR'],
+                        multi_currency_enabled: true,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      settings.enabled_currencies.length === 2 &&
+                      settings.enabled_currencies.includes('MAD') &&
+                      settings.enabled_currencies.includes('EUR')
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    🚢 {t('الممر الأوروبي (MAD + EUR)', 'Corridor EU (MAD + EUR)', 'Corredor UE (MAD + EUR)')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        enabled_currencies: ['MAD', 'MRU', 'XOF'],
+                        multi_currency_enabled: true,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      settings.enabled_currencies.length === 3 &&
+                      settings.enabled_currencies.includes('MAD') &&
+                      settings.enabled_currencies.includes('MRU') &&
+                      settings.enabled_currencies.includes('XOF')
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    🌍 {t('الممر الإفريقي (MAD + MRU + XOF)', 'Corridor Afrique (MAD + MRU + XOF)', 'Corredor África (MAD + MRU + XOF)')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        enabled_currencies: ['MAD', 'EUR', 'MRU', 'XOF'],
+                        multi_currency_enabled: true,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      settings.enabled_currencies.length === 4
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    🌐 {t('التعامل بكل العملات معاً (Multi-Currency Ledgers)', 'Toutes les devises (Multi-Currency Ledgers)', 'Todas las monedas (Multi-Currency Ledgers)')}
+                  </button>
+                </div>
+
+                {/* Individual Currency Checkboxes */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        code: 'MAD',
+                        flag: '🇲🇦',
+                        title: t('الدرهم المغربي (MAD)', 'Dirham Marocain (MAD)', 'Dirham Marroquí (MAD)'),
+                        desc: t(
+                          'للمعاملات المحلية والدولية المرتبطة بالبنوك المغربية والـ LCN',
+                          'Opérations locales et banques marocaines (LCN / SIMT)',
+                          'Operaciones locales y bancos marroquíes (LCN / SIMT)'
+                        ),
+                      },
+                      {
+                        code: 'EUR',
+                        flag: '🇪🇺',
+                        title: t('اليورو الأوروبي (EUR)', 'Euro Européen (EUR)', 'Euro Europeo (EUR)'),
+                        desc: t(
+                          'للتعاملات مع الموردين والمشترين في إسبانيا وفرنسا والاتحاد الأوروبي (SEPA)',
+                          'Clients et fournisseurs en Espagne, France et UE (SEPA)',
+                          'Clientes y proveedores en España, Francia y UE (SEPA)'
+                        ),
+                      },
+                      {
+                        code: 'MRU',
+                        flag: '🇲🇷',
+                        title: t('الأوقية الموريتانية (MRU)', 'Ouguiya Mauritanien (MRU)', 'Uguiya Mauritano (MRU)'),
+                        desc: t(
+                          'لمسارات نواذيبو ونواكشوط ورسوم العبور الموريتانية',
+                          'Axes Nouadhibou, Nouakchott et frais de transit mauritaniens',
+                          'Rutas Nuadibú, Nuakchot y tasas de tránsito mauritanas'
+                        ),
+                      },
+                      {
+                        code: 'XOF',
+                        flag: '🇸🇳',
+                        title: t('فرنك سيفا غرب إفريقيا (XOF)', 'Franc CFA BCEAO (XOF)', 'Franco CFA África Occidental (XOF)'),
+                        desc: t(
+                          'لمسارات داكار والسنغال ودول المجموعة الاقتصادية لغرب إفريقيا (ECOWAS)',
+                          'Axes Dakar, Sénégal et zone CEDEAO / UEMOA',
+                          'Rutas Dakar, Senegal y zona CEDEAO / UEMOA'
+                        ),
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const isChecked = settings.enabled_currencies.includes(item.code);
+                    return (
+                      <button
+                        key={item.code}
+                        type="button"
+                        onClick={() => {
+                          setSettings((prev) => {
+                            const exists = prev.enabled_currencies.includes(item.code);
+                            const nextList = exists
+                              ? prev.enabled_currencies.filter((c) => c !== item.code)
+                              : [...prev.enabled_currencies, item.code];
+                            const safeList = nextList.length > 0 ? nextList : [prev.currency || 'MAD'];
+                            return {
+                              ...prev,
+                              enabled_currencies: safeList,
+                              multi_currency_enabled: safeList.length > 1 ? true : prev.multi_currency_enabled,
+                            };
+                          });
+                        }}
+                        className={`p-2.5 rounded-xl border text-start transition-all cursor-pointer flex items-start gap-2.5 ${
+                          isChecked
+                            ? 'border-primary bg-primary/10 shadow-xs'
+                            : 'border-border bg-card opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          readOnly
+                          className="mt-1 rounded border-input accent-primary h-4 w-4 pointer-events-none"
+                        />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-foreground">
+                            {item.flag} {item.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground leading-snug">{item.desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Multi-Currency Ledgers & Realized Forex Toggle */}
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border cursor-pointer">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-foreground block">
+                      {t(
+                        'تفعيل دفاتر الأستاذ متعددة العملات وفروق الصرف المحققة (Realized Forex Gain/Loss)',
+                        'Activer les grands livres multi-devises et écarts de change réalisés (Realized Forex)',
+                        'Activar libros mayores multimoneda y diferencias de cambio realizadas (Realized Forex)'
+                      )}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground block">
+                      {t(
+                        'متابعة الخزينة والسيولة بكل عملة على حدة مع احتساب آلي لأرباح وخسائر الصرف بدقة Decimal.js المطلقة',
+                        'Suivi de la trésorerie par devise avec calcul automatique des gains/pertes de change via Decimal.js',
+                        'Seguimiento de tesorería por moneda con cálculo automático de ganancias/pérdidas cambiarias vía Decimal.js'
+                      )}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.multi_currency_enabled}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        multi_currency_enabled: e.target.checked,
+                      }))
+                    }
+                    className="rounded border-input accent-primary h-4 w-4 shrink-0 ms-3 cursor-pointer"
+                  />
+                </label>
               </div>
 
               {/* شعار الشركة */}
@@ -929,7 +1376,7 @@ function SettingsContent() {
                     </div>
                   </div>
                   <span className="text-[11px] font-mono font-bold bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">
-                    @{emailSettings.email_domain || 'transbodanon.com'}
+                    @{emailSettings.email_domain || 'transsalges.com'}
                   </span>
                 </div>
               </CardHeader>

@@ -3,10 +3,19 @@ import { z } from 'zod';
 export const mailProviderEnum = z.enum(['cpanel', 'hostinger', 'ovh', 'custom']);
 export type MailProvider = z.infer<typeof mailProviderEnum>;
 
+export const corridorScopeEnum = z.enum(['european_only', 'african_only', 'dual']);
+export type CorridorScope = z.infer<typeof corridorScopeEnum>;
+
+export const supportedCurrencyEnum = z.enum(['MAD', 'EUR', 'MRU', 'XOF']);
+export type SupportedCurrency = z.infer<typeof supportedCurrencyEnum>;
+
 export const createCompanySchema = z.object({
   name: z.string().trim().min(2, 'اسم الشركة مطلوب ويجب أن يحتوي على حرفين على الأقل'),
   ice: z.string().trim().optional().nullable(),
   currency: z.string().min(1, 'العملة الافتراضية مطلوبة').default('MAD'),
+  corridor_scope: corridorScopeEnum.default('dual').optional(),
+  enabled_currencies: z.array(z.string()).default(['MAD', 'EUR', 'MRU', 'XOF']).optional(),
+  multi_currency_enabled: z.boolean().default(true).optional(),
   subscription_cost: z.coerce.number().min(0, 'تكلفة الاشتراك يجب أن تكون صفراً أو أكثر').default(0),
   subscription_start_date: z.string().optional().nullable(),
   subscription_end_date: z.string().optional().nullable(),
@@ -39,6 +48,9 @@ export const updateCompanySchema = z.object({
   name: z.string().trim().min(2, 'اسم الشركة مطلوب ويجب أن يحتوي على حرفين على الأقل'),
   ice: z.string().trim().optional().nullable(),
   currency: z.string().min(1, 'العملة الافتراضية مطلوبة').default('MAD'),
+  corridor_scope: corridorScopeEnum.optional(),
+  enabled_currencies: z.array(z.string()).optional(),
+  multi_currency_enabled: z.boolean().optional(),
   subscription_cost: z.coerce.number().min(0, 'تكلفة الاشتراك يجب أن تكون صفراً أو أكثر').default(0),
   subscription_start_date: z.string().optional().nullable(),
   subscription_end_date: z.string().optional().nullable(),

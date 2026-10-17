@@ -127,6 +127,11 @@ export async function getCompaniesAction(): Promise<{
 
     const enrichedCompanies: Company[] = (companiesData || []).map((comp) => ({
       ...comp,
+      corridor_scope: comp.corridor_scope || 'dual',
+      enabled_currencies: Array.isArray(comp.enabled_currencies) && comp.enabled_currencies.length > 0
+        ? comp.enabled_currencies
+        : ['MAD', 'EUR', 'MRU', 'XOF'],
+      multi_currency_enabled: comp.multi_currency_enabled ?? true,
       subscription_cost: comp.subscription_cost ?? 0,
       subscription_start_date: comp.subscription_start_date || null,
       subscription_end_date: comp.subscription_end_date || null,
@@ -323,6 +328,12 @@ export async function createCompanyAction(
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
       currency: parsed.data.currency || 'MAD',
+      corridor_scope: parsed.data.corridor_scope || 'dual',
+      enabled_currencies:
+        Array.isArray(parsed.data.enabled_currencies) && parsed.data.enabled_currencies.length > 0
+          ? parsed.data.enabled_currencies
+          : ['MAD', 'EUR', 'MRU', 'XOF'],
+      multi_currency_enabled: parsed.data.multi_currency_enabled ?? true,
       subscription_cost: parsed.data.subscription_cost ?? 0,
       subscription_start_date: parsed.data.subscription_start_date || null,
       subscription_end_date: parsed.data.subscription_end_date || null,
@@ -369,6 +380,9 @@ export async function createCompanyAction(
         if (!baseError && baseData) {
           finalCompany = {
             ...baseData,
+            corridor_scope: parsed.data.corridor_scope || 'dual',
+            enabled_currencies: parsed.data.enabled_currencies || ['MAD', 'EUR', 'MRU', 'XOF'],
+            multi_currency_enabled: parsed.data.multi_currency_enabled ?? true,
             subscription_cost: parsed.data.subscription_cost ?? 0,
             subscription_start_date: parsed.data.subscription_start_date || null,
             subscription_end_date: parsed.data.subscription_end_date || null,
@@ -482,6 +496,11 @@ export async function updateCompanyAction(
       name: parsed.data.name.trim(),
       ice: parsed.data.ice?.trim() || null,
       currency: parsed.data.currency || 'MAD',
+      ...(parsed.data.corridor_scope ? { corridor_scope: parsed.data.corridor_scope } : {}),
+      ...(parsed.data.enabled_currencies ? { enabled_currencies: parsed.data.enabled_currencies } : {}),
+      ...(parsed.data.multi_currency_enabled !== undefined
+        ? { multi_currency_enabled: parsed.data.multi_currency_enabled }
+        : {}),
       subscription_cost: parsed.data.subscription_cost ?? 0,
       subscription_start_date: parsed.data.subscription_start_date || null,
       subscription_end_date: parsed.data.subscription_end_date || null,
