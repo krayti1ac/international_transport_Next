@@ -164,3 +164,38 @@ export interface EligibleSettlementForTransfer {
   validation_errors: string[];
 }
 
+export interface EligibleSupplierPayableForTransfer {
+  payable_id: number;
+  invoice_reference: string;
+  supplier_id: number;
+  supplier_name: string;
+  category: 'fuel_provider' | 'ferry_operator' | 'toll_operator' | 'maintenance_vendor';
+  amount: string;
+  currency: 'MAD' | 'EUR';
+  due_date: string;
+  bank_name?: string | null;
+  bank_rib?: string | null;
+  bank_iban?: string | null;
+  bank_bic?: string | null;
+  is_rib_valid: boolean;
+  is_iban_valid: boolean;
+  validation_errors: string[];
+}
+
+export interface TreasuryLedgerSyncEntry {
+  transaction_reference: string;
+  batch_id: number;
+  batch_reference: string;
+  recipient_type: TransferRecipientType;
+  recipient_id?: number | null;
+  recipient_name: string;
+  amount: string;
+  currency: 'MAD' | 'EUR';
+  exchange_rate_eur_to_mad: string;
+  amount_mad_equivalent: string;
+  category: 'driver_settlement' | 'supplier_payable';
+  execution_date: string;
+  description: string;
+}
+
+

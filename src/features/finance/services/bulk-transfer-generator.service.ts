@@ -12,6 +12,8 @@ import type {
   MoroccanLcnOptions,
   RibValidationResult,
   SepaPain001Options,
+  TransferRecipientType,
+  TreasuryLedgerSyncEntry,
 } from '../types/bulk-transfer.types';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
@@ -437,4 +439,75 @@ ${txXmlParts.join('\n')}
   public static calculateFileChecksum(content: string): string {
     return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
   }
+
+  /**
+   * بناء قيود الخزينة الآلية (treasury_transactions) بدقة Decimal.js عند تنفيذ حزمة التحويل البنكي المجمعة
+   * (سواء كانت SEPA XML باليورو أو Virement de Masse SIMT/LCN بالدرهم للسائقين وموردي المحروقات والعبّارات).
+   */
+  public static buildTreasuryLedgerEntriesForBatch(params: {
+    batchId: number;
+    batchReference: string;
+    executionDate: string;
+    currency: 'MAD' | 'EUR' | string;
+    exchangeRateEurToMad?: number | string;
+    items: Array<{
+      endToEndId: string;
+      recipientType: TransferRecipientType;
+      recipientId?: number | null;
+      recipientName: string;
+      amount: number | string;
+      remittanceInformation?: string | null;
+    }>;
+  }): {
+    entries: TreasuryLedgerSyncEntry[];
+    totalOriginalCurrency: string;
+    totalMadEquivalent: string;
+  } {
+    const currencyUpper = String(params.currency || 'MAD').toUpperCase() === 'EUR' ? 'EUR' : 'MAD';
+    const fxDec =
+      currencyUpper === 'EUR'
+        ? Decimal.max(1, new Decimal(params.exchangeRateEurToMad || '10.85'))
+        : new Decimal(1);
+
+    let totalOriginalDec = new Decimal(0);
+    let totalMadDec = new Decimal(0);
+    const entries: TreasuryLedgerSyncEntry[] = [];
+
+    for (const item of params.items) {
+      const amtDec = Decimal.max(0, new Decimal(item.amount || 0));
+      if (amtDec.lessThanOrEqualTo(0)) continue;
+
+      const amtMadDec = amtDec.times(fxDec);
+      totalOriginalDec = totalOriginalDec.plus(amtDec);
+      totalMadDec = totalMadDec.plus(amtMadDec);
+
+      const category: 'driver_settlement' | 'supplier_payable' =
+        item.recipientType === 'driver' ? 'driver_settlement' : 'supplier_payable';
+
+      entries.push({
+        transaction_reference: `TRS-${params.batchReference}-${item.endToEndId}`,
+        batch_id: params.batchId,
+        batch_reference: params.batchReference,
+        recipient_type: item.recipientType,
+        recipient_id: item.recipientId ?? null,
+        recipient_name: item.recipientName,
+        amount: amtDec.toFixed(2),
+        currency: currencyUpper,
+        exchange_rate_eur_to_mad: fxDec.toFixed(4),
+        amount_mad_equivalent: amtMadDec.toFixed(2),
+        category,
+        execution_date: params.executionDate,
+        description: `[${params.batchReference}] ${
+          category === 'driver_settlement' ? 'تسوية كشف سائق' : 'سداد مستحقات مورد/عبّارة'
+        } — ${item.recipientName} (${item.remittanceInformation || item.endToEndId})`,
+      });
+    }
+
+    return {
+      entries,
+      totalOriginalCurrency: totalOriginalDec.toFixed(2),
+      totalMadEquivalent: totalMadDec.toFixed(2),
+    };
+  }
 }
+

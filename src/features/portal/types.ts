@@ -65,5 +65,92 @@ export interface CreateBookingResult {
   clientPviScore?: string;
 }
 
+export interface PortalInstantQuoteInput {
+  clientId: number;
+  clientName?: string;
+  routeFrom: string;
+  routeTo: string;
+  roadDistanceKm: number;
+  ferryDistanceKm?: number;
+  cargoType: 'fresh_produce' | 'frozen_fish' | 'general_cargo' | 'pharmaceuticals';
+  trailerType: 'frigo' | 'bache' | 'box' | 'container';
+  weightTons: number;
+  currency?: 'EUR' | 'MAD';
+  exchangeRateEurToMad?: string;
+  creditLimitMad?: string;
+}
+
+export interface PortalInstantQuoteEvaluation {
+  quoteReference: string;
+  routeFrom: string;
+  routeTo: string;
+  corridorType: 'european_maritime' | 'african_overland';
+  currency: 'EUR' | 'MAD';
+  baseRoadFreight: string;
+  ferryCrossingSurcharge: string;
+  reeferColdChainSurcharge: string;
+  customsClearanceFee: string;
+  totalHtAmount: string;
+  vatRatePct: string;
+  taxExemptionClause: string;
+  totalTtcAmount: string;
+  totalConsolidatedMad: string;
+  clientPviScore: string;
+  currentOpenExposureMad: string;
+  creditLimitMad: string;
+  projectedExposureMad: string;
+  remainingCreditHeadroomMad: string;
+  isCreditApproved: boolean;
+  isFrozenByDunningStage4: boolean;
+  blockingReason?: string;
+}
+
+export interface ClientTripCompleteDossier {
+  dossierReference: string;
+  generatedAt: string;
+  tripId: number;
+  clientId: number;
+  clientName: string;
+  route: string;
+  zeroInternalCostLeakageVerified: boolean;
+  invoiceSummary: {
+    invoiceNumber: string;
+    issueDate: string;
+    totalTtc: string;
+    paidAmount: string;
+    remainingAmount: string;
+    currency: string;
+    taxExemptionAttestation: string;
+    qrVerificationHash: string;
+  };
+  eCmrDocument: {
+    cmrNumber: string;
+    originCity: string;
+    destinationCity: string;
+    exporterName: string;
+    truckPlate: string;
+    driverName: string;
+    grossWeightTons: string;
+    conventionClause: string;
+  };
+  ePodCertificate: {
+    status: 'signed_verified' | 'pending_delivery';
+    receiverName: string;
+    deliveredAt: string;
+    deliveryGpsCoordinates: string;
+    hmacSha256ForensicSignature: string;
+  };
+  carbonAuditCertificate: {
+    standard: 'GLEC Framework v3.0 / ISO 14083 / EU CBAM';
+    distanceKm: string;
+    cargoWeightTons: string;
+    tonKilometers: string;
+    wtwEmissionsKgCo2e: string;
+    intensityGCo2ePerTkm: string;
+    reeferShareKgCo2e: string;
+  };
+}
+
+
 
 
