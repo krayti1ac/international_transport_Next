@@ -12,7 +12,8 @@ export type AuditAction =
   | 'security_alert' 
   | 'fifo_payment'
   | 'customs_push'
-  | 'whatsapp_notification';
+  | 'whatsapp_notification'
+  | 'telegram_notification';
 
 export interface LogActionParams {
   entityType: string;

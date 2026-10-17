@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendWhatsAppCloudMessage } from '@/lib/whatsapp';
+import { sendTelegramAlert } from '@/lib/telegram';
 import { sendDomainEmail } from '@/lib/email-smtp';
 import { recordAuditLog } from '@/lib/audit.server';
 import { SmartDunningCashFlowService } from './smart-dunning-cashflow.service';
@@ -13,6 +14,7 @@ import type {
 export interface InjectedTenantDunningPayload {
   companyId: number;
   companyName: string;
+  telegramChatId?: string | null;
   settledInvoices: HistoricalSettledInvoiceInput[];
   openReceivables: OpenReceivableInput[];
 }
@@ -63,16 +65,17 @@ export async function processMultiTenantSmartDunningCron(options?: {
     if (supabase) {
       const { data: companiesRows } = await supabase
         .from('companies')
-        .select('id, name, is_active')
+        .select('id, name, is_active, telegram_chat_id')
         .order('id', { ascending: true });
 
       const activeCompanies = Array.isArray(companiesRows) && companiesRows.length > 0
         ? companiesRows.filter((c) => c.is_active !== false)
-        : [{ id: 1, name: 'Trans Bodanon International' }];
+        : [{ id: 1, name: 'Trans Bodanon International', telegram_chat_id: '-100192837465' }];
 
       for (const company of activeCompanies) {
         const companyId = Number(company.id);
         const companyName = String(company.name || `Company #${companyId}`);
+        const companyTelegramChatId = (company as { telegram_chat_id?: string | null }).telegram_chat_id || null;
 
         try {
           const [clientsRes, invoicesRes, lcnRes] = await Promise.all([
@@ -213,6 +216,7 @@ export async function processMultiTenantSmartDunningCron(options?: {
           tenantsToProcess.push({
             companyId,
             companyName,
+            telegramChatId: companyTelegramChatId,
             settledInvoices,
             openReceivables,
           });
@@ -296,6 +300,36 @@ export async function processMultiTenantSmartDunningCron(options?: {
             html: htmlBody,
             text: bodyText,
             companyId: tenant.companyId,
+          }).catch(() => {});
+        }
+
+        const targetTelegramChat =
+          tenant.telegramChatId || process.env.TELEGRAM_DEFAULT_CHAT_ID;
+        if (targetTelegramChat && process.env.TELEGRAM_BOT_TOKEN) {
+          const siteUrl =
+            process.env.NEXT_PUBLIC_APP_URL || 'https://app.transbodanon.ma';
+          const tgDunningHtml =
+            `💳 <b>إشعار تحصيل ومطالبة مالية (${item.escalationStage}) | ${tenant.companyName}</b>\n\n` +
+            `• <b>العميل:</b> ${item.clientName}\n` +
+            `• <b>الوثيقة:</b> <code>${item.documentNumber}</code>\n` +
+            `• <b>المبلغ المتبقي:</b> <b>${item.remainingAmount} ${item.currency}</b>\n` +
+            `• <b>أيام التأخير:</b> ${item.daysOverdue} يوم`;
+
+          await sendTelegramAlert({
+            chatId: targetTelegramChat,
+            message: tgDunningHtml,
+            inlineButtons: [
+              [
+                {
+                  text: '📊 رادار التحصيل والـ PVI',
+                  url: `${siteUrl}/finance`,
+                },
+              ],
+            ],
+            auditEntity: {
+              type: 'smart_dunning_cron',
+              id: `${tenant.companyId}:${item.id}`,
+            },
           }).catch(() => {});
         }
 

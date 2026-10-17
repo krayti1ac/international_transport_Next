@@ -175,6 +175,21 @@ const OPTIONAL_VARS = [
     label: 'WhatsApp Live Dispatch Mode (set "true" for real live sending)',
     example: 'true',
   },
+  {
+    key: 'TELEGRAM_BOT_TOKEN',
+    label: 'Telegram Bot API Token (from @BotFather)',
+    example: '123456789:ABCdefGHIjklMNOpqrsTUVwxyz',
+  },
+  {
+    key: 'TELEGRAM_DEFAULT_CHAT_ID',
+    label: 'Telegram Default Operations Group Chat ID',
+    example: '-100192837465',
+  },
+  {
+    key: 'TELEGRAM_LIVE_DISPATCH',
+    label: 'Telegram Live Dispatch Mode (set "true" for real live sending)',
+    example: 'true',
+  },
 ];
 
 let errors = 0;
@@ -212,11 +227,17 @@ function checkRequiredVars() {
   }
 
   const isLive = process.env.WHATSAPP_LIVE_DISPATCH === 'true';
+  const isTelegramLive = process.env.TELEGRAM_LIVE_DISPATCH === 'true';
   process.stdout.write('\n');
   if (isLive) {
     ok(`WhatsApp Gateway: 🟢 LIVE DISPATCH MODE (Directly messaging drivers & clients)`);
   } else {
     ok(`WhatsApp Gateway: 🧪 SAFE SIMULATION MODE (Safety override active - messages kept to test numbers)`);
+  }
+  if (isTelegramLive) {
+    ok(`Telegram Gateway: 🟢 LIVE DISPATCH MODE (Directly messaging tenant groups & clients)`);
+  } else {
+    ok(`Telegram Gateway: 🧪 SAFE SIMULATION MODE (Safety override active - messages kept to default chat)`);
   }
 }
 

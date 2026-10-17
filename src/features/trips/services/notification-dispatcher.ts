@@ -1,8 +1,9 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { sendWhatsAppCloudMessage, formatPhoneNumber } from '@/lib/whatsapp';
+import { sendTelegramAlert, type TelegramInlineButton } from '@/lib/telegram';
 import { dispatchClientWebhook } from '@/lib/webhooks';
-import type { TripOrder, Client, Truck } from '@/types/database';
+import type { TripOrder, Client, Truck, Company } from '@/types/database';
 
 export type TripLifecycleEventType =
   | 'trip_dispatched'
@@ -325,6 +326,7 @@ export async function dispatchTripLifecycleNotifications(
       .from('trip_orders')
       .select(`
         id,
+        company_id,
         route,
         route_export,
         departure_date,
@@ -345,11 +347,18 @@ export async function dispatchTripLifecycleNotifications(
       return { success: true, dispatchedToClient: false };
     }
 
-    // 2. Fetch Client and Truck details
-    const [clientRes, truckRes] = await Promise.all([
+    // 2. Fetch Client, Truck, and Company details
+    const [clientRes, truckRes, companyRes] = await Promise.all([
       supabase.from('clients').select('*').eq('id', trip.client_id).single<Client>(),
       trip.truck_id
         ? supabase.from('trucks').select('plate_number').eq('id', trip.truck_id).single<Truck>()
+        : Promise.resolve({ data: null }),
+      trip.company_id
+        ? supabase
+            .from('companies')
+            .select('id, telegram_chat_id')
+            .eq('id', trip.company_id)
+            .single<Pick<Company, 'id' | 'telegram_chat_id'>>()
         : Promise.resolve({ data: null }),
     ]);
 
@@ -364,6 +373,21 @@ export async function dispatchTripLifecycleNotifications(
     const podPdfLink = `${siteUrl}/api/pod?tripId=${trip.id}`;
     const cmrCode = trip.cmr_export_number || trip.cmr_number || `CMR-${trip.id}`;
     const routeText = trip.route_export || trip.route || 'شحنة دولية';
+    const locale = extraDetails?.locale || inferClientLocale(client);
+
+    const message = buildMilestoneMessage({
+      eventType,
+      locale,
+      clientName: client.name || 'عميلنا العزيز',
+      tripId: trip.id,
+      cmrNumber: cmrCode,
+      route: routeText,
+      departureDate: trip.departure_date,
+      plateNumber: truckPlate,
+      trackingUrl: trackingLink,
+      podPdfUrl: podPdfLink,
+      details: extraDetails,
+    });
 
     // 3. Dispatch to Client Webhook if configured
     const clientWebhookUrl = (client as unknown as { webhook_url?: string }).webhook_url;
@@ -392,22 +416,6 @@ export async function dispatchTripLifecycleNotifications(
     // 4. Build and dispatch WhatsApp Notification
     let dispatchedToClient = false;
     if (client.phone && (process.env.WHATSAPP_API_TOKEN || process.env.CALLMEBOT_API_KEY)) {
-      const locale = extraDetails?.locale || inferClientLocale(client);
-
-      const message = buildMilestoneMessage({
-        eventType,
-        locale,
-        clientName: client.name || 'عميلنا العزيز',
-        tripId: trip.id,
-        cmrNumber: cmrCode,
-        route: routeText,
-        departureDate: trip.departure_date,
-        plateNumber: truckPlate,
-        trackingUrl: trackingLink,
-        podPdfUrl: podPdfLink,
-        details: extraDetails,
-      });
-
       await sendWhatsAppCloudMessage({
         to: client.phone,
         message,
@@ -418,6 +426,58 @@ export async function dispatchTripLifecycleNotifications(
       });
 
       dispatchedToClient = true;
+    }
+
+    // 5. Dispatch Telegram Cloud Notification (Client Telegram Chat or Tenant Operations Group)
+    const targetTelegramChatId =
+      client.telegram_chat_id || companyRes.data?.telegram_chat_id || null;
+
+    if (targetTelegramChatId && process.env.TELEGRAM_BOT_TOKEN) {
+      const telegramHtmlMessage = message
+        .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+        .replace(/_([^_\n]+)_/g, '<i>$1</i>');
+
+      const inlineButtons: TelegramInlineButton[][] = [
+        [
+          {
+            text:
+              locale === 'es'
+                ? '📍 Seguimiento GPS y Frigo en directo'
+                : locale === 'fr'
+                  ? '📍 Suivi GPS & Chaîne du Froid'
+                  : '📍 التتبع الفضائي وحرارة المبرد',
+            url: trackingLink,
+          },
+        ],
+      ];
+
+      if (eventType === 'delivery_completed') {
+        inlineButtons.push([
+          {
+            text:
+              locale === 'es'
+                ? '📄 Descargar Certificado e-POD (PDF)'
+                : locale === 'fr'
+                  ? '📄 Télécharger Récépissé e-POD (PDF)'
+                  : '📄 تحميل وثيقة التسليم e-POD (PDF)',
+            url: podPdfLink,
+          },
+        ]);
+      }
+
+      const tgResult = await sendTelegramAlert({
+        chatId: targetTelegramChatId,
+        message: telegramHtmlMessage,
+        inlineButtons,
+        auditEntity: {
+          type: 'trip_order',
+          id: trip.id,
+        },
+      });
+
+      if (tgResult.success) {
+        dispatchedToClient = true;
+      }
     }
 
     return { success: true, dispatchedToClient };

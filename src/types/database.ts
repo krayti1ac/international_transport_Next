@@ -30,6 +30,9 @@ export interface Company {
   email_user?: string | null;
   email_password?: string | null;
   has_email_password?: boolean;
+  alert_phone?: string | null;
+  alert_email?: string | null;
+  telegram_chat_id?: string | null;
   created_at: string;
 }
 
@@ -125,6 +128,7 @@ export interface Client {
   logo_url?: string | null;
   loading_gps_url?: string | null;
   unloading_gps_url?: string | null;
+  telegram_chat_id?: string | null;
 }
 
 export interface Driver {
@@ -148,6 +152,7 @@ export interface Driver {
   african_visa_number?: string;
   african_visa_expiry_date?: string;
   photo_url?: string | null;
+  telegram_chat_id?: string | null;
   created_at?: string;
 }
 
