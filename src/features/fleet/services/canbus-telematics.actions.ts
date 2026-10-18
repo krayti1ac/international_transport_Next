@@ -7,9 +7,15 @@ import type {
   FmsTelematicsPacket,
   TelematicsAlert,
   TruckTelematicsState,
+  ReeferOperationMode,
 } from '../types/telematics.types';
 import { processFrigoTelematicsGuard } from './frigo-guard.actions';
 import { evaluatePortGeofences } from '@/features/tracking/services/port-geofence.actions';
+import { CargoLossAssessmentService } from '@/features/tracking/services/cargo-loss-assessment.service';
+import type {
+  CargoCategory,
+  ReeferCargoInsuranceClaim,
+} from '@/features/tracking/types/reefer-claim-settlement.types';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -22,6 +28,14 @@ const telematicsCache = new Map<
     timestamp: number;
     speed_kmh: number;
     coolant_temp_c: number;
+    reefer_temp_c?: number;
+    reefer_mode?: ReeferOperationMode;
+    is_defrost_active?: boolean;
+    defrost_started_at?: number;
+    defrost_duration_minutes?: number;
+    refrigerant_pressure_bar?: number;
+    refrigerant_leak_detected?: boolean;
+    last_claim_reference?: string;
   }
 >();
 
@@ -37,6 +51,7 @@ export async function ingestFmsTelematicsPacket(
   success: boolean;
   alerts: TelematicsAlert[];
   state?: TruckTelematicsState;
+  claim?: ReeferCargoInsuranceClaim;
   error?: string;
 }> {
   try {
@@ -55,6 +70,46 @@ export async function ingestFmsTelematicsPacket(
     const truckId = truck ? truck.id : 0;
     const truckModel = truck ? truck.model : 'International TIR Truck';
     const truckStatus = (truck ? truck.status : 'active') as 'active' | 'maintenance' | 'idle';
+
+    // Resolve active trip & driver context for reefer tracking and automated insurance claims
+    let activeTrip: {
+      id: number;
+      cmr_number?: string | null;
+      goods_description_export?: string | null;
+      goods_description_import?: string | null;
+      driver_id?: number | null;
+    } | null = null;
+
+    if (packet.trip_id) {
+      const { data: t } = await supabase
+        .from('trip_orders')
+        .select('id, cmr_number, goods_description_export, goods_description_import, driver_id')
+        .eq('id', packet.trip_id)
+        .maybeSingle();
+      if (t) activeTrip = t;
+    }
+
+    if (!activeTrip && truckId > 0) {
+      const { data: t } = await supabase
+        .from('trip_orders')
+        .select('id, cmr_number, goods_description_export, goods_description_import, driver_id')
+        .eq('truck_id', truckId)
+        .in('status', ['in_transit', 'loading', 'customs_export', 'pending'])
+        .order('departure_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (t) activeTrip = t;
+    }
+
+    let driverName = 'Field Fleet Driver';
+    if (activeTrip?.driver_id) {
+      const { data: driver } = await supabase
+        .from('drivers')
+        .select('name')
+        .eq('id', activeTrip.driver_id)
+        .maybeSingle();
+      if (driver?.name) driverName = driver.name;
+    }
 
     // Nominal TIR tank capacity (Standard double tank = 800 - 1100L, default 900L)
     const tankCapacityL = new Decimal(900);
@@ -188,6 +243,205 @@ export async function ingestFmsTelematicsPacket(
       });
     }
 
+    // Check E: Defrost Cycle Stuck / Extended Defrost (> 45 min)
+    const isDefrostActive = packet.is_defrost_active === true || packet.reefer_mode === 'defrost';
+    let defrostMins = packet.defrost_duration_minutes;
+    if (defrostMins === undefined && isDefrostActive) {
+      const prevDefrostStart = lastReading?.defrost_started_at;
+      if (prevDefrostStart) {
+        defrostMins = Math.max(1, Math.round((nowMs - prevDefrostStart) / (1000 * 60)));
+      } else {
+        defrostMins = 15;
+      }
+    } else if (!isDefrostActive) {
+      defrostMins = 0;
+    }
+
+    if (isDefrostActive && defrostMins !== undefined && defrostMins >= 45) {
+      const alert: TelematicsAlert = {
+        id: `defrost-${cleanPlate}-${Date.now()}`,
+        truck_plate: cleanPlate,
+        alert_type: 'REEFER_DEFROST_STUCK',
+        severity: defrostMins >= 60 ? 'critical' : 'warning',
+        title: 'إنذار استمرار دورة إذابة الجليد (Defrost Cycle Stuck)',
+        title_fr: 'Cycle de dégivrage anormalement prolongé (Defrost Bloqué)',
+        title_es: 'Ciclo de desescarche bloqueado anormalmente prolongado',
+        description: `وحدة التبريد عالقة في وضع إذابة الصقيع لأكثر من ${defrostMins} دقيقة، مما يرفع حرارة المقصورة ويهدد سلامة الشحنة الغذائية.`,
+        description_fr: `Le groupe frigo est bloqué en dégivrage depuis ${defrostMins} min, provoquant une hausse thermique anormale.`,
+        description_es: `El equipo frigorífico está bloqueado en modo desescarche durante ${defrostMins} min, elevando la temperatura de carga.`,
+        timestamp: nowIso,
+        metrics: {
+          reefer_temp_c: packet.reefer_temp_c,
+          defrost_duration_minutes: defrostMins,
+        },
+      };
+      generatedAlerts.push(alert);
+      recentAlerts.unshift(alert);
+
+      await recordAuditLog({
+        actionType: 'security_alert',
+        entityType: 'reefer_telematics',
+        entityId: truckId.toString(),
+        reason: `REEFER_DEFROST_STUCK: Plate ${cleanPlate}, duration ${defrostMins} mins`,
+        newData: {
+          event: 'REEFER_DEFROST_STUCK',
+          plate: cleanPlate,
+          defrostDurationMins: defrostMins,
+          reeferTempC: packet.reefer_temp_c,
+          timestamp: nowIso,
+        },
+      });
+    }
+
+    // Check F: Refrigerant Circuit Leak / Pressure Collapse (< 8.0 bar)
+    const isLeakDetected = packet.refrigerant_leak_detected === true;
+    const refrigPressure = packet.refrigerant_pressure_bar;
+    const isLowPressure = refrigPressure !== undefined && refrigPressure < 8.0;
+
+    if (isLeakDetected || isLowPressure) {
+      const barDisplay = refrigPressure !== undefined ? refrigPressure.toFixed(1) : '6.2';
+      const alert: TelematicsAlert = {
+        id: `leak-${cleanPlate}-${Date.now()}`,
+        truck_plate: cleanPlate,
+        alert_type: 'REEFER_REFRIGERANT_LEAK',
+        severity: 'critical',
+        title: 'تسرب حرج لغاز التبريد وهبوط ضغط الدائرة (Refrigerant Leak Detected)',
+        title_fr: 'Fuite critique de fluide frigorigène (Chute de pression)',
+        title_es: 'Fuga crítica de refrigerante (Caída de presión del circuito)',
+        description: `هبوط حاد في ضغط غاز التبريد (${barDisplay} bar) مع اشتباه تسريب في صمام التمدد (TXV) أو أنابيب المكثف. خطر توقف الضاغط وشيك.`,
+        description_fr: `Chute brutale de pression du fluide frigorigène (${barDisplay} bar). Risque de panne compresseur ou fuite TXV.`,
+        description_es: `Caída abrupta de presión de refrigerante (${barDisplay} bar). Riesgo inminente de parada del compresor o fuga en TXV.`,
+        timestamp: nowIso,
+        metrics: {
+          refrigerant_pressure_bar: refrigPressure,
+          reefer_temp_c: packet.reefer_temp_c,
+        },
+      };
+      generatedAlerts.push(alert);
+      recentAlerts.unshift(alert);
+
+      await recordAuditLog({
+        actionType: 'security_alert',
+        entityType: 'reefer_circuit',
+        entityId: truckId.toString(),
+        reason: `REEFER_REFRIGERANT_LEAK: Plate ${cleanPlate}, pressure ${barDisplay} bar`,
+        newData: {
+          event: 'REEFER_REFRIGERANT_LEAK',
+          plate: cleanPlate,
+          refrigerantPressureBar: refrigPressure,
+          timestamp: nowIso,
+        },
+      });
+    }
+
+    // Check G: Critical Cold Chain Breach & Automated Cargo Insurance Claim Trigger
+    let generatedClaim: ReeferCargoInsuranceClaim | undefined;
+    const currentReeferTemp = packet.reefer_temp_c;
+
+    if (currentReeferTemp !== undefined) {
+      const cargoDesc = `${activeTrip?.goods_description_export || ''} ${activeTrip?.goods_description_import || ''}`.toLowerCase();
+      const isFrozen =
+        (packet.cargo_setpoint_c !== undefined && packet.cargo_setpoint_c <= -10) ||
+        cargoDesc.includes('frozen') ||
+        cargoDesc.includes('surgelé') ||
+        cargoDesc.includes('مجمد') ||
+        currentReeferTemp < -6.0;
+
+      const setpointTemp = packet.cargo_setpoint_c ?? (isFrozen ? -18.0 : 4.0);
+      const isCriticalTempBreach = isFrozen ? currentReeferTemp >= -5.0 : currentReeferTemp >= 8.0;
+
+      if (isCriticalTempBreach) {
+        // Prevent duplicate claims within 30 minutes for the same truck
+        const alreadyClaimed = recentAlerts.some(
+          (a) =>
+            a.truck_plate === cleanPlate &&
+            a.alert_type === 'REEFER_CARGO_LOSS_IMMINENT' &&
+            a.metrics.claim_reference &&
+            nowMs - new Date(a.timestamp).getTime() < 30 * 60 * 1000
+        );
+
+        if (!alreadyClaimed) {
+          const tripId = activeTrip?.id || packet.trip_id || (truckId > 0 ? truckId * 100 + 1 : 901);
+          const tripNumber = activeTrip?.cmr_number || `CMR-TIR-${cleanPlate}-${tripId}`;
+          const cargoCategory: CargoCategory = isFrozen ? 'deep_frozen' : 'fresh_produce';
+          const insuredValue = 350000; // 350,000 MAD standard insured cargo value
+          const deltaT = Math.max(0.5, Math.abs(currentReeferTemp - setpointTemp));
+
+          try {
+            generatedClaim = await CargoLossAssessmentService.processInsuranceClaim({
+              tripId,
+              tripNumber,
+              truckPlate: cleanPlate,
+              driverName,
+              cargoCategory,
+              insuredCargoValue: insuredValue,
+              currency: 'MAD',
+              deductibleAmount: 5000,
+              durationMinutes: 180,
+              tempRiseDeltaC: deltaT,
+              maxAllowedTempC: setpointTemp,
+              tempAtCloseC: currentReeferTemp,
+              mktElevationC: deltaT > 5 ? 3.5 : 1.5,
+              insurerName: 'Allianz Maroc / RMA Watanya',
+              policyNumber: 'POL-FRIGO-2026-TANGIER',
+              settlementType: 'credit_note',
+              notes: `فتح ملف مطالبة أوتوماتيكي عبر نظام IoT FMS/CAN-Bus إثر كسر حرج لسلسلة التبريد (${currentReeferTemp.toFixed(1)}°C مقابل الضبط ${setpointTemp.toFixed(1)}°C). ضغط الغاز: ${refrigPressure !== undefined ? `${refrigPressure.toFixed(1)} bar` : 'سليم'}.`,
+              lines: [
+                {
+                  itemDescription: isFrozen
+                    ? 'شحنة أسماك ورخويات مجمدة (Frozen Seafood)'
+                    : 'شحنة فواكه وخضروات طازجة (Fresh Berries)',
+                  affectedQuantity: 18500,
+                  unitOfMeasure: 'kg',
+                  unitValue: new Decimal(insuredValue).dividedBy(18500).toDecimalPlaces(2).toNumber(),
+                  depreciationPct: isFrozen ? 65 : 55,
+                },
+              ],
+            });
+
+            const alert: TelematicsAlert = {
+              id: `claim-${cleanPlate}-${Date.now()}`,
+              truck_plate: cleanPlate,
+              alert_type: 'REEFER_CARGO_LOSS_IMMINENT',
+              severity: 'critical',
+              title: 'إصدار ملف مطالبة تأمين بضائع آلياً (Auto Cargo Claim Triggered)',
+              title_fr: 'Dossier sinistre assurance marchandise ouvert automatiquement',
+              title_es: 'Expediente de reclamación de seguro abierto automáticamente',
+              description: `تم تلقائياً قيد ملف المطالبة ${generatedClaim.claimReference} بتعويض صافي تقديري ${generatedClaim.netIndemnityAmount.toLocaleString()} MAD نتيجة كسر حرج لسلسلة التبريد.`,
+              description_fr: `Dossier ${generatedClaim.claimReference} créé avec indemnité estimée de ${generatedClaim.netIndemnityAmount.toLocaleString()} MAD suite à une rupture de froid.`,
+              description_es: `Expediente ${generatedClaim.claimReference} generado con indemnización estimada de ${generatedClaim.netIndemnityAmount.toLocaleString()} MAD por rotura de cadena de frío.`,
+              timestamp: nowIso,
+              metrics: {
+                reefer_temp_c: currentReeferTemp,
+                claim_reference: generatedClaim.claimReference,
+                gross_loss_estimate: generatedClaim.grossLossAmount,
+              },
+            };
+
+            generatedAlerts.push(alert);
+            recentAlerts.unshift(alert);
+
+            await recordAuditLog({
+              actionType: 'create',
+              entityType: 'reefer_insurance_claim',
+              entityId: generatedClaim.id,
+              reason: `Auto Claim Generated via Telematics: Ref ${generatedClaim.claimReference}, Trip #${tripId}`,
+              newData: {
+                claimReference: generatedClaim.claimReference,
+                tripId,
+                truckPlate: cleanPlate,
+                reeferTempC: currentReeferTemp,
+                netIndemnityAmount: generatedClaim.netIndemnityAmount,
+                claimDossierHash: generatedClaim.claimDossierHash,
+              },
+            });
+          } catch (claimErr) {
+            console.error('[canbus-telematics] Failed to auto-create insurance claim:', claimErr);
+          }
+        }
+      }
+    }
+
     // Evaluate Strategic Port & Border Geofences
     if (truckId > 0 && packet.latitude && packet.longitude) {
       await evaluatePortGeofences({
@@ -205,12 +459,23 @@ export async function ingestFmsTelematicsPacket(
     }
 
     // 3. Update In-Memory Telematics Cache
+    const activeClaimRef =
+      generatedClaim?.claimReference || lastReading?.last_claim_reference;
+
     telematicsCache.set(cleanPlate, {
       fuel_level_percent: packet.fuel_level_percent,
       fuel_liters: currentFuelLitersDec.toNumber(),
       timestamp: nowMs,
       speed_kmh: packet.speed_kmh,
       coolant_temp_c: packet.engine_coolant_temp_c,
+      reefer_temp_c: packet.reefer_temp_c,
+      reefer_mode: packet.reefer_mode ?? (isDefrostActive ? 'defrost' : 'cooling'),
+      is_defrost_active: isDefrostActive,
+      defrost_started_at: isDefrostActive ? (lastReading?.defrost_started_at || nowMs) : undefined,
+      defrost_duration_minutes: defrostMins,
+      refrigerant_pressure_bar: refrigPressure,
+      refrigerant_leak_detected: isLeakDetected || isLowPressure,
+      last_claim_reference: activeClaimRef,
     });
 
     // 4. Record Location in Database if truck exists
@@ -247,6 +512,12 @@ export async function ingestFmsTelematicsPacket(
       engine_coolant_temp_c: packet.engine_coolant_temp_c,
       odometer_km: packet.odometer_km,
       reefer_temp_c: packet.reefer_temp_c,
+      reefer_mode: packet.reefer_mode ?? (isDefrostActive ? 'defrost' : 'cooling'),
+      is_defrost_active: isDefrostActive,
+      defrost_duration_minutes: defrostMins,
+      refrigerant_pressure_bar: refrigPressure,
+      refrigerant_leak_detected: isLeakDetected || isLowPressure,
+      active_claim_reference: activeClaimRef,
       engine_health: engineHealth,
       active_alerts: generatedAlerts,
     };
@@ -255,6 +526,7 @@ export async function ingestFmsTelematicsPacket(
       success: true,
       alerts: generatedAlerts,
       state,
+      claim: generatedClaim,
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to ingest telematics packet';
@@ -307,6 +579,13 @@ export async function getFleetTelematicsOverview(): Promise<{
         (a) => a.truck_plate.toUpperCase() === t.plate_number.toUpperCase()
       );
 
+      const reeferTemp = cached?.reefer_temp_c ?? -18.2;
+      const reeferMode = cached?.reefer_mode ?? 'cooling';
+      const isDefrost = cached?.is_defrost_active ?? false;
+      const defrostDuration = cached?.defrost_duration_minutes ?? 0;
+      const refrigPressure = cached?.refrigerant_pressure_bar ?? 14.2;
+      const refrigLeak = cached?.refrigerant_leak_detected ?? (refrigPressure < 8.0);
+
       truckStates.push({
         truck_id: t.id,
         plate_number: t.plate_number,
@@ -321,6 +600,13 @@ export async function getFleetTelematicsOverview(): Promise<{
         engine_rpm: speed > 0 ? 1450 : 650,
         engine_coolant_temp_c: coolant,
         odometer_km: 184500,
+        reefer_temp_c: reeferTemp,
+        reefer_mode: reeferMode,
+        is_defrost_active: isDefrost,
+        defrost_duration_minutes: defrostDuration,
+        refrigerant_pressure_bar: refrigPressure,
+        refrigerant_leak_detected: refrigLeak,
+        active_claim_reference: cached?.last_claim_reference,
         engine_health: coolant >= 105 ? 'critical' : coolant >= 98 ? 'warning' : 'healthy',
         active_alerts: truckAlerts,
       });

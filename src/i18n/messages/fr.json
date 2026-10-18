@@ -2635,6 +2635,19 @@
       "selectedBannerTotal": "Total Nominal",
       "clearSelection": "Désélectionner",
       "selectAllPortfolio": "Sélectionner tous les effets en portefeuille"
+    },
+    "extendedIotStream": {
+      "title": "Protocole de flux IoT étendu pour groupes frigo et bus CAN",
+      "defrostStuckAlert": "Cycle de dégivrage anormalement prolongé (Defrost Bloqué)",
+      "refrigerantLeakAlert": "Fuite critique de fluide frigorigène (Chute de pression)",
+      "cargoLossImminentAlert": "Dossier sinistre assurance marchandise ouvert automatiquement",
+      "defrostDuration": "Durée du cycle de dégivrage",
+      "refrigerantPressure": "Pression du circuit frigorifique",
+      "autoClaimReference": "Dossier d'indemnisation généré automatiquement",
+      "normalSignal": "Signal FMS normal",
+      "simulateDefrost": "Dégivrage bloqué (>45 min)",
+      "simulateLeak": "Fuite de réfrigérant",
+      "simulateClaim": "Rupture chaîne du froid + auto-claim"
     }
   },
   "fleetFuelBi": {

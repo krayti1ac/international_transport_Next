@@ -3,9 +3,14 @@ export type TelematicsAlertType =
   | 'COOLANT_OVERHEATING'
   | 'EXCESSIVE_IDLING'
   | 'HARSH_DRIVING_OVERSPEED'
-  | 'REEFER_TEMP_BREACH';
+  | 'REEFER_TEMP_BREACH'
+  | 'REEFER_DEFROST_STUCK'
+  | 'REEFER_REFRIGERANT_LEAK'
+  | 'REEFER_CARGO_LOSS_IMMINENT';
 
 export type AlertSeverity = 'critical' | 'warning' | 'info';
+
+export type ReeferOperationMode = 'cooling' | 'defrost' | 'heating' | 'standby' | 'off';
 
 export interface FmsTelematicsPacket {
   imei?: string;
@@ -24,6 +29,13 @@ export interface FmsTelematicsPacket {
   battery_voltage_v?: number;
   ambient_temp_c?: number;
   reefer_temp_c?: number; // درجة حرارة المقطورة المبردة (Frigo)
+  reefer_mode?: ReeferOperationMode;
+  is_defrost_active?: boolean;
+  defrost_duration_minutes?: number;
+  refrigerant_pressure_bar?: number;
+  refrigerant_leak_detected?: boolean;
+  cargo_setpoint_c?: number;
+  trip_id?: number;
 }
 
 export interface TelematicsAlert {
@@ -33,8 +45,10 @@ export interface TelematicsAlert {
   severity: AlertSeverity;
   title: string;
   title_fr: string;
+  title_es?: string;
   description: string;
   description_fr: string;
+  description_es?: string;
   timestamp: string;
   metrics: {
     speed_kmh?: number;
@@ -43,6 +57,10 @@ export interface TelematicsAlert {
     coolant_temp_c?: number;
     engine_rpm?: number;
     reefer_temp_c?: number;
+    defrost_duration_minutes?: number;
+    refrigerant_pressure_bar?: number;
+    claim_reference?: string;
+    gross_loss_estimate?: number;
   };
 }
 
@@ -61,6 +79,12 @@ export interface TruckTelematicsState {
   engine_coolant_temp_c: number;
   odometer_km: number;
   reefer_temp_c?: number;
+  reefer_mode?: ReeferOperationMode;
+  is_defrost_active?: boolean;
+  defrost_duration_minutes?: number;
+  refrigerant_pressure_bar?: number;
+  refrigerant_leak_detected?: boolean;
+  active_claim_reference?: string;
   engine_health: 'healthy' | 'warning' | 'critical';
   active_alerts: TelematicsAlert[];
 }

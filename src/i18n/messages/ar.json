@@ -2635,6 +2635,19 @@
       "selectedBannerTotal": "المجموع الاسمي",
       "clearSelection": "إلغاء التحديد",
       "selectAllPortfolio": "تحديد كافة الأوراق في الحافظة"
+    },
+    "extendedIotStream": {
+      "title": "بروتوكول البث الحي لمستشعرات التبريد وكمبيوتر الشاحنة",
+      "defrostStuckAlert": "إنذار استمرار دورة إذابة الجليد (Defrost Stuck)",
+      "refrigerantLeakAlert": "تسرب حرج لغاز التبريد وهبوط ضغط الدائرة",
+      "cargoLossImminentAlert": "إصدار ملف مطالبة تأمين بضائع آلياً",
+      "defrostDuration": "مدة إذابة الصقيع",
+      "refrigerantPressure": "ضغط دائرة التبريد",
+      "autoClaimReference": "ملف مطالبة التأمين المولد آلياً",
+      "normalSignal": "قيادة عادية",
+      "simulateDefrost": "عطل إذابة جليد (>45د)",
+      "simulateLeak": "تسرب غاز التبريد",
+      "simulateClaim": "كسر تبريد + فتح مطالبة تأمين"
     }
   },
   "fleetFuelBi": {

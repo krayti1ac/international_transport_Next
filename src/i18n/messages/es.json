@@ -2635,6 +2635,19 @@
       "selectedBannerTotal": "Total Nominal",
       "clearSelection": "Deseleccionar",
       "selectAllPortfolio": "Seleccionar todos los efectos en cartera"
+    },
+    "extendedIotStream": {
+      "title": "Protocolo de flujo IoT extendido para equipos frigoríficos y CAN-Bus",
+      "defrostStuckAlert": "Ciclo de desescarche bloqueado anormalmente prolongado",
+      "refrigerantLeakAlert": "Fuga crítica de refrigerante (Caída de presión del circuito)",
+      "cargoLossImminentAlert": "Expediente de reclamación de seguro abierto automáticamente",
+      "defrostDuration": "Duración del desescarche",
+      "refrigerantPressure": "Presión del circuito frigorífico",
+      "autoClaimReference": "Expediente de seguro generado automáticamente",
+      "normalSignal": "Señal FMS normal",
+      "simulateDefrost": "Desescarche bloqueado (>45 min)",
+      "simulateLeak": "Fuga de refrigerante",
+      "simulateClaim": "Rotura de frío + auto-reclamación"
     }
   },
   "fleetFuelBi": {

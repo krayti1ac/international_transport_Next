@@ -17,17 +17,22 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(body)) {
       const results = [];
       const allAlerts = [];
+      const claimsCreated = [];
       for (const packet of body as FmsTelematicsPacket[]) {
         const res = await ingestFmsTelematicsPacket(packet);
         results.push(res);
         if (res.alerts && res.alerts.length > 0) {
           allAlerts.push(...res.alerts);
         }
+        if (res.claim) {
+          claimsCreated.push(res.claim);
+        }
       }
       return NextResponse.json({
         success: true,
         processedCount: results.length,
         alerts: allAlerts,
+        claimsCreated,
       });
     } else {
       const packet = body as FmsTelematicsPacket;
