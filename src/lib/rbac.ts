@@ -225,6 +225,7 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/european-tolls',
     '/pricing',
     '/analytics/corridors',
+    '/analytics/groupage',
     '/predictive-analytics',
   ],
   driver: [
@@ -252,6 +253,7 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/fleet-utilization',
     '/predictive-analytics',
     '/analytics/corridors',
+    '/analytics/groupage',
     '/clients',
     '/chat',
   ],
@@ -271,6 +273,7 @@ export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
     '/fleet-utilization',
     '/predictive-analytics',
     '/analytics/corridors',
+    '/analytics/groupage',
     '/documents',
     '/notifications/expiration',
     '/geofence-zones',

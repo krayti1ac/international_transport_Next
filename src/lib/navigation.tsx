@@ -26,6 +26,7 @@ import {
   Activity,
   Compass,
   Radio,
+  Layers,
 } from 'lucide-react';
 
 export const navigationGroups: SidebarGroup[] = [
@@ -364,7 +365,15 @@ export const navigationGroups: SidebarGroup[] = [
         titleEs: 'P&L y Combustible de Corredores',
         href: '/analytics/corridors',
         icon: <Compass className="w-4 h-4 text-emerald-500" />,
-        roles: ['admin', 'accountant', 'fleet_manager'],
+        roles: ['admin', 'accountant', 'fleet_manager', 'secretary'],
+      },
+      {
+        title: 'ربحية الشحن التجميعي (LTL vs FTL)',
+        titleFr: 'Rentabilité Groupage LTL / FTL',
+        titleEs: 'Rentabilidad Grupaje LTL vs FTL',
+        href: '/analytics/groupage',
+        icon: <Layers className="w-4 h-4 text-cyan-400" />,
+        roles: ['admin', 'accountant', 'fleet_manager', 'secretary'],
       },
     ],
   },

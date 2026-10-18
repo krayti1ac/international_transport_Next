@@ -262,3 +262,4 @@ describe('Groupage LTL vs. FTL Margin BI Engine (Strict Decimal.js)', () => {
     });
   });
 });
+
