@@ -14,15 +14,22 @@ const BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000'
 
 test.describe('دورة الشحن التجميعي وتحليلات الربحية (Groupage LTL vs FTL Margin BI E2E)', () => {
 
+  test.beforeEach(async ({ page }) => {
+    // Suppress PWA install popup modal in E2E tests
+    await page.addInitScript(() => {
+      sessionStorage.setItem('tb_pwa_dismissed_session', 'true');
+    });
+  });
+
   test('1. يجب فتح المسار المباشر /analytics/groupage وعرض ترويسة محرك 13.60 LDM و CPK', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/groupage`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/groupage`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // التحقق من عنوان الصفحة
     await expect(page).toHaveTitle(/TransSalges/);
 
     // التحقق من ترويسة لوحة تحليلات الشحن التجميعي
-    const mainHeading = page.locator('h1');
+    const mainHeading = page.locator('main h1').first();
     await expect(mainHeading).toBeVisible();
     await expect(mainHeading).toContainText(/الشحن التجميعي|Groupage|Grupaje/);
 
@@ -32,8 +39,8 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('2. يجب عرض بطاقات المؤشرات التنفيذية الأربع (KPIs) بدقة Decimal.js', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/groupage`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/groupage`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1, h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // 1. بطاقة فارق هامش الربح الصافي
     const marginCard = page.locator('text=/هامش الربح الصافي|Marge Nette|Margen Neto/i').first();
@@ -53,8 +60,8 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('3. يجب تبديل الفلاتر للممرات الدولية والأنماط وتحديث المؤشرات', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/groupage`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/groupage`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1, h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // فلترة الممر البحري الأوروبي
     const euroButton = page.locator('button:has-text("الممر البحري الأوروبي"), button:has-text("Maritime Européen"), button:has-text("Marítimo Europeo")').first();
@@ -82,8 +89,8 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('4. يجب ظهور شريط المستشار الذكي (AI Dispatch Advisor) وعتبة التعادل الربحي', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/groupage`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/groupage`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1, h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // راية التوصية الاستراتيجية للتشغيل
     const aiBanner = page.locator('text=/التوصية الاستراتيجية|Conseil Stratégique|Recomendación Estratégica/i').first();
@@ -100,8 +107,8 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('5. يجب توفر جدول تفاصيل الرحلات التجميعية وإمكانية البحث وتصدير CSV', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/groupage`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/groupage`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1, h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // جدول تفاصيل الرحلات
     const tableHeader = page.locator('th:has-text("CMR"), th:has-text("Trajet"), th:has-text("Ruta")').first();
@@ -119,8 +126,8 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('6. يجب التحقق من تكامل التبويب المخصص للشحن التجميعي في صفحة /analytics/corridors', async ({ page }) => {
-    await page.goto(`${BASE_URL}/analytics/corridors`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/analytics/corridors`, { waitUntil: 'domcontentloaded' });
+    await page.locator('main h1, h1').first().waitFor({ state: 'visible', timeout: 20000 });
 
     // التبويب الثالث في مركز الممرات
     const groupageTab = page.locator('button[role="tab"]:has-text("ربحية الشحن التجميعي"), button[role="tab"]:has-text("Groupage LTL")').first();
@@ -136,16 +143,19 @@ test.describe('دورة الشحن التجميعي وتحليلات الربح�
   });
 
   test('7. التحقق من سلامة عناصر شريط التنقل الجانبي (Sidebar Navigation Integration)', async ({ page }) => {
-    await page.goto(`${BASE_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'domcontentloaded' });
+
+    // فتح مجموعة التقارير في القائمة الجانبية إذا لم تكن مفتوحة
+    const reportsGroupBtn = page.locator('button:has-text("التقارير"), button:has-text("Rapports"), button:has-text("Informes")').first();
+    await reportsGroupBtn.click();
+    await page.waitForTimeout(500);
 
     // التحقق من وجود رابط الشحن التجميعي في القائمة الجانبية
     const navLink = page.locator('a[href="/analytics/groupage"]').first();
-    if (await navLink.isVisible()) {
-      await expect(navLink).toContainText(/الشحن التجميعي|Groupage|Grupaje/);
-      await navLink.click();
-      await expect(page).toHaveURL(/\/analytics\/groupage/);
-    }
+    await expect(navLink).toBeVisible();
+    await expect(navLink).toContainText(/الشحن التجميعي|Groupage|Grupaje/);
+    await navLink.click();
+    await expect(page).toHaveURL(/\/analytics\/groupage/);
   });
 
 });

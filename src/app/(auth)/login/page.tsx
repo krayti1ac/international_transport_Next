@@ -206,7 +206,7 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent className="px-6 pb-6 pt-2">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} action="#" method="POST" className="space-y-4">
             {/* Email Field */}
             <div className={`space-y-1.5 ${isRTL ? 'text-right' : 'text-left'}`}>
               <label className="text-sm font-semibold text-foreground/90">
