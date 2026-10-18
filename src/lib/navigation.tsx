@@ -317,7 +317,7 @@ export const navigationGroups: SidebarGroup[] = [
     labelFr: 'Rapports',
     labelEs: 'Informes',
     icon: <BarChart3 className="w-4 h-4" />,
-    roles: ['admin', 'accountant', 'fleet_manager'],
+    roles: ['admin', 'accountant', 'fleet_manager', 'secretary'],
     items: [
       {
         title: 'التقارير',
