@@ -1,18 +1,20 @@
 import { getCorridorAnalyticsAction } from '@/features/analytics/services/corridor-analytics.actions';
 import { getCorridorPnlAnalyticsAction } from '@/features/analytics/services/corridor-pnl.actions';
+import { getGroupageMarginBiAction } from '@/features/analytics/services/groupage-margin-bi.actions';
 import { CorridorHubView } from '@/features/analytics/components/CorridorHubView';
 import type { CorridorPnlAnalyticsResult } from '@/features/analytics/types/corridor-pnl.types';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ذكاء الممرات وهوامش الربحية وتكلفة الكيلومتر (CPK) | Trans Bodanon TMS',
-  description: 'تحليل دقيق لتكلفة الكيلومتر الصافية (CPK) وهوامش الربحية وكفاءة الوقود بين الممر الأوروبي والممر الإفريقي بدقة Decimal.js',
+  title: 'ذكاء الممرات وربحية الشحن التجميعي (LTL vs FTL) وتكلفة الكيلومتر (CPK) | TransSalges',
+  description: 'تحليل دقيق لتكلفة الكيلومتر الصافية (CPK) وهوامش الربحية وعائد المتر الطولي (LDM) بين الممر الأوروبي والممر الإفريقي بدقة Decimal.js',
 };
 
 export default async function CorridorAnalyticsPage() {
-  const [fuelRes, pnlRes] = await Promise.all([
+  const [fuelRes, pnlRes, groupageRes] = await Promise.all([
     getCorridorAnalyticsAction(),
     getCorridorPnlAnalyticsAction(),
+    getGroupageMarginBiAction(),
   ]);
 
   const emptyFuelFallback = {
@@ -179,10 +181,11 @@ export default async function CorridorAnalyticsPage() {
 
   const fuelData = fuelRes.success && fuelRes.data ? fuelRes.data : emptyFuelFallback;
   const pnlData = pnlRes.success && pnlRes.data ? pnlRes.data : emptyPnlFallback;
+  const groupageData = groupageRes.success && groupageRes.data ? groupageRes.data : undefined;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
-      <CorridorHubView pnlData={pnlData} fuelData={fuelData} />
+      <CorridorHubView pnlData={pnlData} fuelData={fuelData} groupageData={groupageData} />
     </div>
   );
 }
