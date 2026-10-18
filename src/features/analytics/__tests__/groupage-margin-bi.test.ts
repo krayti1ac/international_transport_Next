@@ -188,8 +188,8 @@ describe('Groupage LTL vs. FTL Margin BI Engine (Strict Decimal.js)', () => {
   });
 
   describe('4. Comparative Metrics & Breakeven LDM', () => {
-    it('correctly identifies LTL margin premium over FTL and calculates breakeven LDM', () => {
-      const benchmarkData = getBenchmarkTripsData();
+    it('correctly identifies LTL margin premium over FTL and calculates breakeven LDM', async () => {
+      const benchmarkData = await getBenchmarkTripsData();
       const biResult = computeGroupageMarginBi(benchmarkData);
 
       // Verify overall comparison
@@ -216,8 +216,8 @@ describe('Groupage LTL vs. FTL Margin BI Engine (Strict Decimal.js)', () => {
       expect(afr.ltl.totalConsignments).toBeGreaterThan(0);
     });
 
-    it('accurately groups LTL trips into LDM consolidation efficiency tiers', () => {
-      const benchmarkData = getBenchmarkTripsData();
+    it('accurately groups LTL trips into LDM consolidation efficiency tiers', async () => {
+      const benchmarkData = await getBenchmarkTripsData();
       const biResult = computeGroupageMarginBi(benchmarkData);
 
       expect(biResult.ldmBuckets.length).toBe(3);

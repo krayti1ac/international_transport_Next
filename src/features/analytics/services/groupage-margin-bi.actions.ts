@@ -27,7 +27,7 @@ const groupageMarginBiFilterSchema = z.object({
 });
 
 // Realistic benchmark fallback dataset for offline/dev/demo environments
-export function getBenchmarkTripsData(): RawTripMarginInput[] {
+export async function getBenchmarkTripsData(): Promise<RawTripMarginInput[]> {
   return [
     // 1. European Maritime - LTL Groupage (3 clients, 12.4 LDM)
     {
@@ -477,7 +477,7 @@ export async function getGroupageMarginBiAction(
 
     // Merge benchmark data if DB trips are few or empty to guarantee full BI visibility
     if (tripsData.length < 2) {
-      const benchmarkTrips = getBenchmarkTripsData();
+      const benchmarkTrips = await getBenchmarkTripsData();
       tripsData = [...tripsData, ...benchmarkTrips];
     }
 
